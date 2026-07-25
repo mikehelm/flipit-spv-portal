@@ -2,7 +2,7 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 14 and 16 are complete. 15 — images and video — is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: work packages 0 to 14, 16 and 17 are complete. 15 — images and video — is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
 ---
 
@@ -285,10 +285,6 @@ Issuing an offer does not send anything and does not take anybody off the regist
 - **The email carrying a sign-in link.** The link is created correctly; sending it is part of a later package.
 - **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet.
 
-The export was built early, out of order, in a parallel session. It is in the codebase and tested, but it is not yet linked from anywhere you would find by clicking.
-
----
-
 ## The round, and closing it
 
 Open **The round**. It shows where things stand: how many were invited, how many answered, how many did not, how many asked for more time, and the four money totals against the aggregate raise.
@@ -320,6 +316,26 @@ It names Michael and David, the exact address invitations come from, the exact d
 It is linked from the invitation footer, the portal, the portal sign-in page, the dead-link page and the front door — and it works if you simply type the address, which is the point.
 
 **Everything else is invisible to search engines.** Visit `/robots.txt` and `/sitemap.xml`: the sitemap has exactly one entry, and robots.txt disallows everything except the verification page. Every other page also carries a `noindex` tag, and every response — including a downloaded certificate PDF, which no meta tag could ever reach — carries a `noindex` header.
+
+---
+
+## Export and the audit log
+
+Sign in as the **owner** and open **Audit log**. Everything the application has done is in here — including everything it refused. A blocked send with its reason is more use after the fact than a successful one, so both are recorded.
+
+Filter by actor, by entity, by action, or by a date range. Try filtering the action to `export.completed`, or the entity to `compliance_approval`, and you will see the trail of decisions rather than a wall of noise.
+
+Nothing on that page edits or deletes an entry, and there is no function anywhere in the application that could.
+
+**Two exports, from the same page:**
+
+- **Recipients**, as CSV or Excel, per round. It carries all four amounts as four separate columns — proposed, committed, accepted, received — with the jurisdiction, the send status and timestamps, the account status and its full history, the timeline and its history including any corrections and their reasons, the response and when it was made, every question the investor asked, every reply, and the internal notes. Open it in Excel: the decimals are exactly what is recorded, not rounded and not reformatted into currency.
+- **The audit log**, as CSV or Excel, and this one is the owner's alone. Sign in as the operator and the link is not there — and the download refuses even if you type the address.
+
+Two things worth trying:
+
+- Put `=1+1` in a recipient's internal notes and export to Excel. It comes out neutralised rather than as a live formula. A spreadsheet that runs whatever was typed into a text box is a well-known way to attack the person who opens it.
+- Run a recipient export, then go to settings and try to set the service mode to **disabled**. It now lets you, because §7 requires a completed export within seven days — and the export you just ran is what satisfies it. Before you exported, it would have demanded a written reason.
 
 ---
 

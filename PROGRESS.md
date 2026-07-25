@@ -608,3 +608,40 @@ What a passed deadline does is send the operator an email saying it is his call.
 
 - Seven days between digests is my number; §6.6 says "configurable cadence" and it is currently a constant rather than a setting. One field on the settings page would fix that, and I would rather it were chosen than defaulted.
 - Closing "marks unfilled allocations as available" in §6.6. What that unlocks is §21, which is not built, so today closing stops responses and records itself and nothing more. That is honest but incomplete, and the register of interest (WP10) is where an available allocation would go.
+
+---
+
+## WP17 — Export and audit — done
+
+The two formatting modules were built early in a parallel session and are good: CSV with a byte-order mark so Excel opens it as UTF-8, XLSX through the workbook writer, spreadsheet-injection neutralisation on every cell, and an audit formatter whose schema requires the literal `requestedByRole: 'OWNER'`. **Nothing fed them.** There was no query producing a row and no screen to press.
+
+**Built:** `lib/export/data.ts`, which is the only part of the export path that touches the database; download routes for both exports; and the owner's audit-log viewer with the filters §20 asks for — actor, entity, action, and a date range.
+
+The three history arrays come from the append-only event tables rather than from the current columns, so the export carries **what happened** rather than only where things ended up. A correction in an offer's timeline appears with its reason.
+
+**`last_export_at` is written in one place, after the bytes exist.** §7 makes moving to `disabled` conditional on a completed export in the preceding seven days, and an export that threw halfway is not a completed export. Verified: running one stamps the column the §7 gate reads.
+
+**Verified against the real database.** Twenty-nine checks in `scripts/verify-export.ts`: all four amounts present, distinct and exact — `5000.00`, `4800.00`, `4750.00`, `4750.00`, still strings, still unrounded after a round trip through a real XLSX workbook parsed back out; the timeline history carrying both events including the correction's reason; a cell beginning with `=` neutralised rather than left as a live formula; the audit formatter refusing a non-owner request outright; and no metadata key anywhere in two thousand audit entries matching a credential or a body.
+
+**Decisions:**
+
+- *The recipient export is available to both roles; the audit export is the owner's.* §20 makes only the audit export owner-only, and the recipient data is the same information the review screen already shows the operator. Making him ask for a copy of what is on his own screen would be theatre.
+- *The audit export has two locks on the same door.* `requireOwner()` on the route, and the formatter's schema requiring the literal `'OWNER'`. Either alone would do; both together mean a future route that forgets the guard still fails.
+- *Only the recipient export stamps `last_export_at`.* §7's precondition is about investor data being safe before the service is disabled. An audit export is a different document and should not satisfy that gate.
+- *A missing jurisdiction exports as `ZZ`* — the ISO user-assigned code — rather than blank or absent. A recipient row is required for the compliance gate, so a missing one is a data problem the export should make visible, and `ZZ` reads as clearly wrong in a spreadsheet where an empty cell reads as nothing at all.
+- *The viewer shows the most recent 200 entries and says so.* An unbounded page over an append-only log gets slower every week and nobody notices until it stops loading.
+- *`updated_contact_email` exports as null.* §20 lists it; §4 does not build the change-of-address flow, and `email_change_requests` exists but nothing writes it. Exporting a column that is always empty is honest; inventing a value would not be.
+
+**Deviations:** none. No migration.
+
+**Checklist:** points 1, 4, 5 and 8 are this package's.
+
+1. No monetary value is a JavaScript number. The export schema's `exactDecimal` rejects anything but a plain decimal string, the data layer passes the driver's strings through untouched, and the verification parses a real XLSX back out and asserts `5000.00` is still `5000.00`.
+4. The operator cannot record, amend or void a compliance approval, and nothing in this package changes that — the audit viewer is read-only and the export path has no write except `last_export_at` and the audit entry recording itself.
+5. No investor-facing response reveals another investor. Neither export is investor-facing; both are behind an admin guard and both carry `X-Robots-Tag: noindex`.
+8. No log line carries a token, a body or a key. The export's own audit entry records a kind, a format, a row count and a byte count — verified to contain no address. A scan of every audit entry in the database found no key matching `password`, `secret`, `token`, `apiKey`, `credential`, `htmlBody`, `textBody` or `body`, which is what `assertNoSecrets` has been enforcing at write time all along.
+
+**Uncertain:**
+
+- The audit viewer filters on exact values from dropdowns built from the distinct values present. That is precise and cannot be mistyped, but there is no free-text search across metadata — looking for one offer id means exporting and using a spreadsheet. Fine for now; worth knowing.
+- `loadRecipientExportRows` runs several queries per recipient. At forty recipients that is fine. At four hundred it would want a rewrite, and the shape of the fix is joins rather than loops.

@@ -37,6 +37,7 @@ const ITEMS: NavItem[] = [
   { href: '/compliance', label: 'Compliance', roles: ['OWNER'] },
   { href: '/admin/onboarding', label: 'Setup', roles: ['OPERATOR'] },
   { href: '/admin/invites', label: 'Operator access', roles: ['OWNER'] },
+  { href: '/audit', label: 'Audit log', roles: ['OWNER'] },
   { href: '/admin/settings', label: 'Settings', roles: ['OWNER'] },
 ]
 
