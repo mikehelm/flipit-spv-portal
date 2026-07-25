@@ -26,7 +26,8 @@ interface NavItem {
 
 const ITEMS: NavItem[] = [
   { href: '/admin', label: 'Overview', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/import', label: 'Recipients', roles: ['OWNER', 'OPERATOR'] },
+  { href: '/recipients', label: 'Review and send', roles: ['OWNER', 'OPERATOR'] },
+  { href: '/import', label: 'Import', roles: ['OWNER', 'OPERATOR'] },
   { href: '/templates', label: 'Email templates', roles: ['OWNER', 'OPERATOR'] },
   { href: '/compliance', label: 'Compliance', roles: ['OWNER'] },
   { href: '/admin/onboarding', label: 'Setup', roles: ['OPERATOR'] },

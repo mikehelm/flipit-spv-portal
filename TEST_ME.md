@@ -2,98 +2,136 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: WP1 complete.** The database exists and the application shell runs. There is no sign-in and no investor data yet — sign-in is the next package.
+**Current state: work packages 0 to 7 are complete.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, and send an invitation to one person at a time. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+
+The investor's own portal is the next package. Right now the link in an invitation goes to a page that does not exist yet.
 
 ---
 
 ## Starting it from cold
 
+You need PostgreSQL running, and Node with pnpm.
+
 ```bash
-cd app
 pnpm install
-cp .env.example .env      # then fill in the two secrets below
-pnpm db:migrate           # creates the 41 tables
-pnpm db:seed              # creates the users, the round, the defaults
+cp .env.example .env
+pnpm db:migrate
+pnpm db:seed
 pnpm dev
 ```
 
-You need a PostgreSQL database running, and `DATABASE_URL` in `.env` pointing at it.
-
-Then open **http://localhost:3000**.
-
-For the two secrets in `.env`, run this twice and paste one value into each:
+Before `db:migrate`, open `.env` and fill in two secrets. Run this twice and paste one value into each:
 
 ```bash
 openssl rand -base64 32
 ```
 
-One goes in `ENCRYPTION_KEY`, the other in `AUTH_SECRET`.
+One goes in `ENCRYPTION_KEY`, the other in `AUTH_SECRET`. `DATABASE_URL` needs to point at your database.
+
+Then open **http://localhost:3000**.
 
 ---
 
-## What to try, in order
+## Signing in for the first time
 
-**1. Open the home page.**
-You should see a dark navy page, "Flipit Global SPV" in orange capitals above "Investor Portal", and an orange rule beneath it. This is the FLIPIT palette the whole application will use.
+There is no password in any file, and no way to set one from a settings screen you would have to be signed in to reach. Instead, `pnpm db:seed` prints a one-time link for each account:
 
-**2. Look at the Deployment panel.**
-It shows the URL it is serving from, the base path, and whether sending is permitted. Running locally, sending should show in red as **"Blocked — testing deployment, invitations cannot be sent"**, with an explanation below it.
-
-That block is deliberate and it is one of the safeguards. Portal links embed whatever domain issued them, so a link sent from a test deployment stops working the moment the app moves to its real address. The app will only send when its configured URL matches the production one exactly.
-
-**3. Check the footer.**
-"Made by Make with Mike" should sit quietly at the bottom in small grey text. It should be easy to miss — that is the intention.
-
-**4. Try the base path.**
-Stop the server, then run:
-
-```bash
-BASE_PATH=/SPV APP_URL=http://localhost:3000/SPV pnpm dev
+```
+  mike@flipit.com (owner)
+  http://localhost:3000/api/auth/setup?token=…
 ```
 
-Now **http://localhost:3000/** should return a 404 and **http://localhost:3000/SPV** should show the page, correctly styled. This is what proves the app can live under `mikehelm.com/SPV` before it moves to `spv.flipit.com`.
+Open one. It signs you in and immediately asks you to choose a password — and that is the only page you can reach until you do. Choosing one signs you straight back out, on purpose: the link you arrived on has travelled through a terminal and possibly a chat window, so the session it created is exactly the session that should not outlive the real password.
 
-**5. Prove it refuses to start when misconfigured.**
-Delete the `ENCRYPTION_KEY` line from `.env` and run `pnpm dev` again. It should refuse to start and tell you exactly which variable is wrong. Put it back afterwards.
+Sign back in at `/signin` with the password you chose.
 
-**6. Check the database was created.**
+**Things worth trying, because they are meant to fail:**
 
-```bash
-psql "$DATABASE_URL" -c "\\dt"
-```
+- Open the same setup link a second time. It works once.
+- Sign in with an address that is not one of the three allowlisted ones. It fails with the same sentence, after the same delay, as a wrong password. There is no "no account with that address" anywhere.
+- Get the password wrong ten times. Sign-in from there pauses for fifteen minutes, and restarting the server does not clear it.
+- Change your password. Every other session ends immediately.
 
-You should see 41 tables. Then:
-
-```bash
-psql "$DATABASE_URL" -c "select email, role from users;"
-```
-
-Three rows — you twice as owner, David once as operator. These come from the allowlist in `.env`; nobody else can sign in later.
-
-**7. Prove the seed is safe to re-run.**
+If you need another link later:
 
 ```bash
-pnpm db:seed
+pnpm setup-link serenedavid@gmail.com
 ```
-
-Run it as many times as you like. After the first time it should report nothing, and change nothing.
-
-**8. Run the checks.**
-
-```bash
-pnpm typecheck && pnpm lint && pnpm test
-```
-
-All three should pass. 55 tests currently — environment validation, the production-deployment guard, and a set that enforces the data model's structural rules: no floating-point money anywhere, tokens stored only as hashes, investor accounts genuinely durable across rounds, and the register holding no stored ranking.
 
 ---
 
-## Not built yet — nothing is broken, it simply is not there
+## Importing a list of recipients
 
-Sign-in · uploading a spreadsheet · the email · sending · the investor portal · questions and answers · reminders · the register of interest · the certificate · the verification page.
+Sign in as the operator, go to **Import**, and upload a CSV or Excel file. `SAMPLE_IMPORT.csv` in this repository is a starting point, but the interesting test is a deliberately awkward file — rename the columns, shuffle their order, add columns nobody asked for, mix `10/08/2026` and `2026-08-10`, and put `5%` and `0.05` in the same column.
+
+The import proposes a mapping and then stops and asks you to confirm every column before anything is written. Where a column is genuinely ambiguous — is `5` five percent, or five hundredths? — it asks you outright rather than guessing.
+
+If an OpenAI key is configured, the model helps propose the mapping. It only ever proposes which column means what. Every figure is computed by the application from the raw cell text, and there is a test that maps the same file twice — once with the model's help, once from a dropdown — and asserts the resulting numbers are byte-for-byte identical.
+
+Two kinds of problem are kept apart, on purpose:
+
+- **File-level errors** stop the whole import. A column that cannot be read is one of these.
+- **Per-recipient blocks** stop one person. A recipient in a country the compliance approval does not cover is one of these, and everybody else in the file imports normally.
 
 ---
 
-## Nothing needed from you yet
+## Seeing the email
 
-No credentials or decisions are required to test the above. Sign-in needs nothing from you either — BUILD_SPEC §2.2 dropped Google sign-in, and the first administrator gets in through a one-time setup link rather than an OAuth client. The two things that will eventually need you are a Google **app password** for sending and a compliance approval before any invitation can go out.
+Go to **Email templates**, then preview any recipient. That is the real email, with their real amount, their real percentages and their real deadline — not a mock-up with placeholder text.
+
+The portal link in a preview is deliberately fake. A preview is a read, and reads do not issue credentials.
+
+Try removing the default sender phone number in settings while the contact method is set to "phone". The preview fails loudly and names the variable and the recipient, rather than sending an email with a blank line where a phone number should be.
+
+---
+
+## Recording a compliance approval
+
+Sign in as the **owner** — this is owner-only, and the operator cannot do it at all. Go to **Compliance** and record an approval: who signed it off, when, what evidence there is, and which countries it covers.
+
+Then try these:
+
+- Sign in as the operator and go to `/compliance`. You are refused, and the attempt is written to the audit log.
+- Change one character of the email template. Sending is disabled until the approval is recorded again, and the screen shows you exactly what changed.
+- Approve Australia only, then import somebody in the United States. They are blocked individually, with a full explanation, and everybody else still sends.
+
+---
+
+## The pre-flight checklist, and sending
+
+Go to **Review and send**. You will see every recipient in the round, the four money totals, and the twelve-item checklist from the specification.
+
+Eight of the twelve are worked out by the application and have nothing to click. There is no tick, no override and no "proceed anyway" for a mail server that is not connected or an approval that does not exist. The other four are things only a person can know — that you read the recipient file, that you looked at the test email you sent yourself — and you confirm those, with your name and the time recorded against each one.
+
+Two of the four have a floor underneath them. Tick "all percentages and amounts validated" on a file where an amount is actually missing and it refuses: an attestation can confirm your judgement, but it cannot assert something that is not true.
+
+Once pre-flight is complete, each recipient gets their own Send button. To send, you type that recipient's email address. A checkbox confirms that you clicked; typing the address confirms which person you meant.
+
+**What you cannot do, by design:** send to everybody at once. There is no "select all", no bulk action, and no function anywhere in the code that takes a list of recipients.
+
+Sending a real email needs a Gmail app password, connected from settings. Until one is connected, a send fails with a specific message naming the missing credential — never a generic failure.
+
+---
+
+## The two things that are always on screen
+
+Compliance approval state and mail connection health sit at the top of the review screen and do not move. They are the two things that silently break a send, so they are not buried in settings.
+
+---
+
+## What is not built yet
+
+- **The investor portal.** The link in an invitation does not go anywhere yet. That is the next package.
+- **Questions and answers, the register of interest, updates, reminders.** All later packages.
+- **Two-factor sign-in.** Optional in version one. The database is ready for it; there is no code behind it.
+- **The AI spend cap.** You can set a monthly ceiling in settings, but nothing yet counts spending against it.
+
+The participation certificate, the anti-phishing verification page and the export were built early, out of order, in a parallel session. They are in the codebase and tested, but they are not yet linked from anywhere you would find by clicking.
+
+---
+
+## Things worth knowing
+
+- The `ENCRYPTION_KEY` and `AUTH_SECRET` in your local `.env` are throwaway development values. Generate fresh ones for anything real.
+- No email is ever sent to anyone but the operator's own address during development.
+- The application refuses to send real invitations unless its configured base URL is the production one. Every portal link embeds the domain it was issued from, and a link issued from a testing deployment dies the moment the application moves.
