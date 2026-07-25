@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| Range requests for video (Safari will not play without them) | 25 Jul session C | 2026-07-25 23:52 | `src/lib/media/store.ts`, `src/lib/media/s3.ts`, a new `src/lib/media/ranges.ts`, the three media routes |
 
 ## Done, so nobody starts it again
 
