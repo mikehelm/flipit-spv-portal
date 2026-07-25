@@ -86,3 +86,62 @@ describe('what a tile label may not say', () => {
     expect(forbiddenWordsInTileLabel('Soon')).toEqual(['soon'])
   })
 })
+
+describe('the editing surface — §13.1, AC30', () => {
+  /**
+   * `forbiddenWordsInTileLabel` was written in WP18 as a gate ahead of a
+   * surface that did not exist. This is the surface, and these are the tests
+   * that it calls the gate — which is the whole reason the gate was written.
+   */
+  const actions = readFileSync('src/actions/roadmap.ts', 'utf8')
+
+  it('checks the wording at write time, on every path that writes a label', () => {
+    // Add and update both. A gate on one of the two would be no gate at all.
+    const add = actions.slice(actions.indexOf('addRoadmapTileAction'), actions.indexOf('updateRoadmapTileAction'))
+    const update = actions.slice(actions.indexOf('updateRoadmapTileAction'), actions.indexOf('removeRoadmapTileAction'))
+
+    expect(add).toContain('refuseForbiddenWords')
+    expect(update).toContain('refuseForbiddenWords')
+    expect(actions).toContain('forbiddenWordsInTileLabel')
+  })
+
+  it('refuses out loud and names the word', () => {
+    // §13.1 calls this "the easiest place in the build to say something
+    // unintended", so a silent drop would be the wrong shape entirely: the
+    // owner would believe it had saved.
+    expect(actions).toMatch(/actionError\(/)
+    expect(actions).toContain('found')
+    expect(actions).toContain('roadmap_tile.refused')
+  })
+
+  it('is owner-only, as §13.1 says', () => {
+    expect(actions).toContain('requireOwner()')
+    expect(actions).not.toContain('requireOperator')
+    expect(actions).not.toMatch(/requireAdmin\(\)/)
+  })
+
+  it('audits every change, including the one it refused', () => {
+    for (const action of [
+      'roadmap_tile.added',
+      'roadmap_tile.updated',
+      'roadmap_tile.removed',
+      'roadmap_tile.refused',
+    ]) {
+      expect(actions, `${action} is not audited`).toContain(action)
+    }
+  })
+
+  it('keeps the read-time filter as well, rather than replacing it', () => {
+    // Two layers: refused loudly at write, dropped quietly at read for
+    // anything that reached the table another way.
+    const data = readFileSync('src/lib/portal/data.ts', 'utf8')
+    expect(data).toContain('forbiddenWordsInTileLabel')
+  })
+
+  it('the standing line is shown on the editing screen and is not a field', () => {
+    const page = readFileSync('src/app/(admin)/admin/roadmap/page.tsx', 'utf8')
+    expect(page).toContain('ROADMAP_DISCLAIMER')
+    // Rendered, never bound to an input.
+    expect(page).not.toMatch(/name="disclaimer"|defaultValue=\{ROADMAP_DISCLAIMER\}/)
+  })
+})

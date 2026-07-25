@@ -153,7 +153,9 @@ describe('nothing is silently uncovered', () => {
     const partial = ACCEPTANCE_CRITERIA.filter(
       (c) => c.covered.length > 0 && c.manual,
     ).map((c) => c.n)
-    expect(partial).toEqual([30, 34])
+    // AC30 left this list once the tile-editing surface was built — "configurable
+    // by the owner" was the half that had never existed.
+    expect(partial).toEqual([34])
   })
 
   it('the criteria WP19 singles out are all covered by a unit test', () => {

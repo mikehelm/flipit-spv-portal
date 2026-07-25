@@ -1009,3 +1009,34 @@ Not a numbered work package. §2.2 makes TOTP *"mandatory before the production 
 - Recovery from a lost device **and** lost codes is a database change, and the runbook does not spell out the SQL. It is three columns on one row, and somebody doing it at speed would rather read it than derive it. Worth a paragraph in DEPLOYMENT.md next time that file is open.
 - The gate asks whether *an* operator is enrolled. There is one operator by design (§2), so the question is well posed today; with two, one enrolled operator would satisfy it for both. If a second operator ever exists, this wants to become per-sender.
 - Nothing yet forces enrolment on first sign-in. §2.2 calls it "optional in v1", so this is faithful — but the practical consequence is that the first person to reach production discovers the gate at the moment they try to send, rather than at the moment they sign in. The security page says so plainly, which is the smaller half of the fix.
+
+---
+
+## The "Coming to your portal" tiles are now editable — AC30 closed
+
+The smallest remaining gap, and the one the WP19 merge named as "the next thing worth building". §13.1: *"Configurable by the owner: tiles can be added, renamed, hidden, or switched from 'in development' to live as features ships."* The tiles have been on the investor's portal since WP8; the screen to change them had never existed, so half of AC30 had been unmet the whole time.
+
+**`forbiddenWordsInTileLabel` finally has the surface it was written for.** WP18 built it as a gate ahead of a screen that did not exist yet — the same shape as the WP17 follow-up — and this is that screen. It now **refuses at write time and names the offending word**, which is the right shape given what §13.1 says about this section: *"it is the easiest place in the build to say something unintended."* A silent drop would leave the owner believing it had saved.
+
+WP18's read-time filter stays as the quieter second layer, for anything that reaches the table by some other route. Two layers, one loud and one quiet, and a test asserts both are present.
+
+**Decisions:**
+
+- *Owner only.* §13.1 says "configurable by the owner", and these words appear on the page an investor reads beside their own figures. Where the specification names a role, that is the role.
+- *Forty characters.* §13.1 asks for "short labels and no explanation" and "names only". A long label is a sentence, and a sentence in this section is where the trouble starts.
+- *Ten tiles maximum.* §13.1 says "a small set". Ten is well past small, and the cap stops the section becoming a list of promises by accumulation rather than by any single bad tile.
+- *Hiding is the ordinary way to take one off, and removal is separate.* Hiding keeps the row and is one click to undo. Removal is audited with the label, so the log still says what was there.
+- *The standing line is rendered on the editing screen, greyed and not a field.* Whoever is writing a tile can see the sentence it will sit above, and can see that it is not one of the things they can change.
+- *A refused label is audited too.* `roadmap_tile.refused`, with the reason and without the label — an audit entry recording the wording somebody tried to publish would put it in the log instead of on the page, which is not an improvement.
+
+**Deviations:** none. No migration — `roadmap_tiles` has been in the schema since WP1.
+
+**Checklist:** points 5 and 8.
+
+5. No investor-facing response reveals another investor. The tiles are global rather than per-investor and remain so; nothing on this screen or in these actions reads an investor record.
+8. No log line carries a token, a body or a key. The audit entries record labels, flags and a reason; the refusal entry records the reason and not the refused text.
+
+**Uncertain:**
+
+- Reordering is not built. `sort_order` exists and is set on creation, so tiles appear in the order they were added, and there is no way to move one. §13.1 does not ask for reordering; a pair of arrows would be twenty minutes if it ever matters.
+- The word list is still mine, derived from §13.1's prose. It is now enforced against real input rather than sitting ahead of a surface, which is the right time for somebody to read it — it is `FORBIDDEN_IN_TILE_LABEL` in `lib/portal/roadmap.ts` and the screen shows the first six of them in the hint.

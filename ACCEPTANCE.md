@@ -8,7 +8,7 @@ citation names a test or check that exists — the same test resolves each one
 against the real label in the real file, so a renamed or deleted test breaks
 the map rather than leaving a citation pointing at nothing.
 
-46 of 48 criteria have at least one automated check. 4 carry a written note.
+46 of 48 criteria have at least one automated check. 3 carry a written note.
 
 Where a check runs:
 
@@ -221,11 +221,9 @@ Where a check runs:
 - `src/lib/portal/roadmap.test.ts` — unit — "rejects a promise of return, valuation or liquidity"
 - `src/lib/portal/roadmap.test.ts` — unit — "rejects a timeline — §13.1: "No dates. No soon.""
 - `src/lib/portal/roadmap.test.ts` — unit — "is rendered beneath the tiles on the investor portal"
-- `src/lib/audit-coverage.test.ts` — unit — "calls the one audit helper from inside its own body"
-- `src/lib/audit-coverage.test.ts` — unit — "names every exported reminder mutation that writes to the database"
-- `src/lib/audit-coverage.test.ts` — unit — "registers cancelMany even though it delegates its writes"
-
-**Note.** Half of this is not built. The wording constraint is enforced, and the standing line §13.1 requires is on the page and cannot be switched off. "Configurable by the owner" is not: the tiles are seeded and there is no screen to add, rename or hide one. `forbiddenWordsInTileLabel` is the gate that surface must call, and it exists ahead of it.
+- `src/lib/portal/roadmap.test.ts` — unit — "checks the wording at write time, on every path that writes a label"
+- `src/lib/portal/roadmap.test.ts` — unit — "is owner-only, as §13.1 says"
+- `src/lib/portal/roadmap.test.ts` — unit — "audits every change, including the one it refused"
 
 ## 31. The portal renders correctly and legibly at 375px width, and text contrast meets WCAG AA against the dark palette.
 

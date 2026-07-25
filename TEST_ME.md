@@ -381,6 +381,14 @@ pnpm backup              # writes a backup file
 
 **One thing found while doing this, worth knowing:** the verification page — the one an investor is meant to be able to find — was being hidden from search engines by a mistake in the configuration, and had been for several packages. It is fixed, and there is now a check that asks a running copy of the application rather than reading the configuration file, because reading the file is what missed it.
 
+## The tiles at the bottom of the portal
+
+**Admin → Portal tiles**, owner only. The short names under &ldquo;Coming to your portal&rdquo; on an investor&rsquo;s page. Add one, rename one, hide one, or mark one as shipped.
+
+**Try to add a tile called &ldquo;Guaranteed returns&rdquo;, or &ldquo;Live in 2027&rdquo;, or &ldquo;Reporting &mdash; coming soon&rdquo;.** All three are refused, and the refusal names the word it objected to. This section sits on a securities offer page, so it is kept to tooling and communication &mdash; nothing that reads as a promise of returns, a valuation, liquidity, or a date.
+
+The line beneath the tiles &mdash; *Features shown are in development, are indicative only, and form no part of the investment being offered* &mdash; is shown on the editing screen so you can see what your names will sit above. It cannot be edited or switched off.
+
 ## Two-factor
 
 **Admin → Two-factor.** A code from an authenticator app on top of your password, for the owner and the operator. Any standard app works — Google Authenticator, 1Password, Authy, Bitwarden.
@@ -400,7 +408,6 @@ Worth trying, because these are all meant to work:
 ## What is not built yet
 
 - **Documents, images and video.** All need somewhere to store a file, which has not been chosen yet. Nothing else depends on them.
-- **Editing the "Coming to your portal" tiles.** The tiles are there and the rules about their wording are enforced; the screen to change them is not built. See number 30 in `ACCEPTANCE.md`.
 
 ## The round, and closing it
 

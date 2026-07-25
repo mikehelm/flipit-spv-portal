@@ -552,24 +552,15 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
       unit('src/lib/portal/roadmap.test.ts', 'rejects a timeline — §13.1: "No dates. No soon."'),
       unit('src/lib/portal/roadmap.test.ts', 'is rendered beneath the tiles on the investor portal'),
       unit(
-        'src/lib/audit-coverage.test.ts',
-        'calls the one audit helper from inside its own body',
+        'src/lib/portal/roadmap.test.ts',
+        'checks the wording at write time, on every path that writes a label',
       ),
+      unit('src/lib/portal/roadmap.test.ts', 'is owner-only, as §13.1 says'),
       unit(
-        'src/lib/audit-coverage.test.ts',
-        'names every exported reminder mutation that writes to the database',
-      ),
-      unit(
-        'src/lib/audit-coverage.test.ts',
-        'registers cancelMany even though it delegates its writes',
+        'src/lib/portal/roadmap.test.ts',
+        'audits every change, including the one it refused',
       ),
     ],
-    manual:
-      'Half of this is not built. The wording constraint is enforced, and the standing ' +
-      'line §13.1 requires is on the page and cannot be switched off. "Configurable by ' +
-      'the owner" is not: the tiles are seeded and there is no screen to add, rename or ' +
-      'hide one. `forbiddenWordsInTileLabel` is the gate that surface must call, and it ' +
-      'exists ahead of it.',
   },
   {
     n: 31,
