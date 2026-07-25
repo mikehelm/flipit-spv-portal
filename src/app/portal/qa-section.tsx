@@ -103,7 +103,7 @@ export function QaSection({ view }: { view: InvestorQaView }) {
               No shared questions yet. If you have one, ask above.
             </p>
           ) : (
-            <ul className="mt-4 grid gap-3">
+            <ul className="mt-4 grid grid-cols-1 gap-3">
               {view.shared.map((entry) => (
                 <SharedEntry
                   key={entry.id}
@@ -128,7 +128,7 @@ export function QaSection({ view }: { view: InvestorQaView }) {
             Common questions above with your name removed.
           </p>
 
-          <ul className="mt-4 grid gap-3">
+          <ul className="mt-4 grid grid-cols-1 gap-3">
             {view.own.map((thread) => (
               <li
                 key={thread.entryId}

@@ -81,7 +81,7 @@ export default async function OfferPage({
         </Link>
       </SectionHeading>
 
-      <div className="grid gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -140,7 +140,7 @@ export default async function OfferPage({
         </Card>
 
         <Card title="Where they are">
-          <ol className="grid gap-2">
+          <ol className="grid grid-cols-1 gap-2">
             {OFFER_STAGES.map((item, index) => {
               const currentIndex = OFFER_STAGES.indexOf(stage)
               const tone =
@@ -196,7 +196,7 @@ export default async function OfferPage({
               None issued yet. It is generated automatically when funds received is recorded.
             </Notice>
           ) : (
-            <ul className="mb-4 grid gap-2">
+            <ul className="mb-4 grid grid-cols-1 gap-2">
               {certificates.map((certificate) => (
                 <li
                   key={certificate.id}
@@ -226,7 +226,7 @@ export default async function OfferPage({
 
         {history.length > 0 ? (
           <Card title="History">
-            <ol className="grid gap-3">
+            <ol className="grid grid-cols-1 gap-3">
               {history.map((event) => (
                 <li key={event.id} className="border-l-2 border-edge pl-3">
                   <p className="text-sm text-ftext">

@@ -145,7 +145,7 @@ export default async function QuestionsPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <section>
           <h2 className="mb-3 text-sm font-semibold text-white">
             Waiting for an answer{open.length > 0 ? ` (${open.length})` : ''}
@@ -157,7 +157,7 @@ export default async function QuestionsPage() {
               </p>
             </Card>
           ) : (
-            <div className="grid gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {open.map((entry) => (
                 <QueueEntry key={entry.id} entry={entry} />
               ))}
@@ -170,7 +170,7 @@ export default async function QuestionsPage() {
             <h2 className="mb-3 text-sm font-semibold text-white">
               Answered ({answered.length})
             </h2>
-            <div className="grid gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {answered.map((entry) => (
                 <QueueEntry key={entry.id} entry={entry} />
               ))}

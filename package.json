@@ -18,6 +18,7 @@
     "setup-link": "tsx scripts/mint-setup-link.ts",
     "reminders:run": "tsx scripts/run-reminders.ts",
     "verify:viewport": "tsx scripts/verify-viewport.ts",
+    "verify:lifecycle": "tsx scripts/verify-lifecycle.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
   },
   "dependencies": {

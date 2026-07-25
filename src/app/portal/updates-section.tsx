@@ -25,7 +25,7 @@ export function UpdatesSection({ view }: { view: InvestorUpdatesView }) {
           There are no updates yet. You will be notified by email when one is published.
         </p>
       ) : (
-        <ol className="mt-4 grid gap-3">
+        <ol className="mt-4 grid grid-cols-1 gap-3">
           {view.updates.map((update) => (
             <li key={update.id} className="rounded-sm border hairline bg-paper p-4 sm:p-5">
               <p className="text-sm font-semibold text-white">{update.title}</p>

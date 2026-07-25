@@ -126,7 +126,7 @@ export function AnswerForm({ entry }: { entry: AnswerFormEntry }) {
       {publish ? (
         <div className="mb-4">
           <p className={LABEL}>The question, side by side</p>
-          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="rounded-sm border hairline bg-bg2 p-3">
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted">
                 As they wrote it — never published
@@ -219,7 +219,7 @@ export function PublicationControls({
   pinned: boolean
 }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div>
         <ActionForm
           action={setPinnedAction}

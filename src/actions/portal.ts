@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import { z } from 'zod'
 import { eq } from 'drizzle-orm'
 import { db } from '@/db'
@@ -9,7 +10,8 @@ import { offers } from '@/db/schema'
 import { actionError, actionOk, type ActionState } from '@/components/admin/action-state'
 import { audit } from '@/lib/audit'
 import { canRespond, SIGN_IN_ACCEPTED_MESSAGE } from '@/lib/portal/access'
-import { requestSignInLink } from '@/lib/portal/claim'
+import { requestSignInLink, SIGN_IN_TOKEN_TTL_MINUTES } from '@/lib/portal/claim'
+import { deliverSignInLink } from '@/lib/portal/send-sign-in-link'
 import { loadPortalView } from '@/lib/portal/data'
 import { destroyInvestorSession, readInvestorAccount } from '@/lib/portal/session'
 import { isoToday } from '@/lib/money'
@@ -48,15 +50,33 @@ export async function requestSignInLinkAction(
     const outcome = await requestSignInLink({ email: parsed.data.email })
 
     if (outcome.issued && outcome.token) {
-      // The email itself is WP12's to send — a sign-in link is a notification,
-      // and notifications go through the same gated transport as everything
-      // else. The token is minted, stored hashed, and deliberately not returned
-      // to the browser or written to any log.
       await audit({
         actor: { kind: 'investor', id: outcome.accountId!, label: 'investor' },
         entityType: 'investor_account',
         entityId: outcome.accountId,
         action: 'portal.sign_in_link_requested',
+      })
+
+      // `after` runs once the response has been sent, and that placement is
+      // the point rather than a performance nicety.
+      //
+      // `requestSignInLink` pads every path to a fixed floor precisely so that
+      // a known address cannot be told from an unknown one by timing. Awaiting
+      // an SMTP round trip here would undo all of it: the issued path would
+      // take seconds and the other two would not, which is a far louder signal
+      // than the one that was just closed. So the sentence goes back
+      // immediately, identically, and the delivery happens afterwards.
+      //
+      // The token is passed straight through and never returned to the browser,
+      // never logged, and never written anywhere but the email itself.
+      const token = outcome.token
+      const accountId = outcome.accountId!
+      after(async () => {
+        await deliverSignInLink({
+          accountId,
+          token,
+          expiresInMinutes: SIGN_IN_TOKEN_TTL_MINUTES,
+        })
       })
     }
   }

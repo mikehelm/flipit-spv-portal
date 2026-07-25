@@ -90,7 +90,7 @@ function UpdateCard({
       ) : null}
 
       {!published ? (
-        <div className="mt-5 grid gap-4">
+        <div className="mt-5 grid grid-cols-1 gap-4">
           <details className="rounded-sm border hairline bg-bg2 p-4">
             <summary className="cursor-pointer text-sm font-semibold text-white">
               Edit this draft
@@ -113,12 +113,12 @@ function UpdateCard({
       ) : null}
 
       {published && !withdrawn ? (
-        <div className="mt-5 grid gap-4">
+        <div className="mt-5 grid grid-cols-1 gap-4">
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-silver2">
               Recipients ({update.recipients.length})
             </p>
-            <ul className="grid gap-2">
+            <ul className="grid grid-cols-1 gap-2">
               {update.recipients.map((recipient) => (
                 <li
                   key={recipient.accountId}
@@ -179,7 +179,7 @@ export default async function UpdatesPage() {
         </Notice>
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <Card
           title="Write an update"
           description="Saved as a draft. Nothing reaches anybody until you publish it."
@@ -211,7 +211,7 @@ export default async function UpdatesPage() {
         {drafts.length > 0 ? (
           <section>
             <h2 className="mb-3 text-sm font-semibold text-white">Drafts ({drafts.length})</h2>
-            <div className="grid gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {drafts.map((update) => (
                 <UpdateCard key={update.id} update={update} accounts={accounts} />
               ))}
@@ -231,7 +231,7 @@ export default async function UpdatesPage() {
               </p>
             </Card>
           ) : (
-            <div className="grid gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {live.map((update) => (
                 <UpdateCard key={update.id} update={update} accounts={accounts} />
               ))}
@@ -244,7 +244,7 @@ export default async function UpdatesPage() {
             <h2 className="mb-3 text-sm font-semibold text-white">
               Withdrawn ({withdrawn.length})
             </h2>
-            <div className="grid gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {withdrawn.map((update) => (
                 <UpdateCard key={update.id} update={update} accounts={accounts} />
               ))}

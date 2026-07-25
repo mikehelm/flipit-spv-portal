@@ -59,7 +59,7 @@ export default async function QuestionPage({
         </Link>
       </SectionHeading>
 
-      <div className="grid gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -142,7 +142,7 @@ export default async function QuestionPage({
               {entry.questionOriginal}
             </p>
           ) : (
-            <ol className="grid gap-4">
+            <ol className="grid grid-cols-1 gap-4">
               {messages.map((message) => (
                 <li
                   key={message.id}

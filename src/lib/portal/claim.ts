@@ -160,6 +160,44 @@ export interface SignInLinkRequest {
 }
 
 /**
+ * The floor every sign-in-link request is padded to.
+ *
+ * It has to exceed the slowest legitimate path, or the padding does nothing for
+ * the request that overruns it. A hundred and fifty milliseconds covers four
+ * round trips to a local or same-region Postgres with room to spare, and is
+ * short enough that nobody waiting for the confirmation notices it.
+ */
+export const SIGN_IN_LINK_FLOOR_MS = 150
+
+export interface SignInLinkDeps {
+  /** Injected in tests so the floor does not make the suite wait. */
+  sleep?: (ms: number) => Promise<void>
+  monotonicNow?: () => number
+  /** Replaces the padding wholesale. Tests only. */
+  settle?: () => Promise<void>
+}
+
+const realSleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Pad to a fixed elapsed time, measured from the moment this is built.
+ *
+ * Padding to a floor rather than equalising the work is the conservative
+ * choice: equal work has to be re-established every time somebody adds a query,
+ * and nothing fails when they forget. A floor keeps holding.
+ */
+function settleTo(floorMs: number, deps: SignInLinkDeps): () => Promise<void> {
+  const clock = deps.monotonicNow ?? (() => Date.now())
+  const sleep = deps.sleep ?? realSleep
+  const started = clock()
+  return async () => {
+    const remaining = floorMs - (clock() - started)
+    if (remaining > 0) await sleep(remaining)
+  }
+}
+
+/**
  * What the server should do about a sign-in request.
  *
  * `issued` is never shown to the visitor — the response is
@@ -181,14 +219,35 @@ export interface SignInLinkOutcome {
 
 export async function requestSignInLink(
   input: SignInLinkRequest,
+  deps: SignInLinkDeps = {},
 ): Promise<SignInLinkOutcome> {
   const email = input.email.trim().toLowerCase()
   const now = input.now ?? new Date()
   const config = await readServiceConfig()
 
-  const nothing = (
+  // Every path out of this function is padded to the same elapsed time. The
+  // sentence returned is already identical for every address (§4.1); the work
+  // done was not, and that is the same leak wearing a different hat.
+  //
+  //   unknown address        one SELECT
+  //   known but suspended    one SELECT, one audit INSERT
+  //   known and eligible     one SELECT, one UPDATE, two INSERTs
+  //
+  // The response body cannot tell a stranger whether Bob is on the recipient
+  // list. Three distinct latency bands, sampled freely because this form is
+  // public and unauthenticated, can — and a list of who received a private
+  // securities invitation is exactly what §15 exists to protect. The admin
+  // sign-in path has solved this since WP2 by always verifying a hash, real or
+  // dummy, and sleeping to a floor; this is the same idea, applied where the
+  // work differs by row count rather than by hashing.
+  const settle = deps.settle ?? settleTo(SIGN_IN_LINK_FLOOR_MS, deps)
+
+  const nothing = async (
     detail: SignInLinkOutcome['detail'],
-  ): SignInLinkOutcome => ({ issued: false, token: null, accountId: null, detail })
+  ): Promise<SignInLinkOutcome> => {
+    await settle()
+    return { issued: false, token: null, accountId: null, detail }
+  }
 
   if (email === '') return nothing('NO_SUCH_ACCOUNT')
 
@@ -250,6 +309,7 @@ export async function requestSignInLink(
     metadata: { expiresInMinutes: SIGN_IN_TOKEN_TTL_MINUTES },
   })
 
+  await settle()
   return { issued: true, token, accountId: account.id, detail: 'ISSUED' }
 }
 

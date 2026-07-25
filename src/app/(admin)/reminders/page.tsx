@@ -115,7 +115,7 @@ export default async function RemindersPage() {
         until it does.
       </SectionHeading>
 
-      <div className="mb-6 grid gap-3">
+      <div className="mb-6 grid grid-cols-1 gap-3">
         {config.serviceMode !== 'ACTIVE' ? (
           <Notice tone="warn">
             The service mode is {config.serviceMode}. Nothing sends outside active mode — the
@@ -144,7 +144,7 @@ export default async function RemindersPage() {
         </Notice>
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <Card
           title="The schedule"
           description={`Reminders go out at ${String(REMINDER_HOUR_UTC).padStart(2, '0')}:00 UTC on the day they are due.`}
@@ -181,7 +181,7 @@ export default async function RemindersPage() {
               </p>
             </Card>
           ) : (
-            <ul className="grid gap-3">
+            <ul className="grid grid-cols-1 gap-3">
               {pending.map((row) => (
                 <QueueEntry key={row.id} row={row} />
               ))}
@@ -208,7 +208,7 @@ export default async function RemindersPage() {
             <h2 className="mb-3 text-sm font-semibold text-white">
               Sent, cancelled and skipped ({done.length})
             </h2>
-            <ul className="grid gap-3">
+            <ul className="grid grid-cols-1 gap-3">
               {done.map((row) => (
                 <QueueEntry key={row.id} row={row} />
               ))}

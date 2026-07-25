@@ -665,6 +665,83 @@ It checks two ways, because either alone is insufficient. **Structurally**, whic
 
 ---
 
+## Hardening — suspension was unreachable, and the sign-in form leaked by timing
+
+Not a work package. Two live defects found by auditing the twelve-point checklist across the whole codebase rather than package by package, which is how both survived: neither breaks a test, and both sit in code that reads as finished.
+
+### Nobody could suspend an account
+
+`changeAccountStatus` has existed since WP8 and is correct — it writes the status, revokes every session and every unspent link **in the same function** so a caller cannot do one and forget the other, writes the `AccountStatusEvent` with actor, reason and whether the investor was told, and refuses an operator who tries to archive. **It had no callers.** Not an action, not a route, not a script, not a test. `revokeAllPortalAccess` had none either.
+
+So §4.2's *"Suspension and closure take effect immediately — active sessions are terminated, outstanding links are revoked"* was a true statement about unreachable code, and checklist point 7 could not be exercised. TEST_ME told the reader to suspend an investor and watch their session die on the next click; there was no way to do it. If an investor's mailbox were compromised tomorrow, their thirty-day session and their unspent fourteen-day claim link would both stay live and nothing in the application could stop them.
+
+**Built:** `/investors` — every account with its status, its offer count, whether the mailbox is verified, when they last signed in, and the full status history with each reason and who recorded it. Each row shows **how many live sessions and unspent links the person holds right now**, because §4.2's sentence is worth seeing before the decision rather than after it. The change form asks for the destination, a reason of at least ten characters, whether the investor has been told, and the word `SUSPEND`, `CLOSE` or `ARCHIVE` typed out — a click on the wrong row looks exactly like a click on the right one, and typing the word does not.
+
+**The action adds no rule of its own.** Every refusal comes back from `changeAccountStatus`, including the owner-only check on archiving, so a second caller cannot get a different answer from this one. Re-checking the role in the action would create two places that have to agree, which is one place that eventually will not.
+
+**Verified against the real database, with a second investor present throughout.** Thirty checks in `scripts/verify-lifecycle.ts`: a suspension with no reason is refused *and changes nothing*; an operator cannot archive; two live sessions and two unspent links all die at once; the other investor's two and two are untouched; a suspended account cannot claim, cannot be issued a link, and asking for one produces nothing while an unaffected investor still gets theirs; the status event carries the reason, the actor and the notified flag; restoring is possible but does not un-revoke anything; and a closed account on the default `read_only` can still sign back in.
+
+### The public sign-in form told you who was on the recipient list
+
+`requestSignInLink` returns one sentence for every address — §4.1 requires that, and it did it. The **work** was not the same, which is the same leak wearing a different hat:
+
+| address | queries |
+| --- | --- |
+| unknown | one SELECT |
+| known but suspended | one SELECT, one audit INSERT |
+| known and eligible | one SELECT, one UPDATE, two INSERTs |
+
+The portal sign-in form is public, unauthenticated and unthrottled, so an attacker can sample it as often as they like. Three distinct latency bands, keyed exactly on account existence and eligibility, identify anybody holding a private securities invitation — which is precisely what §15 exists to protect, and the identical sentence does nothing to hide it. The module's own header claimed *"the same response and the same delay"*.
+
+The admin path has done this correctly since WP2: it always verifies a hash, real or dummy, and sleeps to a floor. Every exit from `requestSignInLink` is now padded to `SIGN_IN_LINK_FLOOR_MS`, measured from before the first query.
+
+**Padding to a floor rather than equalising the work is deliberate.** Equal work has to be re-established every time somebody adds a query, and nothing fails when they forget. A floor keeps holding. The tests are structural rather than statistical for the same reason a security property should not be a flaky test: they assert that every return settles, that the padding is built before the first query rather than after it, and that the action still has exactly one return carrying one sentence.
+
+**Checklist:** points 5 and 7 are this change's.
+
+5. No investor-facing response reveals another investor. The response body was already identical; the timing is now too. Verified that the operator's account list — which does load every investor, because it is an admin surface — carries no token hash.
+7. Suspension revokes existing sessions **and** refuses new links. Both halves, in one function, now reachable from a screen, and verified against a real database with two investors.
+
+**Uncertain:**
+
+- The floor is 150ms. It has to exceed the slowest legitimate path or it achieves nothing for the case that matters most; four round trips to a same-region Postgres fits inside it comfortably, but a database on the far side of an ocean would not. Worth re-measuring once the production database is real.
+- There is still no rate limit on the portal sign-in form. The admin form has progressive throttling by address and by IP; the investor form has none. With the timing closed there is nothing obvious left to learn from sampling it, but a bare public form that mints tokens deserves the same treatment, and that is a small package rather than a line.
+- Two related gaps found in the same audit and **not** fixed here, because both are known and documented rather than accidental: the sign-in link is minted and never emailed, so a returning investor is told a link is on its way and receives nothing; and re-sending an invitation leaves the previous claim token live, where the sign-in path revokes the old one first. The first is the larger of the two — it locks out every investor whose session lapses — and it is a small, self-contained package.
+
+---
+
+## Hardening — the sign-in link is now actually sent
+
+Not a work package. The third defect from the same audit, and the one an investor would hit first.
+
+`requestSignInLink` has minted a token, hashed it and stored it since WP8. Nothing sent it. So the portal told every returning investor *"If that address has a record with us, a sign-in link is on its way"*, wrote a row that expired unused forty-five minutes later, and sent nothing. **Anybody whose session lapsed was locked out by a sentence that was not true**, with no way back in short of the operator issuing a fresh invitation.
+
+**Built:** `lib/portal/sign-in-email.ts`, the message, and `lib/portal/send-sign-in-link.ts`, the one function that delivers it.
+
+**It is not compliance-gated, and that is a decision rather than an omission.** §8.2's approval covers the invitation and the reminder — the two emails that communicate an offer of securities. This one says somebody asked to sign in and here is the door. It is the same category as the update notification (§6) and the Q&A reply (§6.7.6). Registering it would mean one word changed in an operational email voids the approval that lets invitations go out, which is not a stricter reading of §8.2 but a broken one. A test asserts the module hashes no template and names no template kind.
+
+**Decisions:**
+
+- *It carries the link and nothing else.* `buildSignInEmail` takes two links and a duration, and has no parameter for a name, an amount, a percentage, a deadline or the round. Two reasons, and the second is the one that decided it: a sign-in email lands in a mailbox that may be the very reason the person is signing in again, and it is the message an attacker would most like to trigger for somebody else's address. Neither is a good place for the terms of a private placement. A test asserts the arity, that the visible text carries no digit outside the link and the stated expiry, and that the words "allocation", "deadline", "invitation" and "SPV" appear nowhere once the links are stripped.
+- *The lead says "Somebody asked", not "You asked".* An unrequested sign-in email is exactly what an attempt on somebody's account looks like from the inside, and the recipient is the only person positioned to notice. "You asked for this" would be a false statement in precisely the case that matters. It is followed by a plain line saying that ignoring it is safe and the link expires on its own — more use to them than any warning the application could raise on its own.
+- *The address is never a parameter.* `deliverSignInLink` takes an account id and looks the address up. This is the one email an unauthenticated stranger can cause to be sent, and the only thing between that and an open relay is that the recipient cannot come from the request. A test asserts there is no `email: string` in the module's signatures and no `to: input.…` anywhere in it.
+- *Delivery runs in `after()`, once the response has gone.* This is load-bearing rather than a performance nicety. The previous commit padded every path through `requestSignInLink` to a fixed floor so a known address cannot be told from an unknown one by timing; awaiting an SMTP round trip in the action would have undone all of it, because the issued path would take seconds and the other two would not. That is a far louder signal than the one just closed. The sentence goes back immediately and identically; the email follows. A test asserts `deliverSignInLink` appears nowhere in the action body before the `after` callback.
+- *A failure is silent to the investor and loud in the audit log.* They have already been told the one sentence §4.1 requires, and telling them the send failed would confirm the address exists — which is the whole thing the identical sentence exists to hide. `portal.sign_in_link_delivered` and `portal.sign_in_link_not_delivered` record which it was, with the failure class and the attempt count and never the address, the token or the body.
+
+**Checklist:** points 2, 5, 6 and 8 are this change's.
+
+2. No send path bypasses anything. It goes through `sendOneEmail`, whose gate covers the credential (§8.1), the service mode (§7) and the deployment (§18.1); a test asserts the module constructs no transport and imports no mail library. It is deliberately outside the compliance approval, for the reason above.
+5. No investor-facing response reveals another investor. The action still has exactly one return carrying one sentence, asserted by a test, and the delivery outcome cannot reach it.
+6. The token is single-use, hashed at rest and expiring — unchanged from WP8. It now travels in exactly one place, the email, and a test asserts it reaches no audit metadata.
+8. No log line carries a token, an address or a body. Asserted against every `metadata:` block in the module.
+
+**Uncertain:**
+
+- Forty-five minutes is WP8's number and it is short for an email. It is right for a link that is one click from being reissued, but somebody who asks from a phone and opens it on a laptop an hour later gets a dead link and has to ask again. Worth a look once real people are using it.
+- `after()` runs the send on the same invocation once the response has flushed. On Netlify that is supported, but it is not a queue: if the function is killed between the response and the send, the link is minted and never delivered and the investor is told it is on its way. The audit log shows nothing at all in that case, which is the one failure mode here that is silent in both directions. A retry surface — the operator seeing "asked for a link, never delivered" — would close it, and that is a small package rather than a line.
+
+---
+
 ## WP18 — Branding, mobile, accessibility — done
 
 Four things were asked for: the §13.2 palette applied consistently, every screen correct at 375px before desktop, WCAG AA contrast with `--dim` on `--bg` specifically named, and keyboard navigation and focus states throughout. Plus the page curl as a restrained brand mark.
@@ -702,7 +779,11 @@ The pairing §13.2 actually names, `--dim` on `--bg`, was fine all along at 6.95
 - *A roadmap tile whose label breaks §13.1 is not rendered.* Names only, no dates, nothing that reads as return, valuation, liquidity or a timeline. Nothing writes these today except the seed, so nothing can currently be dropped without somebody noticing; when a tile-editing surface is built it must refuse at write time and name the offending word, and `forbiddenWordsInTileLabel` is what it should call.
 - *The page curl does not move, structurally.* §13.2: "Do not animate it aggressively; this is an investment document, not the product demo." There is no transform, no transition and no keyframe in the component, and a test asserts it. It is `aria-hidden` and `focusable="false"`, so it never lands between an investor and the button they are reaching for.
 
+**Twenty grids could not shrink, and one of them had already broken.** A Tailwind `grid` with no `grid-cols-*` gets a single implicit column sized to `max-content` — as wide as its widest child wants to be. The audit log's filter form was one, and it was fine until the log contained a longer action name, at which point a `<select>` sized to its longest option pushed the document to 404px and the owner's screen scrolled sideways at 375px. `sm:grid-cols-2` does not help: below the breakpoint — which is where §13.2 says to look first — it does nothing. Every grid now declares `grid-cols-1`, whose `minmax(0, 1fr)` is what lets a child shrink, and a test fails on a `grid` class without an unprefixed column count.
+
 **Deviations:** one migration, `0005`, adding three columns to `service_config` for the credit. No other schema change.
+
+**Merged with a parallel session** that built the Investors screen, the sign-in link send and the suspension controls. Its two new screens carried hex literals and a 36px control; both were tokenised and raised, and its screens are in the 375px verification — which is the argument for the palette test being a test rather than a convention. One hundred and four checks now pass across twenty-one screens.
 
 **Two things fixed in passing, both outside this package's scope:**
 

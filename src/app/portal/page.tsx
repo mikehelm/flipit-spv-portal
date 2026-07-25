@@ -210,7 +210,7 @@ function OfferSection({ offer, allowResponse }: { offer: PortalOffer; allowRespo
             share certificate and not a title document — the subscription and SPV documents
             remain the governing instruments.
           </p>
-          <ul className="mt-4 grid gap-2">
+          <ul className="mt-4 grid grid-cols-1 gap-2">
             {offer.certificates.map((certificate) => (
               <li
                 key={certificate.id}
@@ -318,7 +318,7 @@ export default async function PortalPage() {
         {canView(view.access) && view.tiles.length > 0 ? (
           <section className="mt-12">
             <h2 className="text-sm font-semibold text-white">Coming to your portal</h2>
-            <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+            <ul className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {view.tiles.map((tile) => (
                 <li
                   key={tile.label}

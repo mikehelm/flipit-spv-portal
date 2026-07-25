@@ -224,7 +224,7 @@ export default async function RecipientsPage({
       </SectionHeading>
 
       {/* §12: these two are always visible, because they are what silently breaks a send. */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-2">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-sm border hairline bg-paper p-4">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-dim">
             Compliance approval
@@ -279,7 +279,7 @@ export default async function RecipientsPage({
         title={`Recipients (${visible.length} of ${context.rows.length})`}
         description="Filters are links, so a filtered view can be shared or bookmarked."
       >
-        <form method="get" className="mb-5 grid gap-3 sm:grid-cols-3">
+        <form method="get" className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <input
             type="search"
             name="search"
@@ -329,7 +329,7 @@ export default async function RecipientsPage({
               : 'No recipient matches those filters.'}
           </p>
         ) : (
-          <ul className="grid gap-3">
+          <ul className="grid grid-cols-1 gap-3">
             {visible.map((row) => (
               <RecipientCard
                 key={row.offerId}

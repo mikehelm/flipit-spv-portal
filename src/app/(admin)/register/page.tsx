@@ -133,7 +133,7 @@ function MemberCard({ member }: { member: RegisterMember }) {
         </p>
       )}
 
-      <div className="mt-5 grid gap-3">
+      <div className="mt-5 grid grid-cols-1 gap-3">
         <OverrideForm
           accountId={member.accountId}
           currentPosition={member.position}
@@ -179,7 +179,7 @@ export default async function RegisterPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <section>
           <h2 className="mb-3 text-sm font-semibold text-white">
             In computed order{members.length > 0 ? ` (${members.length})` : ''}
@@ -194,7 +194,7 @@ export default async function RegisterPage() {
               </p>
             </Card>
           ) : (
-            <div className="grid gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {members.map((member) => (
                 <MemberCard key={member.accountId} member={member} />
               ))}

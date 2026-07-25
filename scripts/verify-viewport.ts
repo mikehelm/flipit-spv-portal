@@ -520,6 +520,7 @@ async function main(): Promise<void> {
     for (const [label, path] of [
       ['overview', '/admin'],
       ['review and send', '/recipients'],
+      ['investors', '/investors'],
       ['import', '/import'],
       ['email templates', '/templates'],
       ['the round', '/round'],

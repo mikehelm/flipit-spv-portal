@@ -52,7 +52,7 @@ export default function Home() {
 
       <div className="mt-10 rounded-sm border hairline bg-paper p-5">
         <p className="text-sm font-semibold text-white">Deployment</p>
-        <dl className="mt-3 grid gap-2 text-sm text-dim sm:grid-cols-[9rem_1fr]">
+        <dl className="mt-3 grid grid-cols-1 gap-2 text-sm text-dim sm:grid-cols-[9rem_1fr]">
           <dt>Serving from</dt>
           <dd className="break-all text-ftext">{config.APP_URL}</dd>
           <dt>Base path</dt>

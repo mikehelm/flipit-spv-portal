@@ -83,9 +83,9 @@ export default async function AuditPage({
         </Notice>
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <Card title="Filter" description="By actor, entity or action — BUILD_SPEC §20.">
-          <form method="get" className="grid gap-4 sm:grid-cols-2">
+          <form method="get" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="block">
               <span className="block text-xs font-semibold uppercase tracking-wider text-silver2">
                 Actor
@@ -205,7 +205,7 @@ export default async function AuditPage({
             <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-silver2">
               Recipients
             </p>
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 gap-3">
               {rounds.map((round) => (
                 <div key={round.id} className="flex flex-wrap items-center gap-3">
                   <span className="text-sm text-ftext">{round.name}</span>
@@ -239,7 +239,7 @@ export default async function AuditPage({
               <p className="text-sm text-dim">Nothing matches that filter.</p>
             </Card>
           ) : (
-            <ul className="grid gap-2">
+            <ul className="grid grid-cols-1 gap-2">
               {rows.map((row) => (
                 <li key={row.id} className="rounded-sm border hairline bg-paper p-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">

@@ -64,7 +64,7 @@ export default async function RoundPage() {
         Closing the round is a button, and doing nothing is a legitimate answer.
       </SectionHeading>
 
-      <div className="mb-6 grid gap-3">
+      <div className="mb-6 grid grid-cols-1 gap-3">
         {summary.closedAt ? (
           <Notice tone="warn">
             This round was closed on {summary.closedAt.toISOString().slice(0, 10)}. Responses are
@@ -80,7 +80,7 @@ export default async function RoundPage() {
         ) : null}
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <Card title="Where it stands">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm sm:grid-cols-4">
             {(
@@ -148,7 +148,7 @@ export default async function RoundPage() {
             <h2 className="mb-3 text-sm font-semibold text-white">
               Still to respond ({chasing.length})
             </h2>
-            <ul className="grid gap-3">
+            <ul className="grid grid-cols-1 gap-3">
               {chasing.map((row) => (
                 <li
                   key={row.offerId}

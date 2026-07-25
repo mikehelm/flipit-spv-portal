@@ -54,7 +54,7 @@ export function MailConnectionPanel({
         <Pill tone={TONE[health.state]}>{LABEL[health.state]}</Pill>
       </p>
 
-      <dl className="mt-3 grid gap-1 text-sm text-dim sm:grid-cols-[10rem_1fr]">
+      <dl className="mt-3 grid grid-cols-1 gap-1 text-sm text-dim sm:grid-cols-[10rem_1fr]">
         <dt>Sends as</dt>
         <dd className="break-all text-ftext">
           {health.authenticatedAddress ?? 'No account connected'}

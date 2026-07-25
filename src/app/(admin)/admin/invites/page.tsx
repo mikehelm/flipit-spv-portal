@@ -95,7 +95,7 @@ export default async function InvitesPage() {
                       </span>
                       <Pill tone={STATUS_TONE[status]}>{status.replace('_', ' ')}</Pill>
                     </div>
-                    <dl className="mt-2 grid gap-1 text-xs text-dim sm:grid-cols-[7rem_1fr]">
+                    <dl className="mt-2 grid grid-cols-1 gap-1 text-xs text-dim sm:grid-cols-[7rem_1fr]">
                       <dt>Issued</dt>
                       <dd>{utc(invite.createdAt)}</dd>
                       <dt>Expires</dt>

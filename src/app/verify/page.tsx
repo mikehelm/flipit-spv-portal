@@ -61,7 +61,7 @@ export function VerificationPageContent({
 
       <section className="mt-5 rounded-sm border hairline bg-paper p-5 sm:p-7">
         <h2 className="text-xl font-semibold text-white">Two exact checks</h2>
-        <dl className="mt-5 grid gap-5">
+        <dl className="mt-5 grid grid-cols-1 gap-5">
           <div>
             <dt className="text-xs font-bold uppercase tracking-[0.14em] text-dim">
               Invitation sender

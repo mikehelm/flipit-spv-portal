@@ -95,6 +95,37 @@ describe('touch targets', () => {
   })
 })
 
+describe('layout that cannot shrink', () => {
+  it('every grid declares a base column count', () => {
+    /**
+     * A `grid` with no `grid-cols-*` gets one implicit column sized to
+     * `auto`, which is `max-content` — so the column is as wide as its widest
+     * child wants to be, and a `<select>` whose longest option is long pushes
+     * the whole document sideways. Tailwind's `grid-cols-1` is
+     * `repeat(1, minmax(0, 1fr))`, and the `minmax(0, ...)` is the part that
+     * lets the child shrink.
+     *
+     * This is not theoretical. The audit log's filter form was a bare `grid`,
+     * and it was fine until the audit log had a longer action name in it —
+     * at which point the page scrolled sideways at 375px on a screen the
+     * owner reads. Twenty grids across the application had the same shape.
+     *
+     * A prefixed `sm:grid-cols-2` does not satisfy this: below the `sm`
+     * breakpoint, which is where §13.2 says to look first, it does nothing.
+     */
+    const offenders: string[] = []
+    for (const file of screens) {
+      for (const m of code(file).matchAll(/className="([^"{}]*)"/g)) {
+        const tokens = m[1].split(/\s+/)
+        if (!tokens.includes('grid')) continue
+        if (tokens.some((t) => /^grid-cols-\S+$/.test(t))) continue
+        offenders.push(`${file}: class="${m[1]}"`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+})
+
 describe('the page renders at the width of the device', () => {
   it('the viewport is declared, and zoom is not capped', () => {
     const layout = read('src/app/layout.tsx')
