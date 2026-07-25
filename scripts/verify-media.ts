@@ -25,7 +25,7 @@ import { db } from '@/db'
 import { auditEvents, investorAccounts, mediaAssets, operatorVideos, users } from '@/db/schema'
 import { resetEnvCache } from '@/lib/env'
 import { readDimensions } from '@/lib/media/dimensions'
-import { jpegWithMetadata, mp4WithLocation, svgBytes } from '@/lib/media/fixtures'
+import { jpegWithMetadata, mp4WithLocation, svgBytes, webmWithMetadata } from '@/lib/media/fixtures'
 import { ingest } from '@/lib/media/ingest'
 import { mediaStore, resetMediaStoreCache } from '@/lib/media/store'
 import { mayViewVideo } from '@/lib/media/video'
@@ -156,6 +156,31 @@ async function main(): Promise<void> {
   check('the uploaded video carried coordinates', Buffer.from(videoBytes).toString('latin1').includes('+51.5074'))
   check('the stored video does not', !videoOnDisk.toString('latin1').includes('+51.5074'))
   check('and it is byte-for-byte the same length, so it still plays', videoOnDisk.length === videoBytes.length)
+
+  // An uploaded WebM — the case the strip used to pass straight through.
+  const webmBytes = webmWithMetadata()
+  const webm = await ingest('video', webmBytes, 'video/webm')
+  check('an uploaded WebM is accepted', webm.ok)
+
+  if (webm.ok) {
+    const webmOnDisk = await readFile(path.join(directory, webm.storageKey))
+    const uploadedText = Buffer.from(webmBytes).toString('latin1')
+    const storedText = webmOnDisk.toString('latin1')
+
+    check('the uploaded WebM carried a name and a location', uploadedText.includes(SECRET))
+    check('the stored one does not', !storedText.includes(SECRET))
+    check('nor the muxing software', !storedText.includes('Muxed by'))
+    check('nor the track name', !storedText.includes('Camera of'))
+    check('nor the tag block', !storedText.includes('LOCATION'))
+    check(
+      'and it is byte-for-byte the same length, so seeking still works',
+      webmOnDisk.length === webmBytes.length,
+    )
+    check('it is still recognisably a WebM', storedText.includes('webm'))
+
+    const store = mediaStore()
+    if (store) await store.remove(webm.storageKey)
+  }
 
   const [row] = await db
     .insert(operatorVideos)

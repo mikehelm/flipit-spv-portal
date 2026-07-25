@@ -1553,3 +1553,144 @@ files. `pnpm verify:viewport` — 130 checks, both changed screens still passing
   this scale — a handful per offer — and it would be the wrong shape for an
   offer with hundreds. A recursive query is the answer if that ever happens, and
   it is not the shape of this problem.
+
+---
+
+## WebM — closing the one format that claimed to be stripped and was not
+
+Not a numbered work package. A gap WP15 named in its own Uncertain section and
+left open, deliberately and with a description of what closing it would take.
+
+`stripMetadata` passed `video/webm` straight through. The reasoning written
+beside it was that the only path producing a WebM here is §13.3's in-browser
+recorder, and a `MediaRecorder` stream carries no location, no device serial and
+no owner name — nothing to remove. That is true of a *recorded* file. It was
+never true of an *uploaded* one, and §13.3 asks for both: *"in-browser recording
+and file upload"*. A WebM off a phone, a screen recorder or ffmpeg carries a
+`WritingApp` naming the software and often the machine it is licensed to, a
+`Title`, a `DateUTC`, a track `Name`, and in `Tags` whatever free text somebody's
+editing software wrote. All of it went to the store untouched, and the media
+screen told the operator the file had been stripped.
+
+**Built.**
+
+- **`stripEbmlMetadata`** — an EBML walk that neutralises the text a Matroska
+  container can carry, in place, without changing the length of anything.
+- **`webmWithMetadata`** in the fixtures — a WebM shaped like one a recorder
+  produces, carrying the same string in five separate places, plus a Cluster of
+  frame data so the length assertion means something.
+- **Fourteen tests**, and **seven checks in `pnpm verify:media`** against the
+  real store.
+- **`stripsMetadata` now answers true for every video format**, so the sentence
+  the upload screen shows the operator is true of the file he just chose.
+
+**Decisions.**
+
+- ***In place, byte for byte, exactly as the MP4 stripper works.*** Matroska
+  addresses its own elements by absolute position — `SeekHead` entries and
+  `CueClusterPosition` are byte offsets from the start of the segment — so
+  deleting an element shifts every one of them and produces a file that seeks to
+  the wrong place or does not play at all. Nothing here changes a length.
+- ***Two treatments, decided by whether the format requires the element.***
+  Optional master elements — `Tags`, `Attachments`, `Chapters` — are overwritten
+  with a `Void` element of exactly the same total size, `Void` being EBML's
+  defined "ignore this padding" and the direct equivalent of the `free` box the
+  MP4 stripper writes. `MuxingApp` and `WritingApp` are *mandatory* in Matroska,
+  and a track's `Name` lives inside a `TrackEntry` that has to stay, so those
+  keep their element and have their payload zeroed. An empty string is a valid
+  value; a missing mandatory element is not.
+- ***An exact-size `Void` is always possible, and that is why this works.*** EBML
+  permits a size to be written in more bytes than it strictly needs, so the
+  replacement picks a size-field length that makes one id byte, the size field
+  and the payload add up to precisely the span being overwritten. Any span of
+  two bytes or more can be covered. There is no case that falls back to leaving
+  metadata in place.
+- ***`DateUTC` is zeroed rather than voided***, which sets it to the format's own
+  epoch of 2001-01-01. A fixed wrong date is better than a real one and better
+  than a file that fails validation.
+- ***The rules are keyed by scope, not by a global list of ids.*** `Title` is
+  only acted on inside `Info`, `Name` only inside a `TrackEntry`, and the walk
+  descends only where there is a reason to — never into a `Cluster`, which is
+  where all the video is and none of the text. A two-byte id that collides with
+  something meaningful at another depth cannot be acted on at the wrong level.
+- ***An unknown-size element stops the walk rather than being guessed past.***
+  Legal for a live-streamed `Segment`, and its children are still walked; what
+  is not done is stepping over it to whatever follows, because there is no
+  reliable "whatever follows".
+- *A malformed or truncated WebM is returned at its original length rather than
+  half-processed.* Every parse step that cannot make sense of what it is reading
+  returns instead of guessing, which is the same rule the ISO walker follows.
+- *`SeekHead` is left alone.* Voiding `Tags` leaves any `SeekHead` entry pointing
+  at it addressing a `Void` instead. Every demuxer checks what it finds at a seek
+  position and ignores a mismatch, and rewriting `SeekHead` would mean editing a
+  structure whose entries are themselves position-dependent. Recorded under
+  Uncertain rather than assumed away.
+
+**Deviations.** No migration, no schema change, no new route, no dependency.
+`stripsMetadata` changed answer for one format, which is the point.
+
+**One pre-existing test replaced rather than widened.** `strip.test.ts` had a
+test named *"passes WebM through unchanged — the browser recorder is the only
+thing that makes one"*, which asserted the old behaviour. It is now *"leaves a
+WebM with nothing to remove alone"*, asserting the same bytes come back for the
+recorder's output — which is still true, and is now true because nothing
+*matched* rather than because nothing was *tried*. The old test was correct
+about the old behaviour and would have been wrong to keep.
+
+**Checklist.** Point 8 is this change's; the rest were re-checked because it
+changes what is written to the store.
+
+1. **No monetary value is a JavaScript number.** Nothing here touches money. The
+   existing test asserting `parseFloat` and `.toNumber(` appear in no media
+   module still passes.
+2. **No send path bypasses anything.** Nothing here sends; the existing test
+   asserting no media module names `sendOneEmail`, `SmtpTransport` or
+   `assertCanSend` covers the new code.
+3. **A jurisdiction block still stops one recipient.** Untouched.
+4. **The operator still cannot record, amend or void an approval.** Untouched.
+5. **No investor-facing response reveals another investor.** `stripEbmlMetadata`
+   is pure and takes bytes; it knows nothing about accounts. `verify:media` runs
+   with two investors present throughout — 39 checks pass.
+6. **Claim and sign-in tokens are single-use, hashed and expiring.** Untouched.
+7. **Suspension revokes sessions and refuses new links.** Untouched.
+8. **No log line carries a token, a body or a key.** The stripper logs nothing —
+   the existing assertion that no media module calls `console` at all covers it —
+   and the strings it removes never reach a message, a return value or an audit
+   entry. What is removed is overwritten, not reported.
+9. **The verification page is still the only indexable route.** No new route.
+10. A published Q&A entry carries nothing identifying. Untouched.
+11. The AI path cannot change a calculated figure. Untouched.
+12. The app still refuses to send when its base URL is not the production value.
+    Untouched.
+
+**Verified.** `pnpm verify:media` — 39 checks, up from 31, seven of them new: an
+uploaded WebM accepted, the name and location it carried absent from the file on
+disk, the muxing software absent, the track name absent, the tag block absent,
+the length identical so seeking still works, and the file still identifiable as a
+WebM afterwards. `pnpm test` — 1746 tests, 90 files. `pnpm verify:viewport` — 130
+checks still green.
+
+**Uncertain.**
+
+- *A stale `SeekHead` entry may point at a `Void`.* Harmless in every demuxer
+  that checks what it finds — which is all of them, because a seek index is
+  advisory — but it is a file that is very slightly less tidy than one written
+  from scratch. Rewriting `SeekHead` correctly means editing position-dependent
+  entries and is a much larger change for no observed benefit.
+- *This is tested against a fixture, not against a file from a real recorder.*
+  The fixture is built byte by byte in the repository, so what it contains is
+  readable rather than opaque — but a WebM out of a real phone will have
+  elements this one does not, and the honest position is that the walk has been
+  proved correct on a file this codebase wrote. A recorded file dropped into
+  `verify:media` would be the stronger test.
+- *Only text-bearing elements this build knows about are removed.* The approach
+  is a denylist, which is the opposite of the allowlist the PNG and JPEG
+  strippers use, and it is the weaker of the two shapes. An allowlist is not
+  available here: a WebM is mostly one enormous Cluster of frame data that has
+  to survive verbatim, so "keep only what cannot carry a sentence" would mean
+  enumerating every element in Matroska. The denylist covers every element a
+  recorder or an editor is known to write text into; something exotic could get
+  past it.
+- *`CodecPrivate` is not touched.* It carries codec initialisation data, not
+  authored text, and zeroing it would break playback outright. It is in principle
+  a place bytes could hide, and it is deliberately left alone.

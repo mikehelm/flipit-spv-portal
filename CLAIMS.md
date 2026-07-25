@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| EBML stripping for an uploaded WebM | 25 Jul session C | 2026-07-25 23:45 | `src/lib/media/strip.ts`, `src/lib/media/fixtures.ts`, `src/lib/media/strip.test.ts`, `scripts/verify-media.ts` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -54,7 +54,9 @@ not a package.
 `pnpm verify:documents` is 48 checks covering the whole correction lifecycle.
 
 What is left is not a package either. The open items are listed under Uncertain
-at the end of each PROGRESS.md section. The largest now are range requests on a
-video, a reconciliation pass for objects whose rows are gone, EBML stripping for
-an uploaded WebM, and the open question — sharpened by corrections — of whether
-issuing a document should notify the investor at all.
+at the end of each PROGRESS.md section. **EBML stripping for an uploaded WebM is done too**, so every accepted format
+except PDF is now stripped, and PDF is deliberate.
+
+The largest now are range requests on a video, a reconciliation pass for objects
+whose rows are gone, and the open question — sharpened by corrections — of
+whether issuing a document should notify the investor at all.

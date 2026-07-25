@@ -6,11 +6,20 @@ import {
   pngWithMetadata,
   svgBytes,
   webmBytes,
+  webmWithMetadata,
   webpWithMetadata,
 } from './fixtures'
 import { sniffFormat } from './formats'
 import { readDimensions } from './dimensions'
-import { stripIsoMetadata, stripJpeg, stripMetadata, stripPng, stripWebp } from './strip'
+import {
+  stripEbmlMetadata,
+  stripIsoMetadata,
+  stripJpeg,
+  stripMetadata,
+  stripPng,
+  stripWebp,
+  stripsMetadata,
+} from './strip'
 
 /**
  * BUILD_SPEC §13.2 — "stripped of EXIF" — and §22 AC31.
@@ -220,9 +229,149 @@ describe('stripMetadata', () => {
     expect(text(stripMetadata('video/quicktime', mp4WithLocation()))).not.toContain('+51.5074')
   })
 
-  it('passes WebM through unchanged — the browser recorder is the only thing that makes one', () => {
+  it('routes WebM to the EBML stripper too, which it did not used to', () => {
+    expect(text(stripMetadata('video/webm', webmWithMetadata()))).not.toContain(SECRET)
+  })
+
+  it('leaves a WebM with nothing to remove alone', () => {
+    // The browser recorder's output has no Info strings and no Tags. Nothing
+    // matches, so nothing is written — the bytes come back identical.
     const bytes = webmBytes()
     expect([...stripMetadata('video/webm', bytes)]).toEqual([...bytes])
+  })
+
+  it('says it strips every video format now, and still not a PDF', () => {
+    expect(stripsMetadata('video/webm')).toBe(true)
+    expect(stripsMetadata('video/mp4')).toBe(true)
+    expect(stripsMetadata('video/quicktime')).toBe(true)
+    expect(stripsMetadata('image/jpeg')).toBe(true)
+    // A document package is a legal instrument. Byte for byte, deliberately.
+    expect(stripsMetadata('application/pdf')).toBe(false)
+  })
+})
+
+/**
+ * WebM was the one accepted format that claimed to be stripped and was not.
+ *
+ * The old reasoning held for a recorded file — a `MediaRecorder` stream carries
+ * nothing to remove — and never held for an uploaded one, which is a path this
+ * application has always had. These are the tests for closing that.
+ */
+describe('WebM — the gap that had a name', () => {
+  const source = webmWithMetadata()
+  const stripped = stripMetadata('video/webm', source)
+
+  it('the fixture really does carry what the test is looking for', () => {
+    // Four separate places, so a stripper that found one and missed three
+    // could not pass.
+    expect(text(source)).toContain('Title: ')
+    expect(text(source)).toContain(SECRET)
+    expect(text(source)).toContain('Muxed by software')
+    expect(text(source)).toContain('Written by software')
+    expect(text(source)).toContain('Camera of')
+    expect(text(source)).toContain('LOCATION')
+  })
+
+  it('none of it survives', () => {
+    expect(text(stripped)).not.toContain(SECRET)
+    expect(text(stripped)).not.toContain('Title:')
+    expect(text(stripped)).not.toContain('Muxed by')
+    expect(text(stripped)).not.toContain('Written by')
+    expect(text(stripped)).not.toContain('Camera of')
+    expect(text(stripped)).not.toContain('LOCATION')
+  })
+
+  /**
+   * The whole reason this is done in place. Matroska addresses its own
+   * elements by absolute byte position — SeekHead entries and cue positions
+   * are offsets from the start of the segment — so a stripper that shortened
+   * anything would produce a file that seeks to the wrong place.
+   */
+  it('not one byte of length changes', () => {
+    expect(stripped.length).toBe(source.length)
+  })
+
+  it('and the frame data is untouched', () => {
+    // The SimpleBlock payload, byte for byte.
+    const frame = [0x81, 0, 0, 0x80, 1, 2, 3, 4, 5, 6, 7, 8]
+    const asArray = [...stripped]
+    const found = asArray.findIndex((_, i) =>
+      frame.every((byte, j) => asArray[i + j] === byte),
+    )
+    expect(found).toBeGreaterThan(0)
+  })
+
+  it('the header still says it is a WebM, so it is still identifiable', () => {
+    expect(sniffFormat(stripped)).toBe('video/webm')
+    expect(text(stripped)).toContain('webm')
+  })
+
+  it('the structural elements survive — this is a strip, not a demolition', () => {
+    // Segment, Info, Tracks and Cluster ids are all still where they were.
+    for (const id of [
+      [0x18, 0x53, 0x80, 0x67], // Segment
+      [0x15, 0x49, 0xa9, 0x66], // Info
+      [0x16, 0x54, 0xae, 0x6b], // Tracks
+      [0x1f, 0x43, 0xb6, 0x75], // Cluster
+    ]) {
+      const asArray = [...stripped]
+      const at = asArray.findIndex((_, i) => id.every((byte, j) => asArray[i + j] === byte))
+      expect(at).toBeGreaterThan(0)
+    }
+  })
+
+  it('the mandatory elements are kept and emptied, not deleted', () => {
+    // MuxingApp (0x4D80) and WritingApp (0x5741) are required by Matroska. A
+    // file missing one is invalid; a file where one is empty is not.
+    const asArray = [...stripped]
+    for (const id of [
+      [0x4d, 0x80],
+      [0x57, 0x41],
+    ]) {
+      const at = asArray.findIndex((_, i) => id.every((byte, j) => asArray[i + j] === byte))
+      expect(at).toBeGreaterThan(0)
+    }
+  })
+
+  it('the optional Tags block is replaced by a Void of exactly its size', () => {
+    // Tags (0x1254C367) is gone entirely, and a Void (0xEC) stands where it
+    // was. Void is the EBML equivalent of the MP4 `free` box.
+    const asArray = [...stripped]
+    const tagsId = [0x12, 0x54, 0xc3, 0x67]
+    const stillThere = asArray.findIndex((_, i) =>
+      tagsId.every((byte, j) => asArray[i + j] === byte),
+    )
+    expect(stillThere).toBe(-1)
+    expect(asArray).toContain(0xec)
+  })
+
+  it('an already-clean WebM is byte-identical, so stripping twice is safe', () => {
+    const twice = stripMetadata('video/webm', stripped)
+    expect([...twice]).toEqual([...stripped])
+  })
+
+  it('a truncated WebM is returned rather than corrupted', () => {
+    for (const cut of [4, 8, 16, 32, 64]) {
+      const short = source.slice(0, cut)
+      const result = stripMetadata('video/webm', short)
+      expect(result.length).toBe(short.length)
+    }
+  })
+
+  it('random bytes behind an EBML magic do not hang or throw', () => {
+    const noise = new Uint8Array(512)
+    noise.set([0x1a, 0x45, 0xdf, 0xa3], 0)
+    for (let i = 4; i < noise.length; i += 1) noise[i] = (i * 37) % 256
+
+    expect(() => stripMetadata('video/webm', noise)).not.toThrow()
+    expect(stripMetadata('video/webm', noise).length).toBe(noise.length)
+  })
+
+  it('does not touch the bytes of a format that is not a WebM', () => {
+    // The entry point routes by the sniffed format, so this is belt to braces:
+    // pointed at an MP4 directly, the EBML walk finds no ids it knows.
+    const mp4 = mp4WithLocation()
+    expect([...stripEbmlMetadata(mp4)].length).toBe(mp4.length)
   })
 })
 

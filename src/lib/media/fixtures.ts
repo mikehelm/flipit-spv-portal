@@ -198,3 +198,104 @@ export function webmBytes(): Uint8Array {
 }
 
 export const FIXTURE_SECRET_MARKER = 'Privet Drive'
+
+// ---------------------------------------------------------------------------
+// WebM / Matroska
+// ---------------------------------------------------------------------------
+
+/** An EBML size VINT, written in the fewest bytes that hold the value. */
+function ebmlSize(value: number): Uint8Array {
+  for (let length = 1; length <= 8; length += 1) {
+    if (value <= Math.pow(2, 7 * length) - 2) {
+      const out = new Uint8Array(length)
+      let remaining = value
+      for (let i = length - 1; i >= 0; i -= 1) {
+        out[i] = remaining % 256
+        remaining = Math.floor(remaining / 256)
+      }
+      out[0] = out[0]! | (0x80 >> (length - 1))
+      return out
+    }
+  }
+  throw new Error('size too large for a fixture')
+}
+
+/** One EBML element: its id bytes, its size, and its payload. */
+function ebml(id: number[], payload: Uint8Array): Uint8Array {
+  return concat([u8(...id), ebmlSize(payload.length), payload])
+}
+
+/**
+ * A WebM shaped like one a phone or a screen recorder produces: an EBML header,
+ * then a Segment holding Info with a `Title`, a `MuxingApp`, a `WritingApp` and
+ * a `DateUTC`; a Tracks with a named track; a Tags block full of free text; and
+ * a Cluster of frame data at the end.
+ *
+ * The Cluster matters for the same reason the `mdat` matters in the MP4
+ * fixture: Matroska addresses elements by absolute byte position, so the test
+ * that the length is unchanged is really a test that seeking still works.
+ */
+export function webmWithMetadata(options: { secret?: string } = {}): Uint8Array {
+  const secret = options.secret ?? 'Recorded by David at 42 Privet Drive'
+
+  const header = ebml(
+    [0x1a, 0x45, 0xdf, 0xa3],
+    concat([
+      ebml([0x42, 0x82], ascii('webm')), // DocType
+      ebml([0x42, 0x87], u8(2)), // DocTypeVersion
+    ]),
+  )
+
+  const info = ebml(
+    [0x15, 0x49, 0xa9, 0x66],
+    concat([
+      ebml([0x2a, 0xd7, 0xb1], u8(0x0f, 0x42, 0x40)), // TimestampScale
+      ebml([0x7b, 0xa9], ascii(`Title: ${secret}`)),
+      ebml([0x4d, 0x80], ascii(`Muxed by software belonging to ${secret}`)),
+      ebml([0x57, 0x41], ascii(`Written by software registered to ${secret}`)),
+      ebml([0x44, 0x61], u8(0, 0, 0, 0, 0, 0, 0, 1)), // DateUTC
+    ]),
+  )
+
+  const tracks = ebml(
+    [0x16, 0x54, 0xae, 0x6b],
+    concat([
+      ebml(
+        [0xae],
+        concat([
+          ebml([0xd7], u8(1)), // TrackNumber
+          ebml([0x83], u8(1)), // TrackType
+          ebml([0x53, 0x6e], ascii(`Camera of ${secret}`)), // Name
+          ebml([0x86], ascii('V_VP8')), // CodecID
+        ]),
+      ),
+    ]),
+  )
+
+  const tags = ebml(
+    [0x12, 0x54, 0xc3, 0x67],
+    concat([
+      ebml(
+        [0x73, 0x73],
+        concat([
+          ebml(
+            [0x67, 0xc8],
+            concat([ebml([0x45, 0xa3], ascii('LOCATION')), ebml([0x44, 0x87], ascii(secret))]),
+          ),
+        ]),
+      ),
+    ]),
+  )
+
+  const cluster = ebml(
+    [0x1f, 0x43, 0xb6, 0x75],
+    concat([
+      ebml([0xe7], u8(0)), // Timestamp
+      ebml([0xa3], u8(0x81, 0, 0, 0x80, 1, 2, 3, 4, 5, 6, 7, 8)), // SimpleBlock
+    ]),
+  )
+
+  const segment = ebml([0x18, 0x53, 0x80, 0x67], concat([info, tracks, tags, cluster]))
+
+  return concat([header, segment])
+}

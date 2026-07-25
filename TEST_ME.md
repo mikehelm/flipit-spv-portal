@@ -434,6 +434,8 @@ Before you choose a file, the screen tells you what is about to happen to it —
 
 **Try a `.jpg` that is actually a PDF.** Refused. The format is read from the file's own opening bytes, never from its name.
 
+Every image and every video is stripped before it is stored — that now includes an uploaded WebM, which used to be the one exception. Upload a video recorded on a phone or exported from editing software and the software's name, the file's title, the date, the track name and any tags it carried are all gone from the stored file, while the file itself is byte-for-byte the same length, so it still plays and still seeks. A PDF is the only thing stored exactly as you gave it, and that is deliberate.
+
 Every image is served from this application's own address, at a long random URL — nothing is ever loaded from somewhere else, and finding one address tells you nothing about any other.
 
 **Using one in the invitation email.** The **Email templates** screen lists every library image with the exact address to paste into the template. It is a copy-and-paste rather than a button on purpose: putting an image in the template changes the template, which changes the hash the compliance approval covers, so **sending is blocked until a fresh approval is recorded**. That is the right behaviour — an approval has to cover the document that actually goes out, images included — and the screen warns you before you do it rather than after.
