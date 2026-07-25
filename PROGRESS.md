@@ -407,3 +407,41 @@ The part worth reading is `lib/qa/anonymity.ts`, because §6.7.3 is the one sect
 
 - The register page offers no way to issue an offer with a *different* sender name or phone than the defaults, though the columns exist. The import can set them per row. Nobody has said whether a freed allocation ever comes from a different sender; I left the fields on the form but unlabelled as prominent, and it is worth a look.
 - Where the whole register is ordered, somebody who has settled in an *earlier* round outranks somebody who committed in this one. That follows §5.2.2 read literally, and I think it is right — completing is completing — but it is a judgement about people's expectations rather than about the text.
+
+---
+
+## WP11 — Updates feed — done
+
+**Built:** §6 in full. The operator writes an update, saves it as a draft, sees it rendered as the investor will see it, and publishes it to everyone, to a subset by status, or to one named person. It appears in the portal newest first with a published date. Published updates cannot be edited or deleted; a correction is a new update, and withdrawal leaves the row, the delivery rows and an audit entry with the reason.
+
+**The notification email takes two arguments and both are links.** §6 says it *"carries no amounts, percentages, or personal detail"*, and the way that is guaranteed is that `buildUpdateNotification(portalLink, verificationLink)` has no parameter for a title, a body, a name or a figure. There is nothing to pass in. A test asserts the function's arity is two, that two calls are byte-identical, and that the visible text — markup stripped, so `width:100%` is not mistaken for a percentage — contains no digit at all outside the two URLs. A second test asserts the module imports neither the database nor `formatMoney`.
+
+**The audience is resolved once, at publication, into `update_deliveries` rows**, and the investor's feed is a join through their own row. A targeted update reaching only its recipients is therefore a property of the schema rather than of somebody remembering to write a `where` clause. It also keeps the update immutable in the sense that matters: an account that changes status the next morning does not silently gain or lose a notice that was already published.
+
+**Verified against the real database, with four investors present.** Forty-one checks in `scripts/verify-updates.ts`: a draft is on nobody's portal and has no delivery rows; an update addressed to one person is invisible to the other three and its text appears nowhere in their feeds; a status filter reaches only that status; a published update refuses every edit and every delete; withdrawal removes it from the portals while keeping the row, the reason and the delivery rows; and a withdrawn update cannot be notified about.
+
+**Decisions:**
+
+- *Publishing sends nothing.* §6 says publication "may optionally trigger a notification email", and §14 says there is no bulk send anywhere in the UI or the API. A notification that reached forty people because one button was pressed is a bulk send whatever the button says, so the two are reconciled the conservative way: publishing queues the notifications and lists the recipients, and each one is its own press to one address — the same rule as an invitation. The one unattended sender in this application is the reminder, and §6.5 spells out the constraints that make it safe; nothing here inherits them.
+- *Suspended and archived accounts can never be addressed, including by a status filter that names them.* §4.2 gives neither any portal access, so a delivery row for one would be a record of a communication that did not happen. A filter resolving to nobody resolves to nobody — it is never widened to "everyone", which is the failure that would send a targeted notice to the whole list.
+- *`ALL` includes `INVITED`.* §6 says "all active investors"; an account in `INVITED` has been sent an invitation and has not opened it yet, and excluding them means the first thing they see on claiming is a feed with a hole in it.
+- *A withdrawn update leaves no tombstone on the investor's screen.* §6 puts the tombstone in the audit log. "This notice was withdrawn" on the page would be a second communication about the thing that was withdrawn.
+- *A published update is never deleted, only withdrawn.* A tombstone that destroys the evidence of what was published is not a tombstone. A source test asserts there is exactly one `db.delete` in the module and that it is the one discarding an unpublished draft.
+- *Publishing to an audience that currently matches nobody is refused* rather than succeeding quietly. An update with no readers is a draft that thinks it is published.
+- *Notifying somebody who has been suspended since publication is refused.* A suspension between the two is a decision about a person, and an email telling them to open a portal they cannot reach is pointless at best.
+- *Read state is per-delivery and is the investor's own.* The operator sees whether each recipient opened it; no investor sees anything about anybody else's.
+- *A withdrawal reason is at least ten characters and goes only in the audit log.*
+
+**Deviations:** none. No migration was needed — `portal_updates` and `update_deliveries` from WP1 already had every column §6 requires.
+
+**Checklist:** points 1, 2, 5 and 8 are this package's.
+
+1. No monetary value is a JavaScript number. Nothing in this package handles money at all, and a source test asserts `Number(`, `parseFloat`, `parseInt` and `.toNumber(` appear nowhere in `lib/updates`.
+2. No send path bypasses anything. The notification goes through `sendOneEmail` and its gate refused it in verification, naming the missing credential. A source test asserts no `lib/updates` module constructs a transport or imports nodemailer, and that no function is named `notifyAll`, `sendAll`, `sendMany`, `sendBatch` or `sendBulk`.
+5. No investor-facing response reveals another investor. Verified with four accounts: a targeted update is absent from the other three feeds, its text appears nowhere in them, and no other investor's name is in the serialised view. The notification email is identical for every recipient, so it has nothing to leak either.
+8. No log line carries a body or a credential. The audit metadata records counts, ids and the audience shape — never the body, and never the list of addresses, because a roster of investors in the audit log is a roster of investors. The audit guard caught one key called `bodyCharacters` during this package and threw rather than redacting; the key is now `characters`, and the guard being blunt is what made that a thirty-second fix rather than a silent one.
+
+**Uncertain:**
+
+- Publishing lists the recipients and expects a press each. With forty investors that is forty presses. I believe that is the right reading of §14, and the alternative — one button that emails everybody — is exactly the shape the rule exists to forbid. But if Michael wants a middle ground, the honest one is a per-recipient confirmation that stays one-at-a-time rather than a loop, and that is a decision rather than a fix.
+- An investor's read state is recorded but nothing marks it read automatically yet; the action exists and is bound to the session's own account. Wiring it to the page needs a client component on the portal and I left it out rather than adding one for a non-essential signal.

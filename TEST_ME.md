@@ -2,7 +2,7 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 7 are complete, the core of 8, and all of 9 and 10.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — and keep a register of interest that can turn into a real offer. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: work packages 0 to 7 are complete, the core of 8, and all of 9, 10 and 11.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, and publish updates to everyone, to a subset, or to one person. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
 ---
 
@@ -178,6 +178,24 @@ Publish it, then look at the shared section as a *different* investor. You will 
 
 ---
 
+## Updates
+
+Sign in as the operator and open **Updates**. Write one, choose who it goes to, and save it as a draft. Nothing has reached anybody: no portal shows it, no email exists, and the recipient list is empty because the audience is only worked out at the moment you publish.
+
+Publish it and it appears on each recipient's portal, newest first, with the date.
+
+**Then try to change it.** You cannot. A published update is immutable — the refusal says so and tells you what to do instead, which is publish a correction as a new update. You cannot delete it either; the only thing you can do is withdraw it, and that asks for a reason, removes it from every portal, and keeps the row, the reason and the record of who received it. The investor simply stops seeing it — there is no "this was withdrawn" notice on their page, because that would be a second announcement about the thing you just took down.
+
+**The targeting is the part worth testing.** Publish one update to a single named investor and one to "invited accounts only". Then sign in as two different investors and compare. Each sees exactly what was addressed to them and nothing else — not the other update, not its text, not a hint that it exists. That is not a filter on the page; each investor's feed is built from their own delivery rows, so there is nothing to filter.
+
+Suspended and archived accounts can never be addressed, even if you tick their status in the filter. Neither can reach the portal, so a notice addressed to them would be a record of a message nobody could read. If a filter matches nobody at all, publishing is refused rather than succeeding quietly.
+
+**The notification email.** The Updates page shows it in full, because it is the same for everybody: one sentence saying an update is waiting, a link to the portal, and a line explaining that the update itself is deliberately not in the email. No title, no name, no amounts, no percentages. It cannot carry any of them — the function that builds it takes two links and nothing else.
+
+**Publishing does not send it.** Once published, each recipient gets their own Send button. There is no button anywhere that emails everybody at once, here or anywhere else in the application. Without a Gmail app password connected, each attempt fails with a specific message naming the missing credential, and the recipient is not marked as notified.
+
+---
+
 ## Register of interest
 
 On the investor's side it sits under the questions. The four paragraphs are the ones from the specification, word for word — a test reads them out of `BUILD_SPEC.md` and compares, so the screen cannot quietly drift into promising something. The most important sentence is the one that says joining does not create a position: *"Joining the register does not itself create a position; completing your current participation does."*
@@ -212,7 +230,7 @@ Issuing an offer does not send anything and does not take anybody off the regist
 
 - **The rest of the portal.** Documents, and the operator-side status advancement with its two-step confirmation for funds received.
 - **The email carrying a sign-in link.** The link is created correctly; sending it is part of a later package.
-- **Updates and reminders.** Both later packages.
+- **Reminders.** A later package, and the only unattended sender in the system.
 - **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet.
 
 The participation certificate, the anti-phishing verification page and the export were built early, out of order, in a parallel session. They are in the codebase and tested, but they are not yet linked from anywhere you would find by clicking.

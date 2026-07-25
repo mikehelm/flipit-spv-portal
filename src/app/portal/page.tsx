@@ -9,8 +9,10 @@ import { PAYMENT_SAFETY_NOTICE, type TimelineStep } from '@/lib/portal/timeline'
 import { readInvestorAccount } from '@/lib/portal/session'
 import { loadInvestorQa } from '@/lib/qa/data'
 import { loadInvestorRegisterView } from '@/lib/register/data'
+import { loadInvestorUpdates } from '@/lib/updates/data'
 import { QaSection } from './qa-section'
 import { RegisterSection } from './register-section'
+import { UpdatesSection } from './updates-section'
 
 export const metadata: Metadata = {
   title: 'Your private invitation — Flipit',
@@ -224,6 +226,9 @@ export default async function PortalPage() {
   const register = canView(view.access)
     ? await loadInvestorRegisterView(account.id, view.access)
     : null
+  const updates = canView(view.access)
+    ? await loadInvestorUpdates(account.id, view.access)
+    : null
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
@@ -262,6 +267,8 @@ export default async function PortalPage() {
           ))
         )
       ) : null}
+
+      {updates ? <UpdatesSection view={updates} /> : null}
 
       {qa ? <QaSection view={qa} /> : null}
 
