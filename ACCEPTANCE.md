@@ -8,7 +8,7 @@ citation names a test or check that exists — the same test resolves each one
 against the real label in the real file, so a renamed or deleted test breaks
 the map rather than leaving a citation pointing at nothing.
 
-46 of 48 criteria have at least one automated check. 4 carry a written note.
+46 of 48 criteria have at least one automated check. 3 carry a written note.
 
 Where a check runs:
 
@@ -219,11 +219,16 @@ Where a check runs:
 - `src/lib/portal/roadmap.test.ts` — unit — "rejects a promise of return, valuation or liquidity"
 - `src/lib/portal/roadmap.test.ts` — unit — "rejects a timeline — §13.1: "No dates. No soon.""
 - `src/lib/portal/roadmap.test.ts` — unit — "is rendered beneath the tiles on the investor portal"
-- `src/lib/audit-coverage.test.ts` — unit — "calls the one audit helper from inside its own body"
-- `src/lib/audit-coverage.test.ts` — unit — "names every exported reminder mutation that writes to the database"
-- `src/lib/audit-coverage.test.ts` — unit — "registers cancelMany even though it delegates its writes"
-
-**Note.** Half of this is not built. The wording constraint is enforced, and the standing line §13.1 requires is on the page and cannot be switched off. "Configurable by the owner" is not: the tiles are seeded and there is no screen to add, rename or hide one. `forbiddenWordsInTileLabel` is the gate that surface must call, and it exists ahead of it.
+- `src/actions/roadmap.test.ts` — unit — "refuses an operator on every exported action, and writes nothing"
+- `src/actions/roadmap.test.ts` — unit — "names the word it will not take, rather than calling the label invalid"
+- `src/actions/roadmap.test.ts` — unit — "accepts the four labels §13.1 suggests, through the write path"
+- `src/actions/roadmap.test.ts` — unit — "has no delete of a roadmap tile in either module"
+- `scripts/verify-roadmap.ts` — database — "a tile can be added"
+- `scripts/verify-roadmap.ts` — database — "a tile can be renamed"
+- `scripts/verify-roadmap.ts` — database — "a tile can be hidden"
+- `scripts/verify-roadmap.ts` — database — "a tile can be switched to available"
+- `scripts/verify-roadmap.ts` — database — "no refused label was written"
+- `scripts/verify-roadmap.ts` — database — "is not stored on any tile, so no edit can remove it"
 
 ## 31. The portal renders correctly and legibly at 375px width, and text contrast meets WCAG AA against the dark palette.
 

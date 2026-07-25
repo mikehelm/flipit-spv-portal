@@ -343,9 +343,9 @@ The specification ends with a list of forty-eight things that have to be true be
 
 It is worth opening even if you never run a test, because it is the honest account of where the build actually is:
 
-- **46 of the 48 have an automated check.** Some are ordinary tests; some need a real database, because a rule like "and in nobody else's portal" means nothing until there are two investors; one needs a real browser at phone size.
+- **47 of the 48 have an automated check.** Some are ordinary tests; some need a real database, because a rule like "and in nobody else's portal" means nothing until there are two investors; one needs a real browser at phone size.
 - **2 have none** — the image library and the personal video. Both are waiting on a decision about where to store a file.
-- **4 carry a written note** explaining what is and is not covered. Two of those are the pair above; the other two are half-built and say which half.
+- **3 carry a written note** explaining what is and is not covered. Two are the pair above; the third is number 34, where the part a machine cannot settle is whether you actually read the test email.
 
 The document is generated from the tests rather than written alongside them, so it cannot quietly go out of date. A test reads the specification itself and fails if the wording here drifts from the wording there.
 
@@ -355,6 +355,26 @@ Six of the forty-eight were checked only indirectly — the neighbouring behavio
 
 - The reminder queue recorded who changed it only when a person did. The scheduled run — the one that creates and deletes queued reminders overnight, with nobody watching — recorded nothing at all. Unattended changes are precisely the ones most in need of a trail; they are now recorded against "system".
 - The guard that keeps secrets out of the audit log read only the top level of an entry, and missed the name the settings screen actually uses for the OpenAI key. It now reads every level. It still reads *names* and never *values* — a sign-in legitimately records that the method was a password, and a check that cries wolf is a check somebody eventually switches off.
+
+## Editing what investors see is coming
+
+Sign in as the **owner** and open **Portal roadmap**. This is the small set of tiles at the bottom of an investor's portal, under "Coming to your portal" — the ones that say the portal is a real system still being built out rather than a page that goes quiet once the money is in.
+
+You can add a tile, rename one, reorder them, hide one, or mark one available when the feature actually ships. Every change shows on every investor's portal immediately. There is no delete: hiding keeps the record of what an investor was shown, and deleting would not.
+
+**The part worth testing is what it refuses.** This copy sits on a securities offer page, and the specification calls it the easiest place in the whole build to say something unintended. So try to add these:
+
+- `Returns dashboard`
+- `Exit planning`
+- `Live Q3`
+- `Reporting 2027`
+- `Direct line to David, coming soon`
+
+Each is refused, and the message names the word it will not take rather than saying the label is invalid. Names of tools are fine — the four the specification suggests all go straight in. A rename is checked exactly as an addition is, so an approved tile cannot be edited into a promise afterwards.
+
+The line beneath the tiles — *Features shown are in development, are indicative only, and form no part of the investment being offered* — is not editable from this screen or any other. There is no setting for it and no column it lives in.
+
+**The operator cannot reach any of this.** The menu item is not there for them, and typing the address is refused and written to the audit log.
 
 ## Putting it somewhere real
 
@@ -385,7 +405,7 @@ pnpm backup              # writes a backup file
 
 - **Documents, images and video.** All need somewhere to store a file, which has not been chosen yet. Nothing else depends on them.
 - **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet. **This is the last thing standing between the build and a real send.**
-- **Editing the "Coming to your portal" tiles.** The tiles are there and the rules about their wording are enforced; the screen to change them is not built. See number 30 in `ACCEPTANCE.md`.
+
 
 ## The round, and closing it
 

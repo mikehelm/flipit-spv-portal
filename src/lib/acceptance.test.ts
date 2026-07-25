@@ -144,16 +144,18 @@ describe('nothing is silently uncovered', () => {
   })
 
   it('names the criteria that are not automated, so the count is honest', () => {
-    // Three of the forty-eight have no automated check at all, and all three
-    // are the deferred media package (§13.2's image library, §13.3's video)
-    // or depend on it. Two more are partly covered and say which half.
+    // Two of the forty-eight have no automated check at all, and both are the
+    // deferred media package — §13.2's image library and §13.3's video.
     const uncovered = ACCEPTANCE_CRITERIA.filter((c) => c.covered.length === 0).map((c) => c.n)
     expect(uncovered).toEqual([32, 33])
 
+    // One more is partly covered and says which half. AC30 was in this list
+    // until the owner's tile-editing surface was built; the note came off when
+    // the second half of the sentence stopped being a plan.
     const partial = ACCEPTANCE_CRITERIA.filter(
       (c) => c.covered.length > 0 && c.manual,
     ).map((c) => c.n)
-    expect(partial).toEqual([30, 34])
+    expect(partial).toEqual([34])
   })
 
   it('the criteria WP19 singles out are all covered by a unit test', () => {

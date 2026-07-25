@@ -544,24 +544,19 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
       unit('src/lib/portal/roadmap.test.ts', 'rejects a timeline — §13.1: "No dates. No soon."'),
       unit('src/lib/portal/roadmap.test.ts', 'is rendered beneath the tiles on the investor portal'),
       unit(
-        'src/lib/audit-coverage.test.ts',
-        'calls the one audit helper from inside its own body',
+        'src/actions/roadmap.test.ts',
+        'refuses an operator on every exported action, and writes nothing',
       ),
-      unit(
-        'src/lib/audit-coverage.test.ts',
-        'names every exported reminder mutation that writes to the database',
-      ),
-      unit(
-        'src/lib/audit-coverage.test.ts',
-        'registers cancelMany even though it delegates its writes',
-      ),
+      unit('src/actions/roadmap.test.ts', 'names the word it will not take, rather than calling the label invalid'),
+      unit('src/actions/roadmap.test.ts', 'accepts the four labels §13.1 suggests, through the write path'),
+      unit('src/actions/roadmap.test.ts', 'has no delete of a roadmap tile in either module'),
+      database('scripts/verify-roadmap.ts', 'a tile can be added'),
+      database('scripts/verify-roadmap.ts', 'a tile can be renamed'),
+      database('scripts/verify-roadmap.ts', 'a tile can be hidden'),
+      database('scripts/verify-roadmap.ts', 'a tile can be switched to available'),
+      database('scripts/verify-roadmap.ts', 'no refused label was written'),
+      database('scripts/verify-roadmap.ts', 'is not stored on any tile, so no edit can remove it'),
     ],
-    manual:
-      'Half of this is not built. The wording constraint is enforced, and the standing ' +
-      'line §13.1 requires is on the page and cannot be switched off. "Configurable by ' +
-      'the owner" is not: the tiles are seeded and there is no screen to add, rename or ' +
-      'hide one. `forbiddenWordsInTileLabel` is the gate that surface must call, and it ' +
-      'exists ahead of it.',
   },
   {
     n: 31,

@@ -540,6 +540,7 @@ async function main(): Promise<void> {
       ['reminders', '/reminders'],
       ['register', '/register'],
       ['compliance', '/compliance'],
+      ['portal roadmap', '/admin/roadmap'],
       ['operator access', '/admin/invites'],
       ['audit log', '/audit'],
       ['settings', '/admin/settings'],

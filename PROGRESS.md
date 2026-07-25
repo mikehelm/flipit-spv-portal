@@ -960,3 +960,49 @@ No schema change. No migration.
 - *`cancelMany` writes no entry of its own.* The trail is the per-reminder `reminder.cancelled` entries, which satisfies AC29, but a bulk cancellation is not recoverable from the log as a single act.
 - *The verification scripts are cited but not gated.* `pnpm test` does not run them, and nothing enforces that they have been run recently. Whoever sets up CI should decide where they belong; the argument for a release stage rather than a commit hook is unchanged from WP18.
 - *Two sessions built WP19 in parallel and neither knew.* The merge cost an hour and threw away a working registry. Nothing in the repository says which package is being worked on, and PROGRESS.md is only written at the end — which is exactly too late to prevent this. A one-line claim file, written first, would have.
+
+---
+
+## AC30 — the roadmap tiles the owner could not edit
+
+The one criterion both WP19 sessions found half-built, and it stayed half-built through WP20. §13.1: *"Configurable by the owner: tiles can be added, renamed, hidden, or switched from 'in development' to live as features ship."* The wording rules were enforced and tested; the surface those rules were written for did not exist, and the only way to change a tile was to edit `db/seed.ts`.
+
+**Built.** `src/lib/portal/roadmap-tiles.ts` (the service and the write-time gate), `src/actions/roadmap.ts` (five owner-only server actions), `src/app/(admin)/admin/roadmap/page.tsx` (the screen), a nav entry for the owner alone, and `scripts/verify-roadmap.ts`. No schema change — `roadmap_tiles` already carried `label`, `sort_order`, `is_live` and `hidden`, which is WP1 having read §13.1 properly.
+
+**The gate is now on the way in, and it says the word out loud.** `forbiddenWordsInTileLabel` has existed since WP18 as a read-time filter, quietly dropping an offending tile from the portal. That stays — it protects a row written before this module or by a hand at a database prompt — but it was never the right place for the loud check. A tile silently missing from an investor's portal is a worse thing to debug than a form that refuses and names the word. `checkTileLabel` now runs on create and on rename, and the message names the offending word, quotes §13.1, and says what to write instead: *name the tool, not what it will do for them.*
+
+**Decisions.**
+
+- *Owner-only, not owner-and-operator.* §13.1 does say "configurable by the owner", but the reason is worth stating: this copy sits on a securities offer page, §13.1 calls it "the easiest place in the build to say something unintended", and it asks the compliance approver to review it alongside the email. Whoever answers for that wording is the owner. A refused attempt is audited in the shape `actions/compliance.ts` set, so one query over `refusalReason` finds every refused privileged action rather than one per module.
+- *Hidden, never deleted.* There is no delete anywhere in the module, and a test asserts it. §16 wants the log to answer what the portal looked like on a given day; hiding leaves the row and the trail, deleting leaves neither.
+- *A new tile starts in development.* §13.1 has "in development" as the default state and "live as features ship" as the transition. A tile that could be created already live would let a mis-click tell an investor a feature exists.
+- *A label is capped at forty characters.* §13.1 asks for "short labels and no explanation". The cap is a rule rather than a hint because a label long enough to carry a sentence is long enough to carry a promise, and the four suggested labels are all well inside it.
+- *Reordering rewrites the whole sequence in one transaction.* Swapping two rows leaves gaps and duplicates behind over time, and the portal orders by that column.
+- *The standing line stays out of reach.* It is a constant in `roadmap.ts` with no column, no setting and no prop. A test asserts neither the action nor the service writes or accepts it, and that the owner screen renders it from the constant rather than retyping it.
+
+**Deviations.** None. The package is additive, and `data.ts`'s read-time filter is deliberately unchanged.
+
+**Checklist.** Points 4, 5 and 8 are this package's.
+
+1. No monetary value is a JavaScript number. Nothing here handles money; the only numbers are a sort index and a character count.
+2. No send path bypasses anything. Nothing under `lib/sending`, `lib/compliance` or `lib/email` is touched, and a tile change sends nothing to anybody.
+3. A jurisdiction block still stops one recipient. Untouched.
+4. The operator still cannot record, amend or void a compliance approval — and now cannot edit the copy §13.1 puts in front of the approver either. Every exported action is enumerated by a test that fails if a new one skips `requireOwner`.
+5. No investor-facing response reveals another investor. A tile is global, identical for everybody, and carries no per-investor data. The portal view maps each tile to a label and a live flag and nothing else.
+6. Tokens are untouched.
+7. Suspension is untouched.
+8. No log line carries a token, a body or a key. Six new audit actions, all recording a label, a position or a direction. The refusal entry records a role and an attempted action. All pass `assertNoSecrets`, including the recursive check added in WP19.
+9. The verification page is still the only indexable route. The new screen is under `(admin)` and inherits the default `noindex`.
+10. Q&A is untouched.
+11. The AI path is untouched.
+12. The production base-URL guard is untouched.
+
+**Verification.** `pnpm verify:roadmap` — 37 checks against real Postgres: a refused label is never written, a refused rename leaves the old label standing, hiding keeps the row, the sort column stays a sequence with no gaps, every mutation is on the record, and the seeded tiles are exactly as they were afterwards. `pnpm verify:viewport` now walks the new screen too — 110 checks across twenty-two screens, including 375px, AA contrast and 44px targets on this one.
+
+**Three faults found in this package's own code, by its own tests, and fixed before it landed:** `moveTile` reported success for a tile id that does not exist, because `reorderIds` cannot tell "not there" from "already at the end"; the refusal metadata used key names nobody else uses; and the reorder loop had no transaction, so a failure part way through would have left two tiles claiming one position.
+
+**Uncertain.**
+
+- *Nothing re-approves the tiles when they change.* §13.1 asks the compliance approver to look at this section along with the email, and the email has a hash and an approval that drift breaks. The tiles have neither: the owner can rename a tile after the approval is recorded and no gate notices. The word list is a floor, not an approval. Whether tile copy should join the template hash is a question for whoever records the next approval.
+- *The word list is still mine*, taken from §13.1's prose in WP18 and unchanged here. Somebody should read it now that there is a form that enforces it.
+- *`ACCEPTANCE.md` now reports 47 of 48 with an automated check*, the two uncovered being WP15's deferred media and video. AC34 keeps its note for the half a machine cannot judge.

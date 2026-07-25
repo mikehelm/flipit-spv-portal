@@ -23,6 +23,7 @@
     "backup": "tsx scripts/backup.ts",
     "verify:restore": "tsx scripts/verify-restore.ts",
     "verify:lifecycle": "tsx scripts/verify-lifecycle.ts",
+    "verify:roadmap": "tsx scripts/verify-roadmap.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
   },
   "dependencies": {
