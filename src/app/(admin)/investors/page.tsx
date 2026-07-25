@@ -2,8 +2,11 @@ import type { Metadata } from 'next'
 import { Card, Notice, Pill, SectionHeading } from '@/components/admin/ui'
 import { requireOnboardedAdmin } from '@/lib/auth/guards'
 import { readServiceConfig } from '@/lib/auth/service-config'
+import { documentsByAccount, type AccountOfferDocuments } from '@/lib/documents/data'
+import { mediaStore } from '@/lib/media/store'
 import { loadAdminAccounts, type AdminAccountRow } from '@/lib/portal/accounts-data'
 import { portalAccess } from '@/lib/portal/access'
+import { DocumentsPanel } from './documents-panel'
 import { ChangeStatusForm } from './parts'
 
 export const metadata: Metadata = {
@@ -44,10 +47,14 @@ function AccountCard({
   account,
   closedAccountAccess,
   serviceMode,
+  offerDocuments,
+  storeConfigured,
 }: {
   account: AdminAccountRow
   closedAccountAccess: 'READ_ONLY' | 'NONE'
   serviceMode: 'ACTIVE' | 'READ_ONLY' | 'SUNSET' | 'DISABLED'
+  offerDocuments: AccountOfferDocuments[]
+  storeConfigured: boolean
 }) {
   const access = portalAccess({
     accountStatus: account.status,
@@ -111,6 +118,8 @@ function AccountCard({
         </details>
       ) : null}
 
+      <DocumentsPanel offers={offerDocuments} storeConfigured={storeConfigured} />
+
       <details className="mt-3 rounded-sm border hairline bg-bg2 p-3">
         <summary className="cursor-pointer text-xs font-semibold text-silver2">
           Change their status
@@ -131,7 +140,12 @@ function AccountCard({
 export default async function InvestorsPage() {
   await requireOnboardedAdmin()
 
-  const [accounts, config] = await Promise.all([loadAdminAccounts(), readServiceConfig()])
+  const [accounts, config, documents] = await Promise.all([
+    loadAdminAccounts(),
+    readServiceConfig(),
+    documentsByAccount(),
+  ])
+  const storeConfigured = mediaStore() !== null
 
   const suspended = accounts.filter((row) => row.status === 'SUSPENDED').length
 
@@ -169,6 +183,8 @@ export default async function InvestorsPage() {
                 account={account}
                 closedAccountAccess={config.closedAccountAccess}
                 serviceMode={config.serviceMode}
+                offerDocuments={documents.get(account.id) ?? []}
+                storeConfigured={storeConfigured}
               />
             ))}
           </div>

@@ -12,11 +12,13 @@ import { readInvestorAccount } from '@/lib/portal/session'
 import { loadInvestorQa } from '@/lib/qa/data'
 import { loadInvestorRegisterView } from '@/lib/register/data'
 import { ROADMAP_DISCLAIMER } from '@/lib/portal/roadmap'
+import { investorDocuments } from '@/lib/documents/data'
 import { shouldShowVideoSection, videoTextAlternative } from '@/lib/media/video'
 import { currentVideo } from '@/lib/media/video-store'
 import { loadInvestorUpdates } from '@/lib/updates/data'
 import { QaSection } from './qa-section'
 import { RegisterSection } from './register-section'
+import { DocumentsSection } from './documents-section'
 import { UpdatesSection } from './updates-section'
 import { VideoSection } from './video-section'
 
@@ -279,6 +281,12 @@ export default async function PortalPage() {
   const video = canView(view.access) ? await currentVideo() : null
   const videoText = video ? videoTextAlternative(video) : null
 
+  // §5 status 3 and §13. Issued documents only — `investorDocuments` joins
+  // through this account's own offers, so another investor's document is never
+  // selected rather than being fetched and filtered out. §7 keeps these
+  // readable in `read_only` and `sunset`, which `canView` already allows.
+  const documents = canView(view.access) ? await investorDocuments(account.id) : []
+
   return (
     <>
       <main id="main" className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
@@ -327,6 +335,8 @@ export default async function PortalPage() {
             transcript={videoText?.transcript ?? null}
           />
         ) : null}
+
+        <DocumentsSection documents={documents} />
 
         {updates ? <UpdatesSection view={updates} /> : null}
 

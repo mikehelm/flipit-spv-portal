@@ -1129,3 +1129,55 @@ WP16 deferred this one with a specific reason, and it was the right reason: *"Wh
 - *The sixty-four megabyte video limit is a number I chose*, from what a three-minute phone recording weighs. It is also a ceiling on what one request holds in memory, which is the half of the reasoning that would change if this ever moved to a presigned direct upload.
 - *`media_assets` is not yet referenced by the email templates.* §13.2 says images should be "re-usable across the portal, the email templates, and §13.1's roadmap tiles"; the library, the address and the absolute-URL builder all exist, and the template editor has no picker. That is a small piece of UI, and until it exists the reuse is a copy-and-paste of the address shown on the library screen.
 - *Nothing enforces that an image is dereferenced before it is removed.* Removing an asset deletes the file, and any email already sent that embedded it will show a gap. The screen says so; the application does not stop it.
+
+---
+
+## Document packages — §5's status 3, which had a table and no code
+
+Not a numbered work package. `document_packages` has been in the schema since WP1, §5's timeline has listed *"Documents issued · Operator · Date, document list, download links"* since the specification was written, and §13 has listed *"Documents issued to them, downloadable"* among what an investor sees. None of it existed, for the reason WP16 gave when it deferred WP15: there was nowhere to put a file. WP15's `MediaStore` is that somewhere, and this is the first thing built on top of it.
+
+**Built.**
+
+- **The same ingest, with a third kind.** `UploadKind` gained `document`; the accepted formats, the size limit and the key prefix are now a table keyed by kind rather than a pair of ternaries. There is still one writer, one size check and one identification from the file's own leading bytes.
+- **Upload, open, issue, withdraw, remove** — on the investor's row on the Investors screen, grouped by offer, with the state of each document in words.
+- **`/portal/document/[documentId]`** — the investor's own download, built in the same shape as the participation certificate route.
+- **`/investors/[offerId]/document/[documentId]`** — the operator opening one before he issues it.
+- **A documents section on the portal**, rendered only when something has been issued.
+
+**Decisions.**
+
+- ***PDF, and nothing else.*** A `.docx` is a zip that can carry macros and renders differently on every machine that opens it; an investor reading terms should see the page the operator sent. A PDF is also the only plausible format this application can serve inline without handing the browser something it will run.
+- ***Uploading and issuing are two acts, and the gap between them is the feature.*** §5 makes "documents issued" a dated step on the investor's timeline. An upload that appeared immediately would stop the operator assembling a package, checking it and then releasing it — and would make the date on the timeline a claim about when a file was saved rather than about when the investor could first read it. Issuing takes an explicit confirmation, for the same reason recording funds does.
+- ***A document is stored byte-for-byte, and the metadata is not stripped.*** This is the opposite of the rule for images, and deliberately: a document package is a legal instrument somebody will rely on, altering its bytes would alter the document, and unlike a photograph off a phone these are authored by the operator rather than received from a stranger. There is nothing in one he did not put there himself.
+- ***An issued document cannot be deleted.*** The investor may already hold a copy, and §5 says a correction is *"never a silent overwrite"*. Withdrawing is the reversible act — the row stays, `issued_at` goes back to null, and the audit log holds both events. Removal is available only for something that was never issued.
+- *Both routes refuse with the same 404 an unknown id produces.* Not a 403, and not a different 404 for "exists but is not yours". A test asserts neither file contains a 401 or a 403 at all.
+- *`investorDocuments` joins on the account rather than filtering after the fact.* Another investor's document is never selected, rather than being fetched and discarded. A test reads the function and asserts the join condition is there.
+- *Both roles may upload and issue.* §5 names the operator as who sets status 3, and the owner has full access to records (§2). Where the specification names a role for a *record* rather than for somebody's personal setup, the owner is not excluded — this is the opposite call from §13.3's video, and for the stated reason: a subscription agreement is the investor's record, and a video of David is not.
+- *The download filename is built from the title with everything but letters, digits, spaces and dashes removed.* A `Content-Disposition` filename is a header and the title is free text somebody typed; a quote or a newline in one is an injection, and there is no case here where the exact characters matter.
+- *Every investor download is audited.* §16 wants the trail of what somebody was given and when they took it. The entry records the document id and the title, and never a byte of the file.
+
+**Deviations.** No migration — `document_packages` is used exactly as WP1 declared it. `links.test.ts` widened once more to admit `[documentId]`, with the reasoning written into it: it behaves exactly as `[certificateId]` does, and the route looks the owning account up and compares it against the session.
+
+**Checklist.** Points 5 and 8 are this change's; 1, 2, 3, 4 and 12 are untouched by it and were re-verified because it added routes.
+
+1. No monetary value is a JavaScript number. Nothing here handles money. `documentSizeLabel` formats a byte count, which is not a monetary value and is never used as one.
+2. No send path bypasses anything. Nothing in this change sends an email — issuing a document tells nobody, deliberately, and the screen says so. `verify:deployment` re-run: 41 checks pass.
+3. A jurisdiction block still stops one recipient. Untouched.
+4. The operator still cannot record, amend or void an approval. Untouched.
+5. **No investor-facing response reveals another investor.** The list is joined through the requesting account's own offers; the route compares the owning account against the session; a document that is not yours is the same 404 as one that does not exist. `verify:documents` runs with two investors who each hold a document and checks that Alice's list contains exactly hers, that nothing in it mentions Bruno or his account id, and that she is refused his document by id.
+6. Claim and sign-in tokens are single-use, hashed and expiring. Untouched.
+7. Suspension revokes sessions and refuses new links — and takes the documents with it, while `read_only` and `sunset` deliberately do not, because §7 says an investor must be able to take their records with them. Both are verified against the real database. `verify:lifecycle` re-run: 39 checks pass.
+8. **No log line carries a token, a body or a key.** The audit entries record an offer id and a title; a refused upload records the reason and never the filename. A test asserts no metadata object in the module names `bytes`, `stored` or `file.name`.
+9. The verification page is still the only indexable route. Both new routes set `noindex` themselves. `verify:deployment` re-run.
+10. A published Q&A entry carries nothing identifying. Untouched; `verify:qa` re-run, 51 checks pass.
+11. The AI path cannot change a calculated figure. Untouched.
+12. The app still refuses to send when its base URL is not the production value. Untouched, and confirmed by `verify:deployment`.
+
+**Verified.** `pnpm verify:documents` — 28 checks against the real database with two investors present throughout. `pnpm verify:viewport` is now 130 checks; the Investors screen carries the new panel and still passes 375px and AA.
+
+**Uncertain.**
+
+- *Issuing a document emails nobody.* That is deliberate — telling an investor is an update or a message, written on purpose — but somebody will expect it to, and the only thing saying otherwise is a sentence on the confirmation. Whether §5's status 3 should trigger a notification is a question for whoever runs the first round.
+- *Advancing the timeline to "Documents issued" is still a separate step from issuing a document.* You can do either without the other, which is right — several documents may be issued before the investor is told — but nothing warns an operator whose timeline and document list disagree.
+- *There is no versioning.* A corrected document is a withdrawal and a fresh upload, and the two are only connected by the audit log. The participation certificate has real version history (§5.1 asks for it); §5 does not ask for it here, and this is the conservative reading rather than an obviously right one.
+- *A document is attached to an offer rather than to an account.* §4.3 means an account outlives a round, so an investor with two offers has two document lists on the operator's screen and one merged list on their portal. That is the honest shape of the data and it is also slightly awkward to look at.

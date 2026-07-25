@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Document packages — §5 status 3, §13 "documents issued to them, downloadable" | opus-5 / WP15 session | 2026-07-25 22:55 | `src/lib/documents/**`, `src/actions/documents.ts`, `src/app/portal/document/**`, `src/app/(admin)/investors/**`, `src/lib/media/formats.ts` (a document kind), `scripts/verify-documents.ts` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -42,7 +42,9 @@ With WP15, **all forty-eight acceptance criteria have an automated check**.
 `ACCEPTANCE.md` is the current account of which are proved and how, and it is
 generated from the tests rather than typed, so it is the one to trust.
 
+Document packages — §5's status 3 — landed after WP15 and are done too.
+
 What is left is not a package. The open items are listed under Uncertain at the
 end of each PROGRESS.md section; the largest are an object-store adapter behind
 the media seam, a picker for library images in the email template editor, and
-the document packages of §5.3.
+versioning for a corrected document.

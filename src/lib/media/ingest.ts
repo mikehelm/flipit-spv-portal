@@ -18,13 +18,13 @@
  */
 
 import {
+  DOCUMENT_FORMATS,
   IMAGE_FORMATS,
+  MAX_DOCUMENT_BYTES,
   MAX_IMAGE_BYTES,
   MAX_VIDEO_BYTES,
   REFUSED_FORMATS,
   VIDEO_FORMATS,
-  isImageFormat,
-  isVideoFormat,
   sniffFormat,
   type AcceptedFormat,
   type RefusedFormat,
@@ -32,7 +32,7 @@ import {
 import { stripMetadata } from './strip'
 import { mediaStore, newStorageKey, MEDIA_STORE_UNCONFIGURED } from './store'
 
-export type UploadKind = 'image' | 'video'
+export type UploadKind = 'image' | 'video' | 'document'
 
 export type IngestRefusalReason =
   | 'EMPTY_FILE'
@@ -57,8 +57,36 @@ export interface InspectAccepted {
 
 export type InspectResult = InspectAccepted | IngestRefusal
 
+const ACCEPTED_BY_KIND: Readonly<Record<UploadKind, readonly string[]>> = {
+  image: IMAGE_FORMATS,
+  video: VIDEO_FORMATS,
+  document: DOCUMENT_FORMATS,
+}
+
+const LIMIT_BY_KIND: Readonly<Record<UploadKind, number>> = {
+  image: MAX_IMAGE_BYTES,
+  video: MAX_VIDEO_BYTES,
+  document: MAX_DOCUMENT_BYTES,
+}
+
+const KIND_ARTICLE: Readonly<Record<UploadKind, string>> = {
+  image: 'an image',
+  video: 'a video',
+  document: 'a document',
+}
+
+/**
+ * The prefix on a storage key, so that a key says what kind of thing it names
+ * without anybody having to look the row up. A document is `doc_`.
+ */
+const KEY_PREFIX: Readonly<Record<UploadKind, 'img' | 'vid' | 'doc'>> = {
+  image: 'img',
+  video: 'vid',
+  document: 'doc',
+}
+
 export function maxBytesFor(kind: UploadKind): number {
-  return kind === 'image' ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES
+  return LIMIT_BY_KIND[kind]
 }
 
 function megabytes(bytes: number): string {
@@ -95,9 +123,8 @@ export function inspect(
   if (bytes.length > limit) {
     return refuse(
       'TOO_LARGE',
-      `That file is ${megabytes(bytes.length)} and the limit for ${
-        kind === 'image' ? 'an image' : 'a video'
-      } is ${megabytes(limit)}. Nothing was stored.`,
+      `That file is ${megabytes(bytes.length)} and the limit for ${KIND_ARTICLE[kind]} is ` +
+        `${megabytes(limit)}. Nothing was stored.`,
     )
   }
 
@@ -106,9 +133,17 @@ export function inspect(
   if (sniffed === null) {
     return refuse(
       'UNRECOGNISED_FORMAT',
-      'That file is not in a format this library recognises. ' +
-        `Images: ${IMAGE_FORMATS.join(', ')}. Videos: ${VIDEO_FORMATS.join(', ')}.`,
+      'That file is not in a format this application recognises. ' +
+        `Images: ${IMAGE_FORMATS.join(', ')}. Videos: ${VIDEO_FORMATS.join(', ')}. ` +
+        `Documents: ${DOCUMENT_FORMATS.join(', ')}.`,
     )
+  }
+
+  // "Accepted here" is asked before "refused by name", because the answer
+  // depends on where the file was being put: a PDF is a document package and
+  // is not an image, and both of those need to be sayable.
+  if (ACCEPTED_BY_KIND[kind].includes(sniffed)) {
+    return { ok: true, format: sniffed as AcceptedFormat, sizeBytes: bytes.length }
   }
 
   if (isRefusedFormat(sniffed)) {
@@ -121,21 +156,25 @@ export function inspect(
           ? 'This build cannot reliably remove the comment blocks a GIF can carry, and an ' +
             'image whose metadata cannot be stripped does not go on the portal. Export it as ' +
             'a PNG or a WebP.'
-          : 'It is not an image or a video.'
+          : sniffed === 'application/pdf'
+            ? 'A PDF is a document package, not an image — it goes on the investor’s record ' +
+              'from their row on the Investors screen.'
+            : `It is not ${KIND_ARTICLE[kind]}.`
     return refuse('FORMAT_NOT_ACCEPTED', `That file is ${name} and is not accepted. ${because}`)
   }
 
-  const isRightKind = kind === 'image' ? isImageFormat(sniffed) : isVideoFormat(sniffed)
-  if (!isRightKind) {
-    return refuse(
-      'WRONG_KIND',
-      kind === 'image'
-        ? `That is a video (${sniffed}). The media library takes images; a video goes on the video screen.`
-        : `That is an image (${sniffed}). The video screen takes a video; an image goes in the media library.`,
-    )
-  }
+  // Recognised, accepted somewhere, and not here.
+  const belongsTo = (Object.keys(ACCEPTED_BY_KIND) as UploadKind[]).find((other) =>
+    ACCEPTED_BY_KIND[other].includes(sniffed),
+  )
 
-  return { ok: true, format: sniffed, sizeBytes: bytes.length }
+  return refuse(
+    'WRONG_KIND',
+    belongsTo
+      ? `That is ${KIND_ARTICLE[belongsTo]} (${sniffed}), and this screen takes ` +
+        `${KIND_ARTICLE[kind]}. Nothing was stored.`
+      : `That is not ${KIND_ARTICLE[kind]}. Nothing was stored.`,
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +211,7 @@ export async function ingest(
   if (!store) return refuse('STORE_NOT_CONFIGURED', MEDIA_STORE_UNCONFIGURED)
 
   const stripped = stripMetadata(inspected.format, bytes)
-  const storageKey = newStorageKey(kind === 'image' ? 'img' : 'vid')
+  const storageKey = newStorageKey(KEY_PREFIX[kind])
 
   await store.put(storageKey, stripped, inspected.format)
 

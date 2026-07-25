@@ -56,11 +56,11 @@ export interface MediaStore {
  *     directory cannot escape its root. The validator below is belt to that
  *     braces; both are here because one of them will be the one that holds.
  */
-export function newStorageKey(prefix: 'img' | 'vid'): string {
+export function newStorageKey(prefix: 'img' | 'vid' | 'doc'): string {
   return `${prefix}_${randomBytes(24).toString('base64url')}`
 }
 
-const VALID_KEY = /^(img|vid)_[A-Za-z0-9_-]{16,128}$/
+const VALID_KEY = /^(img|vid|doc)_[A-Za-z0-9_-]{16,128}$/
 
 export function isValidStorageKey(key: string): boolean {
   return VALID_KEY.test(key)

@@ -442,7 +442,7 @@ describe('signing back in later uses a link of the same shape', () => {
 // ---------------------------------------------------------------------------
 
 describe('no portal route accepts anything but a token in its URL', () => {
-  it('has exactly three dynamic segments, all opaque identifiers', () => {
+  it('has exactly four dynamic segments, all opaque identifiers', () => {
     // If a route ever appears as `[email]`, `[accountId]` or `[offerId]`, the
     // personal datum is in the URL by construction and no amount of care in
     // the link builders can take it back out.
@@ -452,10 +452,20 @@ describe('no portal route accepts anything but a token in its URL', () => {
     // — so unlike a certificate id it is not even *capable* of identifying an
     // investor, and the route behind it reads no investor record beyond the
     // session that is already required to reach it.
-    expect(dynamicSegments()).toEqual(['[certificateId]', '[token]', '[videoId]'])
+    //
+    // `[documentId]` joined it with the document packages, and behaves exactly
+    // as `[certificateId]` does: an opaque row id whose route looks the owning
+    // account up and compares it against the session, answering a document
+    // that is not yours with the same 404 as one that does not exist.
+    expect(dynamicSegments()).toEqual([
+      '[certificateId]',
+      '[documentId]',
+      '[token]',
+      '[videoId]',
+    ])
 
     for (const segment of dynamicSegments()) {
-      expect(segment, segment).toMatch(/^\[(token|certificateId|videoId)\]$/)
+      expect(segment, segment).toMatch(/^\[(token|certificateId|videoId|documentId)\]$/)
       // No catch-all: `[...path]` would accept whatever was appended to it.
       expect(segment.startsWith('[...') || segment.startsWith('[[...'), segment).toBe(
         false,
@@ -476,7 +486,7 @@ describe('no portal route accepts anything but a token in its URL', () => {
         }
       }
     }
-    expect([...declared].sort()).toEqual(['certificateId', 'token', 'videoId'])
+    expect([...declared].sort()).toEqual(['certificateId', 'documentId', 'token', 'videoId'])
   })
 
   it('reads no search parameter anywhere in the portal', () => {

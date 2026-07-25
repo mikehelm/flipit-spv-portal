@@ -4,7 +4,7 @@ Rewritten after every work package, so it always describes the current state.
 
 **Current state: every work package, 0 to 20, is complete.** WP15 — the image library and the personal video — was the last one outstanding and is now built, which also means **all forty-eight of the specification's acceptance criteria have an automated check behind them**. Two-factor sign-in, the last release gate, is built too. You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
-You can also upload brand images that are stripped of their embedded location and camera data before they are stored, and David can record a short personal video in the browser or upload one from his phone, watch it in place, and publish it to the portal when he is ready.
+You can also upload brand images that are stripped of their embedded location and camera data before they are stored; David can record a short personal video in the browser or upload one from his phone, watch it in place, and publish it to the portal when he is ready; and you can put a subscription agreement or any other PDF on an investor's record, check it, and issue it to their portal.
 
 The last two packages are the ones that check everything else and then put it somewhere real: a table saying, for each of the forty-eight things the specification requires, which test proves it — and a runbook for the day it goes live. **ACCEPTANCE.md** and **DEPLOYMENT.md** are those two documents, and the plain-English version of each is further down, under "The forty-eight things this was meant to do" and "Putting it somewhere real".
 
@@ -383,6 +383,26 @@ pnpm backup              # writes a backup file
 
 **One thing found while doing this, worth knowing:** the verification page — the one an investor is meant to be able to find — was being hidden from search engines by a mistake in the configuration, and had been for several packages. It is fixed, and there is now a check that asks a running copy of the application rather than reading the configuration file, because reading the file is what missed it.
 
+## Documents
+
+Every investor's row on **Investors** now has a *Documents* section — the subscription agreement, the SPV instrument, whatever else goes on their record.
+
+**The order is enforced and it is the point.** Upload a PDF and it arrives **not issued**. You can open it; the investor cannot see it and cannot reach it. Open it, check it is the right file for the right person, tick the confirmation, and issue it. Only then does it appear on their portal.
+
+**Things worth trying:**
+
+- **Upload a Word document, or a JPEG renamed to `.pdf`.** Refused. The format is read from the file's own opening bytes, and a `.docx` is a zip archive that can carry macros and renders differently on every machine — an investor reading terms should see the page you sent.
+- **Sign in as one investor and try the other's document address.** The same "not found" you get for a document that has never existed. Not a "you are not allowed" — that would tell you the document is real.
+- **Try to delete a document you have already issued.** Refused, with the reason: they may already hold a copy. Withdraw it first — which is recorded — and then it can be removed.
+- **Withdraw an issued document.** It leaves their portal and the row stays, so the log still says it was issued and that you took it back.
+- **Put the portal into read-only or sunset** and check an investor can still download. That is deliberate: §7 says an investor must be able to take their records with them when a round is over. **Suspend** them and it goes, along with everything else.
+
+Unlike an uploaded image, a document is stored **exactly as you uploaded it** — no metadata is removed. It is a legal instrument somebody will rely on, altering its bytes would alter the document, and you wrote it, so there is nothing in it you did not put there.
+
+**Issuing a document emails nobody.** Telling an investor is an update or a message, written on purpose. And advancing their timeline to *Documents issued* is a separate step, so you can issue several before you tell them.
+
+---
+
 ## The media library
 
 **Admin → Media**, open to both you and David. Logos, an email header, a headshot, product screenshots.
@@ -463,8 +483,9 @@ Worth trying, because these are all meant to work:
 
 ## What is not built yet
 
-- **Document packages.** Issuing a set of legal documents to an investor still needs somewhere to store a file, and it needs deciding what those documents are. Images and video no longer wait on that — see below.
 - **A picker for library images inside the email template editor.** The library exists, each image has an address on this deployment, and putting one in a template is currently a copy-and-paste of that address rather than a button.
+- **Versioning for a corrected document.** Replacing an issued document is a withdrawal and a fresh upload, and the two are connected only by the audit log. The participation certificate does keep real version history, because §5.1 asks for it.
+- **A durable place to put files on a real deployment.** The filesystem store works and needs a disk that survives a restart. An object store is selectable and refuses until somebody writes the client behind it — roughly one class.
 
 ## The round, and closing it
 

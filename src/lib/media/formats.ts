@@ -30,11 +30,35 @@
 export const IMAGE_FORMATS = ['image/jpeg', 'image/png', 'image/webp'] as const
 export const VIDEO_FORMATS = ['video/mp4', 'video/webm', 'video/quicktime'] as const
 
+/**
+ * **PDF, and nothing else.** BUILD_SPEC §5 status 3.
+ *
+ * A document package is a subscription agreement or an SPV instrument — the
+ * governing documents §5.1 says the participation certificate is *not*. Two
+ * reasons for the single format:
+ *
+ *   - A `.docx` is a zip archive that can carry macros and remote references,
+ *     and it renders differently on every machine that opens it. An investor
+ *     reading terms should see the same page the operator sent.
+ *   - A PDF is the only one of the plausible formats this application can
+ *     serve inline without handing the browser something it will run.
+ */
+export const DOCUMENT_FORMATS = ['application/pdf'] as const
+
 export type ImageFormat = (typeof IMAGE_FORMATS)[number]
 export type VideoFormat = (typeof VIDEO_FORMATS)[number]
-export type AcceptedFormat = ImageFormat | VideoFormat
+export type DocumentFormat = (typeof DOCUMENT_FORMATS)[number]
+export type AcceptedFormat = ImageFormat | VideoFormat | DocumentFormat
 
-/** Formats we can name in a refusal because we recognise them and say no. */
+/**
+ * Formats we can name in a refusal because we recognise them and say no.
+ *
+ * PDF is on this list *and* on `DOCUMENT_FORMATS`, and that is not a
+ * contradiction: it is accepted where a document belongs and named in a
+ * refusal where an image does. `inspect` asks "is this accepted for this
+ * kind" before it asks "is this one we refuse by name", so the answer depends
+ * on where the file was being put.
+ */
 export const REFUSED_FORMATS = {
   'image/svg+xml': 'SVG',
   'image/gif': 'GIF',
@@ -52,6 +76,10 @@ export function isImageFormat(value: string): value is ImageFormat {
 
 export function isVideoFormat(value: string): value is VideoFormat {
   return (VIDEO_FORMATS as readonly string[]).includes(value)
+}
+
+export function isDocumentFormat(value: string): value is DocumentFormat {
+  return (DOCUMENT_FORMATS as readonly string[]).includes(value)
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +105,15 @@ export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
  * memory as much as it is a policy — see `ingest.ts`.
  */
 export const MAX_VIDEO_BYTES = 64 * 1024 * 1024
+
+/**
+ * Twenty megabytes for a document.
+ *
+ * A subscription agreement is text and runs to tens of kilobytes. Twenty
+ * megabytes is room for a scanned execution copy of something long, and is
+ * still small enough that serving one does not need a range request.
+ */
+export const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024
 
 // ---------------------------------------------------------------------------
 // Sniffing
