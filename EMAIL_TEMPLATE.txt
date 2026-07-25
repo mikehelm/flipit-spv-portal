@@ -1,0 +1,45 @@
+Subject: Private invitation to participate in Flipit
+
+Dear {{recipient_name}},
+
+Flipit has completed an extended period of development, planning, and corporate restructuring. The company is now moving into a more active phase focused on commercial launch, product activation, promotion, new feature releases, and user growth.
+
+Before pursuing broader financing, we are first completing a limited private investment process with a carefully selected group of individuals who are familiar with Flipit and who we believe could be valuable participants in its next stage.
+
+A British Virgin Islands special purpose vehicle, or SPV, is being established to invest in Flipit Global Limited, the Hong Kong company that owns and operates the current Flipit business. The SPV may acquire up to 30% of Flipit Global Limited for a total aggregate investment of USD 30,000.
+
+We would like to offer you the following opportunity:
+
+Proposed investment: USD {{investment_amount}}
+Proposed ownership of the SPV: {{spv_percentage}}%
+Approximate indirect economic interest in Flipit Global Limited: {{indirect_flipit_percentage}}%
+
+The indirect interest shown above assumes the SPV completes its proposed acquisition of 30% of Flipit Global Limited.
+
+This is a new investment in the current structure and will be governed by new subscription and SPV documentation.
+
+David Serene is leading the formation and administration of the SPV and will coordinate the investment process. He is also expected to assume the role of Chief Executive Officer of Flipit Global Limited, subject to completion of the relevant agreements and formal corporate approvals.
+
+Please respond no later than {{response_deadline}} by using the secure private link below:
+
+{{secure_portal_link}}
+
+The link opens your own private portal. It will display this offer and allow you to indicate whether you wish to proceed, ask questions, or update your preferred email address. The portal remains yours for the duration of this process: you can return to it at any time to see where things stand, read updates, access your documents, and see confirmation once your participation has been accepted and any funds received. If you return later without this email, simply enter your address and a fresh sign-in link will be sent to you.
+
+No payment is requested at this stage, and submitting a response does not create a binding investment commitment.
+
+Before any investment is accepted or funds are requested, you will receive the proposed SPV structure, subscription documents, risk disclosures, and other relevant materials for review.
+
+Please note that we will never email you a change of bank details. When payment instructions are issued, verify them with David by voice before transferring any funds.
+
+If you decline or do not respond by the deadline, your proposed allocation may be offered to other eligible participants or used for another company-approved purpose, subject to the final documents and applicable law.
+
+For questions about the investment, your proposed allocation, or the SPV, please contact David through the private portal or reply to this email.
+
+Kind regards,
+
+David Serene
+SPV Manager
+Proposed Chief Executive Officer, Flipit Global Limited
+{{sender_email}}
+{{sender_phone}}

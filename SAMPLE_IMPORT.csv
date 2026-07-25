@@ -1,0 +1,2 @@
+recipient_name,recipient_email,investment_amount_usd,spv_percentage,response_deadline,recipient_jurisdiction,indirect_flipit_percentage_override,internal_notes
+Example Investor,investor@example.com,1500,5,2026-08-10,GB,,Replace this sample row

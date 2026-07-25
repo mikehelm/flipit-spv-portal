@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "required_fields": {
+    "recipient_name": "string",
+    "recipient_email": "email",
+    "investment_amount_usd": "decimal >= 0",
+    "spv_percentage": "decimal between 0 and 100",
+    "response_deadline": "ISO date YYYY-MM-DD, must be future-dated",
+    "recipient_jurisdiction": "ISO 3166-1 alpha-2 country code, must be in the approved jurisdiction list"
+  },
+  "optional_fields": {
+    "indirect_flipit_percentage_override": "decimal",
+    "sender_name": "string",
+    "sender_email": "email",
+    "sender_phone": "string",
+    "internal_notes": "string"
+  },
+  "formula": "indirect_flipit_percentage = spv_percentage * 0.30 unless override supplied",
+  "storage": "All monetary and percentage values stored as exact decimals, never floating point.",
+  "validation": [
+    "Reject malformed emails",
+    "Reject duplicate emails within the file",
+    "Reject duplicates against existing recipient records",
+    "Reject past-dated deadlines",
+    "Block send for any recipient whose jurisdiction is outside the compliance-approved list",
+    "Warn if the sum of spv_percentage exceeds 100",
+    "Warn if the sum of investment_amount_usd exceeds the stated aggregate raise"
+  ]
+}
