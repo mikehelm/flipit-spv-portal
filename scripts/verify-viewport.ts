@@ -544,6 +544,8 @@ async function main(): Promise<void> {
       ['audit log', '/audit'],
       ['two-factor', '/admin/security'],
       ['portal tiles', '/admin/roadmap'],
+      ['media library', '/admin/media'],
+      ['personal video', '/admin/video'],
       ['settings', '/admin/settings'],
     ] as const) {
       await auditScreen(page, label, path)

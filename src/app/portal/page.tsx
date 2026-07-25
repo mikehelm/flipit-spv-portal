@@ -12,10 +12,13 @@ import { readInvestorAccount } from '@/lib/portal/session'
 import { loadInvestorQa } from '@/lib/qa/data'
 import { loadInvestorRegisterView } from '@/lib/register/data'
 import { ROADMAP_DISCLAIMER } from '@/lib/portal/roadmap'
+import { shouldShowVideoSection, videoTextAlternative } from '@/lib/media/video'
+import { currentVideo } from '@/lib/media/video-store'
 import { loadInvestorUpdates } from '@/lib/updates/data'
 import { QaSection } from './qa-section'
 import { RegisterSection } from './register-section'
 import { UpdatesSection } from './updates-section'
+import { VideoSection } from './video-section'
 
 export const metadata: Metadata = {
   title: 'Your private invitation — Flipit',
@@ -269,6 +272,13 @@ export default async function PortalPage() {
     ? await loadInvestorUpdates(account.id, view.access)
     : null
 
+  // §13.3. The section exists only when there is a published video: no
+  // placeholder, no empty player, no gap where one would have been. The video
+  // is global rather than per-investor — there is one, David's, and it is the
+  // same one for everybody — so nothing here reads or reveals another account.
+  const video = canView(view.access) ? await currentVideo() : null
+  const videoText = video ? videoTextAlternative(video) : null
+
   return (
     <>
       <main id="main" className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
@@ -307,6 +317,15 @@ export default async function PortalPage() {
               />
             ))
           )
+        ) : null}
+
+        {shouldShowVideoSection(video) && video ? (
+          <VideoSection
+            videoId={video.id}
+            contentType={video.contentType}
+            caption={videoText?.caption ?? null}
+            transcript={videoText?.transcript ?? null}
+          />
         ) : null}
 
         {updates ? <UpdatesSection view={updates} /> : null}

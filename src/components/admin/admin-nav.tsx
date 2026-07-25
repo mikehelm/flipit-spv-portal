@@ -41,6 +41,11 @@ const ITEMS: NavItem[] = [
   { href: '/admin/invites', label: 'Operator access', roles: ['OWNER'] },
   { href: '/audit', label: 'Audit log', roles: ['OWNER'] },
   { href: '/admin/roadmap', label: 'Portal tiles', roles: ['OWNER'] },
+  // §13.2 names both roles for the media library. §13.3's video is the
+  // operator's own — the owner sees this entry so he can watch the preview,
+  // and every control that writes on that page refuses him server-side.
+  { href: '/admin/media', label: 'Media', roles: ['OWNER', 'OPERATOR'] },
+  { href: '/admin/video', label: 'Video', roles: ['OWNER', 'OPERATOR'] },
   { href: '/admin/settings', label: 'Settings', roles: ['OWNER'] },
 ]
 

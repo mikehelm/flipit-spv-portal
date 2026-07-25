@@ -577,23 +577,29 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
     n: 32,
     criterion:
       "An uploaded image is served from the app's own domain, stripped of EXIF, and available to both the portal and the email templates.",
-    covered: [],
-    manual:
-      'Not built. WP15 is deferred until somewhere to store a file is chosen — see the ' +
-      'WP16 entry in PROGRESS.md for why base64-in-Postgres and a writable disk were ' +
-      'both rejected. There is nothing to test and nothing that pretends there is.',
+    covered: [
+      unit('src/lib/media/strip.test.ts', 'removes EXIF, XMP, ICC, IPTC and the comment, and the fixture had all of them'),
+      unit('src/lib/media/strip.test.ts', 'removes tEXt, iTXt, eXIf, iCCP and tIME, and the fixture had all of them'),
+      unit('src/lib/media/ingest.test.ts', 'writes the STRIPPED bytes, so the original is never on disk at all'),
+      unit('src/lib/media/ingest.test.ts', 'accepts the three image formats and reports the sniffed type, not the declared one'),
+      unit('src/lib/media/boundary.test.ts', 'the public image route reads no session and no investor record'),
+      database('scripts/verify-media.ts', 'the file on disk does not'),
+      database('scripts/verify-media.ts', 'the original never reached the disk at all'),
+    ],
   },
   {
     n: 33,
     criterion:
       'David can record or upload a video, preview it in the real portal layout, replace it, and publish it — and nothing is investor-visible until he publishes.',
-    covered: [],
-    manual:
-      'Not built, and deferred for the same reason as AC32: §13.3 wants recorded or ' +
-      'uploaded video hosted on the application\'s own domain and served only to ' +
-      'authenticated investors, and there is nowhere to put the file. §13.3 also says ' +
-      'the whole feature is optional and removable, and that if David never records one ' +
-      'the portal shows no gap where it would have been — which is the state today.',
+    covered: [
+      unit('src/lib/media/video.test.ts', 'never shows an unpublished video to an investor'),
+      unit('src/lib/media/video.test.ts', 'lets the admin preview see it before anyone else, which is the whole point'),
+      unit('src/lib/media/video.test.ts', 'renders nothing when there is no video — no gap, no placeholder'),
+      unit('src/lib/media/boundary.test.ts', 'the upload route stores a replacement unpublished'),
+      unit('src/lib/media/boundary.test.ts', 'only two files write to the video table at all, and only one of them publishes'),
+      database('scripts/verify-media.ts', 'it arrives unpublished'),
+      database('scripts/verify-media.ts', 'a replacement arrives unpublished, even over a published one'),
+    ],
   },
   {
     n: 34,
@@ -604,16 +610,18 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
         'src/lib/email/transport/guard.test.ts',
         'refuses a test send addressed to anyone but the operator',
       ),
+      unit('src/lib/sending/snapshot.test.ts', 'the test send is the preview, posted — not a third document'),
       unit(
         'src/lib/email/transport/guard.test.ts',
         'still requires a working credential — there is nothing to test with',
       ),
     ],
     manual:
-      'The test send exists and is locked to the operator\'s own address. What is not ' +
-      'built is the prompt — §13.3 wants it offered in the flow rather than found — and ' +
-      '"including his video" depends on AC33. The half that protects a real recipient is ' +
-      'in place; the half that is a nudge is not.',
+      'The prompt is on the pre-flight line that asks whether a test was sent, offered ' +
+      'before the tick rather than after it — §13.3 asks for it "in the flow, not a ' +
+      'feature he has to find". What no test can settle is whether he actually opened ' +
+      'it and looked, which is why the checklist item stays an attestation rather than ' +
+      'becoming an enforced one.',
   },
   {
     n: 35,

@@ -9,3 +9,6 @@ coverage
 # build artefacts — must never be committed, they conflict on every merge
 *.tsbuildinfo
 backups/
+
+# uploaded media for MEDIA_STORE="filesystem" — never committed
+.media/

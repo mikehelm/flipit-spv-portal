@@ -56,6 +56,19 @@ const schema = z.object({
   /** Comma-separated allowlists. Role is assigned by address (BUILD_SPEC §2). */
   OWNER_EMAILS: z.string().default(''),
   OPERATOR_EMAILS: z.string().default(''),
+
+  /**
+   * Where uploaded images and video are stored. BUILD_SPEC §13.2, §13.3.
+   *
+   * Empty means there is nowhere, and that is a supported state rather than a
+   * misconfiguration: the portal, the emails and the certificate are all
+   * complete with an empty media library, and the upload screens say exactly
+   * what to set. See `lib/media/store.ts` for why this is a choice and not a
+   * default — a filesystem store needs a directory that survives a restart,
+   * and a serverless deployment does not have one.
+   */
+  MEDIA_STORE: z.enum(['', 'filesystem', 'object-store']).default(''),
+  MEDIA_DIR: z.string().default('.media'),
 })
 
 type Env = z.infer<typeof schema> & {

@@ -23,6 +23,7 @@
     "backup": "tsx scripts/backup.ts",
     "verify:restore": "tsx scripts/verify-restore.ts",
     "verify:2fa": "tsx scripts/verify-second-factor.ts",
+    "verify:media": "tsx scripts/verify-media.ts",
     "verify:lifecycle": "tsx scripts/verify-lifecycle.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
   },

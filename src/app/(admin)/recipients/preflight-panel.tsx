@@ -1,6 +1,7 @@
 import { confirmPreflightItemAction, resetPreflightAction } from '@/actions/send'
+import { sendTestInvitationAction } from '@/actions/send-test'
 import { ActionForm } from '@/components/admin/action-form'
-import { Card, Notice, Pill } from '@/components/admin/ui'
+import { Card, Field, Notice, Pill, Select } from '@/components/admin/ui'
 import type { PreflightItem, PreflightResult } from '@/lib/sending/preflight'
 
 /**
@@ -25,7 +26,58 @@ function stateLabel(item: PreflightItem): string {
   return 'Needs you'
 }
 
-function Row({ item, names }: { item: PreflightItem; names: Map<string, string> }) {
+/**
+ * §13.3's prompt, sitting on the checklist item it answers. BUILD_SPEC §22 AC34.
+ *
+ * *"Offer him a test email first … This should be a prompt in the flow, not a
+ * feature he has to find."* So it is here, attached to the pre-flight line that
+ * asks whether a test was sent, rather than on a screen of its own — and it is
+ * offered before the tick rather than after it, because ticking a box about an
+ * email you have not sent is the failure mode the item exists to catch.
+ *
+ * The address is not a field. It is the operator's own, read from the
+ * allowlist, and the send gate refuses a test addressed anywhere else.
+ */
+function TestSendPrompt({ names }: { names: Map<string, string> }) {
+  const options = [...names.entries()].map(([offerId, name]) => ({
+    value: offerId,
+    label: name,
+  }))
+
+  if (options.length === 0) return null
+
+  return (
+    <div className="mt-3 rounded-sm border hairline bg-bg2 p-4">
+      <p className="text-sm leading-relaxed text-silver2">
+        Send yourself the complete invitation &mdash; the designed email, this
+        person&rsquo;s real figures, the portal link and anything behind it &mdash; and
+        open it the way they will. It goes to your own address and nowhere else.
+      </p>
+
+      <div className="mt-4">
+        <ActionForm action={sendTestInvitationAction} submitLabel="Send it to me" tone="quiet">
+          <Field
+            label="Rendered from"
+            name="offerId"
+            hint="Their real amount, percentages and deadline. The portal link is deliberately not a working one — a test never issues a token that could be spent."
+          >
+            <Select name="offerId" options={options} />
+          </Field>
+        </ActionForm>
+      </div>
+    </div>
+  )
+}
+
+function Row({
+  item,
+  names,
+  canSendTest,
+}: {
+  item: PreflightItem
+  names: Map<string, string>
+  canSendTest: boolean
+}) {
   const affected = (item.affectedOfferIds ?? [])
     .map((offerId) => names.get(offerId))
     .filter((name): name is string => Boolean(name))
@@ -54,6 +106,10 @@ function Row({ item, names }: { item: PreflightItem; names: Map<string, string> 
         </div>
       </div>
 
+      {item.id === 'TEST_EMAIL_SENT_AND_REVIEWED' && canSendTest ? (
+        <TestSendPrompt names={names} />
+      ) : null}
+
       {item.kind === 'ATTESTED' && item.state === 'AWAITING_CONFIRMATION' ? (
         <div className="mt-3">
           <ActionForm
@@ -71,9 +127,12 @@ function Row({ item, names }: { item: PreflightItem; names: Map<string, string> 
 export function PreflightPanel({
   preflight,
   names,
+  canSendTest,
 }: {
   preflight: PreflightResult
   names: Map<string, string>
+  /** §13.3's test send is the operator's own. The action refuses anyone else. */
+  canSendTest: boolean
 }) {
   return (
     <Card
@@ -87,7 +146,7 @@ export function PreflightPanel({
     >
       <ul className="mb-4">
         {preflight.items.map((item) => (
-          <Row key={item.id} item={item} names={names} />
+          <Row key={item.id} item={item} names={names} canSendTest={canSendTest} />
         ))}
       </ul>
 

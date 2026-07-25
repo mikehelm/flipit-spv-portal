@@ -2,7 +2,9 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 14 and 16 to 20 are complete — every package except 15, images and video, which is deferred until somewhere to store a file is chosen. Two-factor sign-in, the last release gate, is now built too.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: every work package, 0 to 20, is complete.** WP15 — the image library and the personal video — was the last one outstanding and is now built, which also means **all forty-eight of the specification's acceptance criteria have an automated check behind them**. Two-factor sign-in, the last release gate, is built too. You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+
+You can also upload brand images that are stripped of their embedded location and camera data before they are stored, and David can record a short personal video in the browser or upload one from his phone, watch it in place, and publish it to the portal when he is ready.
 
 The last two packages are the ones that check everything else and then put it somewhere real: a table saying, for each of the forty-eight things the specification requires, which test proves it — and a runbook for the day it goes live. **ACCEPTANCE.md** and **DEPLOYMENT.md** are those two documents, and the plain-English version of each is further down, under "The forty-eight things this was meant to do" and "Putting it somewhere real".
 
@@ -343,9 +345,9 @@ The specification ends with a list of forty-eight things that have to be true be
 
 It is worth opening even if you never run a test, because it is the honest account of where the build actually is:
 
-- **46 of the 48 have an automated check.** Some are ordinary tests; some need a real database, because a rule like "and in nobody else's portal" means nothing until there are two investors; one needs a real browser at phone size.
-- **2 have none** — the image library and the personal video. Both are waiting on a decision about where to store a file.
-- **4 carry a written note** explaining what is and is not covered. Two of those are the pair above; the other two are half-built and say which half.
+- **All 48 have an automated check.** Some are ordinary tests; some need a real database, because a rule like "and in nobody else's portal" means nothing until there are two investors; one needs a real browser at phone size.
+- **The last two to get one** were the image library and the personal video, which were waiting on a decision about where to store a file. That decision is made and they are built.
+- **One carries a written note** explaining what is and is not covered: the application can prove it offered you a test email and sent you one, and cannot prove you opened it and looked.
 
 The document is generated from the tests rather than written alongside them, so it cannot quietly go out of date. A test reads the specification itself and fails if the wording here drifts from the wording there.
 
@@ -381,6 +383,58 @@ pnpm backup              # writes a backup file
 
 **One thing found while doing this, worth knowing:** the verification page — the one an investor is meant to be able to find — was being hidden from search engines by a mistake in the configuration, and had been for several packages. It is fixed, and there is now a check that asks a running copy of the application rather than reading the configuration file, because reading the file is what missed it.
 
+## The media library
+
+**Admin → Media**, open to both you and David. Logos, an email header, a headshot, product screenshots.
+
+Before you choose a file, the screen tells you what is about to happen to it — which is the point, because what happens is not obvious:
+
+**Try uploading a photograph taken on a phone.** It is stored with its embedded metadata removed: the coordinates it was taken at, the camera, the date, the owner's name if the camera wrote one. That happens *before* anything is written to disk, so the original never exists on this machine at all. The screen tells you how many bytes it removed.
+
+**Try renaming a `.svg` to `.png` and uploading it.** Refused, by name, with the reason: an SVG is a document that can contain script, and this application serves images from the same address that holds the investor's session. There is no version of that trade that is worth a logo.
+
+**Try a GIF.** Also refused, for a quieter reason — this build cannot reliably strip the comment blocks a GIF can carry, and an image whose metadata cannot be removed does not go on the portal.
+
+**Try a `.jpg` that is actually a PDF.** Refused. The format is read from the file's own opening bytes, never from its name.
+
+Every image is served from this application's own address, at a long random URL — nothing is ever loaded from somewhere else, and finding one address tells you nothing about any other.
+
+**One thing to know before you start:** by default there is nowhere to put a file, and the screen says so plainly rather than failing. Set `MEDIA_STORE="filesystem"` and `MEDIA_DIR` in `.env` to a folder, and restart. That is deliberate — a filesystem needs a disk that survives a restart, and the hosting this eventually runs on may not have one, so the application refuses rather than storing files somewhere they will vanish from. Everything else in the portal works perfectly with an empty library.
+
+---
+
+## David's personal video
+
+**Admin → Video.** Entirely optional. If David never records one, the portal shows no gap where it would have been — there is no placeholder, no empty player, nothing.
+
+Two ways in, and they land in exactly the same place:
+
+- **Record it here.** Turn the camera on, record, watch it back, and either use it or record it again. Nothing leaves the page until you press "Use this one".
+- **Upload one from a phone.** Same checks, same place. If it is an MP4 or a QuickTime file, the location it was shot at is removed before it is stored.
+
+**The order matters and it is enforced.** A newly uploaded video is not published. Until David presses publish, no investor can reach it — not by guessing the address, not by any link, not at all. Try it: copy the address of the preview player while the video is unpublished, open it in a private window, and you get the same "not found" you would get for a video that does not exist. Not a "you are not allowed" — the same nothing.
+
+Then publish it and try again from an investor's portal. It plays.
+
+**Things worth trying:**
+
+- **Replace a published video.** It takes the published one down and the new one arrives unpublished, so you watch it in place before anyone else does. The screen warns you before you upload. Your caption and transcript are carried across.
+- **Sign in as the owner rather than the operator.** You can watch the video. You cannot record, replace, publish or delete one — it is David's, and the buttons refuse you rather than hiding.
+- **Suspend an investor's account** and try their portal. The video goes with everything else.
+- **Leave the caption and transcript empty.** The screen tells you that anyone who cannot play sound gets nothing at all from the video. Fill them in and they appear on the portal as text, in full, not hidden behind a control somebody has to find.
+
+---
+
+## Sending yourself the whole thing
+
+On **Review and send**, on the checklist line that asks whether a test email was sent, there is now a button that sends one. Pick a recipient and it renders their real figures into the real designed email and sends it **to your own address and nowhere else** — the send gate refuses a test addressed anywhere but there, so this cannot reach a real person even by accident.
+
+The portal link in it deliberately does not work. It is the right shape, the right length and the right address, and it opens the "this link is not valid" page. A test that minted a working link would be issuing a real credential against a real investor's record and spending it when you clicked.
+
+This is the thing to do before any real invitation goes out: open it on your phone, the way they will.
+
+---
+
 ## The tiles at the bottom of the portal
 
 **Admin → Portal tiles**, owner only. The short names under &ldquo;Coming to your portal&rdquo; on an investor&rsquo;s page. Add one, rename one, hide one, or mark one as shipped.
@@ -407,7 +461,8 @@ Worth trying, because these are all meant to work:
 
 ## What is not built yet
 
-- **Documents, images and video.** All need somewhere to store a file, which has not been chosen yet. Nothing else depends on them.
+- **Document packages.** Issuing a set of legal documents to an investor still needs somewhere to store a file, and it needs deciding what those documents are. Images and video no longer wait on that — see below.
+- **A picker for library images inside the email template editor.** The library exists, each image has an address on this deployment, and putting one in a template is currently a copy-and-paste of that address rather than a button.
 
 ## The round, and closing it
 
@@ -468,5 +523,6 @@ Two things worth trying:
 - The `ENCRYPTION_KEY` and `AUTH_SECRET` in your local `.env` are throwaway development values. Generate fresh ones for anything real.
 - No email is ever sent to anyone but the operator's own address during development.
 - The application refuses to send real invitations unless its configured base URL is the production one. Every portal link embeds the domain it was issued from, and a link issued from a testing deployment dies the moment the application moves.
+- Uploaded images and video are stored on disk only if you set `MEDIA_STORE` in `.env`. With it unset, the two upload screens say so and everything else works.
 - The colours are taken from the FLIPIT demo file, which is a faithful copy of the live site but not the source of truth. Somebody should check them against flipit.com before launch.
 - The invitation email and the participation certificate are light-coloured documents rather than dark ones, and that is deliberate: an email has to be readable in every mail programme, and a certificate has to print.

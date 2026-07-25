@@ -8,7 +8,7 @@ citation names a test or check that exists — the same test resolves each one
 against the real label in the real file, so a renamed or deleted test breaks
 the map rather than leaving a citation pointing at nothing.
 
-46 of 48 criteria have at least one automated check. 3 carry a written note.
+48 of 48 criteria have at least one automated check. 1 carry a written note.
 
 Where a check runs:
 
@@ -234,22 +234,31 @@ Where a check runs:
 
 ## 32. An uploaded image is served from the app's own domain, stripped of EXIF, and available to both the portal and the email templates.
 
-_No automated check._
-
-**Note.** Not built. WP15 is deferred until somewhere to store a file is chosen — see the WP16 entry in PROGRESS.md for why base64-in-Postgres and a writable disk were both rejected. There is nothing to test and nothing that pretends there is.
+- `src/lib/media/strip.test.ts` — unit — "removes EXIF, XMP, ICC, IPTC and the comment, and the fixture had all of them"
+- `src/lib/media/strip.test.ts` — unit — "removes tEXt, iTXt, eXIf, iCCP and tIME, and the fixture had all of them"
+- `src/lib/media/ingest.test.ts` — unit — "writes the STRIPPED bytes, so the original is never on disk at all"
+- `src/lib/media/ingest.test.ts` — unit — "accepts the three image formats and reports the sniffed type, not the declared one"
+- `src/lib/media/boundary.test.ts` — unit — "the public image route reads no session and no investor record"
+- `scripts/verify-media.ts` — database — "the file on disk does not"
+- `scripts/verify-media.ts` — database — "the original never reached the disk at all"
 
 ## 33. David can record or upload a video, preview it in the real portal layout, replace it, and publish it — and nothing is investor-visible until he publishes.
 
-_No automated check._
-
-**Note.** Not built, and deferred for the same reason as AC32: §13.3 wants recorded or uploaded video hosted on the application's own domain and served only to authenticated investors, and there is nowhere to put the file. §13.3 also says the whole feature is optional and removable, and that if David never records one the portal shows no gap where it would have been — which is the state today.
+- `src/lib/media/video.test.ts` — unit — "never shows an unpublished video to an investor"
+- `src/lib/media/video.test.ts` — unit — "lets the admin preview see it before anyone else, which is the whole point"
+- `src/lib/media/video.test.ts` — unit — "renders nothing when there is no video — no gap, no placeholder"
+- `src/lib/media/boundary.test.ts` — unit — "the upload route stores a replacement unpublished"
+- `src/lib/media/boundary.test.ts` — unit — "only two files write to the video table at all, and only one of them publishes"
+- `scripts/verify-media.ts` — database — "it arrives unpublished"
+- `scripts/verify-media.ts` — database — "a replacement arrives unpublished, even over a published one"
 
 ## 34. The flow prompts David to send himself a complete test invitation, including his video, before any real send is possible.
 
 - `src/lib/email/transport/guard.test.ts` — unit — "refuses a test send addressed to anyone but the operator"
+- `src/lib/sending/snapshot.test.ts` — unit — "the test send is the preview, posted — not a third document"
 - `src/lib/email/transport/guard.test.ts` — unit — "still requires a working credential — there is nothing to test with"
 
-**Note.** The test send exists and is locked to the operator's own address. What is not built is the prompt — §13.3 wants it offered in the flow rather than found — and "including his video" depends on AC33. The half that protects a real recipient is in place; the half that is a nudge is not.
+**Note.** The prompt is on the pre-flight line that asks whether a test was sent, offered before the tick rather than after it — §13.3 asks for it "in the flow, not a feature he has to find". What no test can settle is whether he actually opened it and looked, which is why the checklist item stays an attestation rather than becoming an enforced one.
 
 ## 35. No investor-facing screen reveals the existence, identity, count, or aggregate contribution of any other investor.
 

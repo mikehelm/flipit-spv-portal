@@ -41,6 +41,7 @@ const SEND = 'src/lib/sending/send-invitation.ts'
 const PREVIEW = 'src/app/(admin)/templates/data.ts'
 const BATCH = 'src/lib/sending/data.ts'
 const RENDER = 'src/lib/email/render.ts'
+const TEST_SEND = 'src/actions/send-test.ts'
 
 /** Every shipped source file, so a check covers the application and not a list. */
 function sourceFiles(dir = join(root, 'src')): string[] {
@@ -131,10 +132,32 @@ describe('the preview and the sent snapshot are one document (BUILD_SPEC §22, A
       .map(relative)
       .sort()
 
-    // `render.ts` defines them and uses them for pre-flight; the send and the
-    // preview are the only other callers. A fourth entry here is a divergent
-    // renderer, which is precisely what AC3 forbids.
-    expect(callers).toEqual([PREVIEW, RENDER, SEND].sort())
+    // `render.ts` defines them and uses them for pre-flight; the send, the
+    // preview and §13.3's test send are the only other callers. A fifth entry
+    // here is a divergent renderer, which is precisely what AC3 forbids.
+    expect(callers).toEqual([PREVIEW, RENDER, SEND, TEST_SEND].sort())
+  })
+
+  it('the test send is the preview, posted — not a third document', () => {
+    // §13.3 asks David to "experience exactly what a recipient will", which is
+    // only true if the thing he receives is rendered the way the preview and
+    // the send are. It borrows the preview's own loader, input builder and
+    // link, so there is nothing here that could drift from either of them.
+    const source = withoutComments(read(TEST_SEND))
+
+    expect(source).toContain('loadCurrentTemplate(')
+    expect(source).toContain('renderEmail(template, input, defaults)')
+    expect(source).toContain('toVariableInput(recipient, previewPortalLink())')
+
+    // §11.4's one permitted difference, and it applies here for the same
+    // reason: a test send must not mint a working claim token against a real
+    // investor's record. There is no call to `issueToken` in this file.
+    expect(source).not.toContain('issueToken')
+    expect(source).not.toContain('portalTokens')
+
+    // And it is a test, so it can only ever be addressed to the operator.
+    expect(source).toContain("intent: 'TEST'")
+    expect(source).toContain('to: operator.email')
   })
 
   it('builds the renderer input from the same fields on every path', () => {

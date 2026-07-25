@@ -144,17 +144,19 @@ describe('nothing is silently uncovered', () => {
   })
 
   it('names the criteria that are not automated, so the count is honest', () => {
-    // Three of the forty-eight have no automated check at all, and all three
-    // are the deferred media package (§13.2's image library, §13.3's video)
-    // or depend on it. Two more are partly covered and say which half.
+    // None. AC32 and AC33 were the last two, and WP15 built what they describe
+    // — the media library and the personal video — so every one of the
+    // forty-eight now has at least one check behind it.
     const uncovered = ACCEPTANCE_CRITERIA.filter((c) => c.covered.length === 0).map((c) => c.n)
-    expect(uncovered).toEqual([32, 33])
+    expect(uncovered).toEqual([])
 
     const partial = ACCEPTANCE_CRITERIA.filter(
       (c) => c.covered.length > 0 && c.manual,
     ).map((c) => c.n)
-    // AC30 left this list once the tile-editing surface was built — "configurable
-    // by the owner" was the half that had never existed.
+    // AC30 left this list when the tile-editing surface was built. AC34 stays
+    // on it deliberately: the prompt and the send are both built and tested,
+    // and whether David actually opened the mail and looked at it is not a
+    // thing this application can observe.
     expect(partial).toEqual([34])
   })
 

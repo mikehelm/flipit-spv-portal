@@ -182,7 +182,7 @@ export default async function RecipientsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  await requireOnboardedAdmin()
+  const admin = await requireOnboardedAdmin()
 
   const params = await searchParams
   const context = await loadBatchContext()
@@ -272,7 +272,11 @@ export default async function RecipientsPage({
       </div>
 
       <div className="mb-6">
-        <PreflightPanel preflight={context.preflight} names={names} />
+        <PreflightPanel
+          preflight={context.preflight}
+          names={names}
+          canSendTest={admin.role === 'OPERATOR'}
+        />
       </div>
 
       <Card

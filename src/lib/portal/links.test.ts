@@ -442,14 +442,20 @@ describe('signing back in later uses a link of the same shape', () => {
 // ---------------------------------------------------------------------------
 
 describe('no portal route accepts anything but a token in its URL', () => {
-  it('has exactly two dynamic segments, both opaque identifiers', () => {
+  it('has exactly three dynamic segments, all opaque identifiers', () => {
     // If a route ever appears as `[email]`, `[accountId]` or `[offerId]`, the
     // personal datum is in the URL by construction and no amount of care in
     // the link builders can take it back out.
-    expect(dynamicSegments()).toEqual(['[certificateId]', '[token]'])
+    //
+    // `[videoId]` joined this list in WP15. It names §13.3's operator video,
+    // of which there is exactly one and which belongs to nobody in particular
+    // — so unlike a certificate id it is not even *capable* of identifying an
+    // investor, and the route behind it reads no investor record beyond the
+    // session that is already required to reach it.
+    expect(dynamicSegments()).toEqual(['[certificateId]', '[token]', '[videoId]'])
 
     for (const segment of dynamicSegments()) {
-      expect(segment, segment).toMatch(/^\[(token|certificateId)\]$/)
+      expect(segment, segment).toMatch(/^\[(token|certificateId|videoId)\]$/)
       // No catch-all: `[...path]` would accept whatever was appended to it.
       expect(segment.startsWith('[...') || segment.startsWith('[[...'), segment).toBe(
         false,
@@ -470,7 +476,7 @@ describe('no portal route accepts anything but a token in its URL', () => {
         }
       }
     }
-    expect([...declared].sort()).toEqual(['certificateId', 'token'])
+    expect([...declared].sort()).toEqual(['certificateId', 'token', 'videoId'])
   })
 
   it('reads no search parameter anywhere in the portal', () => {
