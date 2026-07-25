@@ -63,16 +63,31 @@ export async function confirmDisplayNameAction(
     .set({ displayName: parsed.data.displayName })
     .where(eq(users.id, operator.id))
 
+  // Integration: §11.2 resolves `sender_name` from the row, then from
+  // `service_config.default_sender_name` — it never reads `users.display_name`,
+  // and it must not, because a fallback chain that quietly reaches into a user
+  // row is a chain nobody can predict. But §2.1 step 1 asks for exactly this
+  // name, "as it should appear on investment correspondence", so the answer is
+  // written into the configuration the renderer reads rather than left in a
+  // column the renderer cannot see. Explicit write, not an implicit fallback.
+  await db
+    .update(serviceConfig)
+    .set({ defaultSenderName: parsed.data.displayName })
+    .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
+
   await audit({
     actor: { kind: 'user', id: operator.id, label: operator.email },
     entityType: 'user',
     entityId: operator.id,
     action: ONBOARDING_ACTIONS.displayName,
-    metadata: { displayName: parsed.data.displayName },
+    metadata: { displayName: parsed.data.displayName, senderNameDefaultUpdated: true },
   })
 
   revalidatePath(ONBOARDING_PATH)
-  return actionOk('Display name saved.')
+  return actionOk(
+    'Display name saved. It is also now the default sender name on the invitation, ' +
+      'which the owner can change in Settings.',
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -122,12 +137,28 @@ export async function setContactMethodAction(
     .set({ contactMethod, contactValue })
     .where(eq(users.id, operator.id))
 
+  // Same integration as step 1, and the one WP4 flagged: §11.2 gives
+  // `sender_phone` the chain row -> service_config and no automatic fallback,
+  // so the number David just gave has to be written to the configuration or the
+  // invitation blocks at pre-flight with "the operator has not set a number"
+  // while the operator is looking at the number he set. Email-only clears it,
+  // because the phone line is removed from the email entirely in that case and
+  // leaving a stale number in the configuration would be a value nobody chose.
+  await db
+    .update(serviceConfig)
+    .set({ defaultSenderPhone: contactValue })
+    .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
+
   await audit({
     actor: { kind: 'user', id: operator.id, label: operator.email },
     entityType: 'user',
     entityId: operator.id,
     action: ONBOARDING_ACTIONS.contactMethod,
-    metadata: { contactMethod, valueCaptured: contactValue !== null },
+    metadata: {
+      contactMethod,
+      valueCaptured: contactValue !== null,
+      senderPhoneDefaultUpdated: true,
+    },
   })
 
   revalidatePath(ONBOARDING_PATH)

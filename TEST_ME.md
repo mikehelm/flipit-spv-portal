@@ -96,4 +96,4 @@ Sign-in · uploading a spreadsheet · the email · sending · the investor porta
 
 ## Nothing needed from you yet
 
-No credentials or decisions are required to test the above. The first thing that will need you is Google sign-in credentials at WP2 — and even then, the rest of the build continues around it.
+No credentials or decisions are required to test the above. Sign-in needs nothing from you either — BUILD_SPEC §2.2 dropped Google sign-in, and the first administrator gets in through a one-time setup link rather than an OAuth client. The two things that will eventually need you are a Google **app password** for sending and a compliance approval before any invitation can go out.

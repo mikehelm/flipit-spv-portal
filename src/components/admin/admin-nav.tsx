@@ -11,8 +11,11 @@ import type { PrivilegedRole } from '@/lib/roles'
  * on the server by `requireOwner()`. The hiding is manners; the refusal is the
  * access control.
  *
- * Compliance approval (BUILD_SPEC §8.2) is deliberately absent from this nav
- * and from the settings page. It is owner-only and WP6 builds it.
+ * Compliance approval (BUILD_SPEC §8.2) is linked here for the OWNER only. The
+ * link is not what restricts it: `/compliance` calls `requireOwner()` itself
+ * and audits anyone else's attempt before turning them away. It is deliberately
+ * absent from the settings page, so that no future change to who reaches
+ * settings can hand the approval control to the operator.
  */
 
 interface NavItem {
@@ -23,6 +26,9 @@ interface NavItem {
 
 const ITEMS: NavItem[] = [
   { href: '/admin', label: 'Overview', roles: ['OWNER', 'OPERATOR'] },
+  { href: '/import', label: 'Recipients', roles: ['OWNER', 'OPERATOR'] },
+  { href: '/templates', label: 'Email templates', roles: ['OWNER', 'OPERATOR'] },
+  { href: '/compliance', label: 'Compliance', roles: ['OWNER'] },
   { href: '/admin/onboarding', label: 'Setup', roles: ['OPERATOR'] },
   { href: '/admin/invites', label: 'Operator access', roles: ['OWNER'] },
   { href: '/admin/settings', label: 'Settings', roles: ['OWNER'] },

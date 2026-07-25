@@ -45,7 +45,6 @@ export class GmailApiTransport implements EmailTransport {
   /** Nothing is authenticated, so there is no address to report. */
   readonly authenticatedAddress: string | null = null
 
-  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
   async sendOne(_message: OutboundMessage): Promise<SendResult> {
     throw new TransportNotConfiguredError(NOT_CONFIGURED)
   }

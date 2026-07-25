@@ -110,12 +110,14 @@ describe('no JavaScript number touches money or a percentage', () => {
     expect(six.variables.spv_percentage).toBe('16.666667')
   })
 
-  it('trims trailing zeros so a whole percentage does not read as 5.000', () => {
+  it('keeps the configured precision so figures in one panel line up', () => {
+    // Not trimmed to "5". Two figures shown side by side at different
+    // precisions read as a mistake in a document about someone's money.
     const context = resolveEmailVariables(
       recipient({ indirectPercentage: '5.000000' }),
       defaults(),
     )
-    expect(context.variables.indirect_flipit_percentage).toBe('5')
+    expect(context.variables.indirect_flipit_percentage).toBe('5.000')
   })
 })
 
@@ -231,20 +233,27 @@ describe('the operator contact method', () => {
     expect(whatsapp.flags).toEqual({ contact_phone: false, contact_whatsapp: true })
   })
 
-  it('sets no flag when the number is missing, so no label renders alone', () => {
+  it('keeps the flag set when the number is missing, so pre-flight blocks — AC21', () => {
+    // If the flag switched off whenever the value was absent, the phone line
+    // would quietly vanish and a missing sender_phone would never be caught.
     const context = resolveEmailVariables(
       recipient(),
       defaults({ contactMethod: 'PHONE', defaultSenderPhone: null }),
     )
-    expect(context.flags.contact_phone).toBe(false)
+    expect(context.flags.contact_phone).toBe(true)
+    expect(context.variables.sender_phone).toBeNull()
   })
 
-  it('says so plainly when the operator has not chosen a contact method', () => {
+  it('says so plainly, and blocks, when the operator has not chosen a method', () => {
     const context = resolveEmailVariables(
       recipient(),
-      defaults({ contactMethod: null, defaultSenderPhone: null }),
+      // A configured number is deliberately not enough on its own: without a
+      // chosen method there is no correct label for it.
+      defaults({ contactMethod: null, defaultSenderPhone: '+66 81 234 5678' }),
     )
     expect(context.notes.sender_phone).toMatch(/contact method/i)
+    expect(context.variables.sender_phone).toBeNull()
+    expect(context.flags.contact_phone).toBe(true)
   })
 })
 

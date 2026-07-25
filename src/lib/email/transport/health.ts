@@ -77,9 +77,31 @@ export function describeMailConnection(
     }
   }
 
-  const credential = config.smtpUserEncrypted && config.smtpPasswordEncrypted
-    ? readSmtpCredential(config)
-    : null
+  // A stored credential that will not decrypt throws, and this function is
+  // called while rendering the dashboard. An unreadable credential must show
+  // as a broken connection with a specific explanation, not as a 500 on the
+  // page that exists to tell the operator what is broken.
+  let credential: ReturnType<typeof readSmtpCredential> = null
+  let decryptError: string | null = null
+  try {
+    credential =
+      config.smtpUserEncrypted && config.smtpPasswordEncrypted
+        ? readSmtpCredential(config)
+        : null
+  } catch (error) {
+    decryptError = error instanceof Error ? error.message : 'The stored credential is unreadable.'
+  }
+
+  if (decryptError) {
+    return {
+      ...base,
+      state: 'FAILED',
+      authenticatedAddress: null,
+      host: 'smtp.gmail.com',
+      port: 587,
+      summary: decryptError,
+    }
+  }
 
   const address = credential?.user ?? null
 
