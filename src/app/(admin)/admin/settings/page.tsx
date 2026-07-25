@@ -20,6 +20,7 @@ import {
 import { requireOwner } from '@/lib/auth/guards'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { maskConfigured } from '@/lib/crypto'
+import { readSpendSummary } from '@/lib/import/persist'
 
 /**
  * Owner-only settings. BUILD_SPEC §7, §9.1, §10, §11.2, §6.7.5.
@@ -33,6 +34,8 @@ import { maskConfigured } from '@/lib/crypto'
 export default async function SettingsPage() {
   await requireOwner()
   const config = await readServiceConfig()
+  // §9.1 — usage shown on the settings page, not merely capped.
+  const spend = await readSpendSummary()
 
   return (
     <>
@@ -227,7 +230,7 @@ export default async function SettingsPage() {
               <Field
                 label="Monthly spend cap (USD)"
                 name="aiMonthlyCapUsd"
-                hint="At 15–40 recipients real usage is pennies, which is exactly why a runaway loop would go unnoticed until the bill arrived."
+                hint="At 15–40 recipients real usage is pennies, which is exactly why a runaway loop would go unnoticed until the bill arrived. The cap warns; it does not stop an import."
               >
                 <TextInput
                   name="aiMonthlyCapUsd"
@@ -235,6 +238,38 @@ export default async function SettingsPage() {
                   defaultValue={config.aiMonthlyCapUsd}
                 />
               </Field>
+
+              {/*
+                §9.1 asks for usage to be shown here, not only for a cap to be
+                settable. The figure is an estimate from a published price list
+                rather than a bill, and it says so — a number that looks like an
+                invoice and is not one is worse than an obvious estimate.
+              */}
+              <div
+                className={`mb-4 rounded-sm border-l-2 p-3 ${
+                  spend.state === 'OVER_CAP'
+                    ? 'border-l-[#ff5b52] bg-[#ff5b52]/6'
+                    : spend.state === 'APPROACHING_CAP'
+                      ? 'border-l-[#F59A23] bg-[#F59A23]/6'
+                      : 'border-l-[#2a2d52]'
+                }`}
+              >
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#9498b5]">
+                  This month, so far
+                </p>
+                <p className="mt-1.5 text-lg font-bold tabular-nums text-white">
+                  ${spend.spentUsd}
+                  <span className="ml-2 text-xs font-normal text-[#6c7290]">
+                    of ${spend.capUsd}
+                  </span>
+                </p>
+                <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">{spend.message}</p>
+                <p className="mt-2 text-[10px] leading-relaxed text-[#6c7290]">
+                  An estimate, calculated from published per-token prices at the time of
+                  each call. It is not a bill, and OpenAI&rsquo;s invoice is the figure
+                  that counts.
+                </p>
+              </div>
 
               <div className="mb-4">
                 <Checkbox

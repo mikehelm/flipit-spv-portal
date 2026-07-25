@@ -1,6 +1,6 @@
 {
-  "id": "07d4e428-f44d-4fa0-9760-ba0264bf9ef0",
-  "prevId": "0fb6eddc-b3c2-4619-8411-0dd07ff685ab",
+  "id": "7ac1f48c-7ca3-4b1f-a7b5-79a2f616786a",
+  "prevId": "07d4e428-f44d-4fa0-9760-ba0264bf9ef0",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3265,6 +3265,18 @@
         "answer_email_sent_at": {
           "name": "answer_email_sent_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notified_at": {
+          "name": "notified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notify_failure": {
+          "name": "notify_failure",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

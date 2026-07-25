@@ -8,7 +8,14 @@ import {
   verifyPassword,
 } from './password'
 
-/** BUILD_SPEC §2.2 — Argon2id, minimum 12, common-password list, no composition rules. */
+/**
+ * BUILD_SPEC §2.2 — minimum 12, a common-password list, no composition rules.
+ *
+ * §2.2 names Argon2id. This uses scrypt from Node's own crypto module, for
+ * deployment reasons recorded in PROGRESS.md and agreed with the owner. The
+ * property the spec is really asserting — "never a fast hash" — is what these
+ * tests hold the implementation to.
+ */
 
 describe('checkPassword', () => {
   it('accepts a long ordinary phrase', () => {
@@ -82,7 +89,7 @@ describe('hashing', () => {
 })
 
 describe('dummyPasswordHash', () => {
-  it('is a real Argon2id hash that nothing verifies against', async () => {
+  it('is a real scrypt hash that nothing verifies against', async () => {
     const hash = await dummyPasswordHash()
     expect(hash.startsWith('scrypt$')).toBe(true)
     expect(await verifyPassword(hash, 'password')).toBe(false)

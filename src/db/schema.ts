@@ -179,7 +179,7 @@ export const users = pgTable('users', {
   // password and prints a one-time setup link. A password is never read from an
   // environment variable or a configuration file, so there is no other way for
   // one to arrive.
-  /** Argon2id verifier. Null until the account holder chooses a password. */
+  /** A scrypt verifier. Null until the account holder chooses a password. */
   passwordHash: text('password_hash'),
   passwordSetAt: timestamp('password_set_at', { withTimezone: true }),
   /**
@@ -949,6 +949,41 @@ export const aiProposals = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('ai_proposals_job_idx').on(t.importJobId)],
+)
+
+/**
+ * What each call to the model consumed. BUILD_SPEC §9.1 — the spend cap, and
+ * usage shown on the settings page.
+ *
+ * Separate from `ai_proposals` because a call that fails, times out or returns
+ * unusable JSON still costs money and still has to be counted. Tying the record
+ * of spending to the record of a *successful* proposal would under-report by
+ * exactly the calls most worth knowing about.
+ *
+ * Token counts are integers because they are counts. The estimated cost is
+ * `numeric` at six decimal places, because a single mapping call costs a
+ * fraction of a cent and two places would round every one of them to zero.
+ */
+export const aiUsageEvents = pgTable(
+  'ai_usage_events',
+  {
+    id: id(),
+    /** Null when the call failed before a job existed to attach it to. */
+    importJobId: text('import_job_id').references(() => importJobs.id, {
+      onDelete: 'set null',
+    }),
+    model: text('model').notNull(),
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+    /** An estimate from a published price list, not a bill. */
+    estimatedCostUsd: numeric('estimated_cost_usd', { precision: 12, scale: 6 })
+      .notNull()
+      .default('0'),
+    /** False when the model was called but returned nothing usable. */
+    succeeded: boolean('succeeded').notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [index('ai_usage_events_created_idx').on(t.createdAt)],
 )
 
 // ---------------------------------------------------------------------------
