@@ -126,6 +126,66 @@ There is a test that maps the same awkward sheet twice, once from a simulated mo
 
 ---
 
+## WP4, WP5, WP6 — built in a parallel session, merged here
+
+While this session was finishing WP2, a second agent pushed WP4 (email templates and preview), WP5 (email sending), WP6 (the compliance gate) and, out of order, parts of WP13, WP14 and WP17. That work is merged and green: 44 test files, 668 tests, typecheck and lint clean.
+
+I have read the compliance gate closely because everything in WP7 depends on it, and it holds up: the batch helper exists specifically so no caller can write `if (anyBlocked) return`, `drift` is a required argument so an absent drift check cannot be mistaken for a passing one, and the refusal carries the §8.3 wording rather than a generic message. I did not re-derive WP4's and WP5's internals; their own tests are thorough and WP7 exercises both end to end.
+
+Two things I noticed and did not change, because they belong to those packages:
+
+- The reminder template's header comment claims a test asserts the rendered text contains no percentage and no currency figure. No such test exists. The template does look clean, but the claim should either become true or come out.
+- The AI monthly spend cap is still stored and displayed without being enforced or accumulated against. Carried forward from WP3.
+
+---
+
+## WP7 — Sending flow — done
+
+**Built:** the review table (§12), the pre-flight checklist (§19) and per-recipient sending (§14).
+
+The review screen shows every recipient in the round with all the §12 columns, filters by email status, jurisdiction, name and address, and the summary cards. Compliance approval state and mail connection health sit at the top of the page and stay there, because they are the two things that silently break a send. The four money totals are the four amounts of §5 and there is no fifth; they are summed with decimal.js and arrive at the page as strings.
+
+"Portal opened" counts accounts that have claimed and opened their portal. There is no tracking pixel and no link wrapping anywhere in this application, and a test asserts the summary has no other notion of "opened".
+
+The pre-flight splits the twelve §19 items into eight the application works out and four only a person can answer. The eight offer nothing to click. The four get a confirm button, and confirming writes an audit entry with the operator's name and the time. Two of the four have a machine-checked floor underneath them: "all percentages and amounts validated" fails outright if a figure is actually missing, whatever was ticked, because an attestation can confirm a judgement but must not assert a fact that is false.
+
+Sending is one form per row. The confirmation is the recipient's own address, typed out — a checkbox confirms that you clicked, and typing the address confirms which person you meant.
+
+**Verified against real data in the database, not only in unit tests.** With three recipients — two in Australia, one in the United States — and an approval covering Australia only:
+
+- with no approval recorded, nothing is sendable, pre-flight blocks, and calling the send function directly, bypassing the UI entirely, is still refused;
+- with the approval in place, the two Australian recipients are sendable and the American one is blocked alone;
+- the refusal names the country and is not generic;
+- that one jurisdiction refusal does not block pre-flight for anybody else;
+- sending to the blocked recipient writes a BLOCKED send event with its reason, sets that offer's email status to BLOCKED, writes no snapshot, and leaves the other two recipients untouched;
+- with no sending account connected, a send fails loudly with a specific reason rather than quietly doing nothing.
+
+**Decisions:**
+
+- *The email snapshot is written before the transport is touched, not after a successful send.* §11.4 calls the snapshot immutable. A snapshot written on success would not exist for a failure, and a failure is exactly the case where knowing what was attempted matters most. A blocked recipient gets no snapshot, because nothing was composed for them.
+- *The claim token is minted at send time and at no other point.* The preview uses a deliberately fake token of the same shape, so it exercises the template identically without issuing a credential. Pre-flight validation uses the same placeholder: rendering every recipient to check the template must not mint a working link for every recipient.
+- *A permanent send failure revokes the token it just minted; a transient one does not.* The same invitation will be retried after a transient failure and should carry a link the investor can still use. Nothing is going to an address that permanently rejected us.
+- *Pre-flight attestations live in the audit log, not in a column.* They record that a person confirmed something at a moment, which is what an audit entry is, and it means the checklist and the audit trail cannot disagree. A reset entry invalidates everything before it, so re-importing the file forces the checklist to be walked again.
+- *There is no action anywhere in this package that takes a list of recipients.* §14 says sending is one at a time by design. The way to keep that true is for a bulk send to be something somebody would have to sit down and write, rather than something they reach by passing an array to a function that already exists.
+- *A blocked recipient is shown in the table, not hidden from it.* A block stops a send; it does not erase the person from the review. There is a test for it.
+- *The confirmation is the address rather than a checkbox.* The spec asks for "per-recipient send with confirmation" without saying what form it takes, so this is the conservative reading.
+
+**Deviations:** none from the task file. The one thing WP7 does not do is advance the offer stage on send — `offers.stage` already defaults to `INVITATION_SENT`, and the two-step status advancement is WP8's, so writing it here would have meant two owners for one column.
+
+**Checklist:** points 1, 2, 3 and 8 are the ones this package touches.
+
+1. No monetary value is a JavaScript number. The totals go through decimal.js and there is a source-level test asserting `Number(`, `parseFloat(`, `parseInt(` and `.toNumber(` appear nowhere in the review module. That test strips comments before scanning, so the module's own explanation of why it avoids `Number()` does not trip the check that it avoids `Number()` — otherwise the easy way to make it pass is to delete the explanation.
+2. No send path bypasses the compliance approval or the token check. Verified by calling the send function directly with no approval recorded and watching it refuse.
+3. A jurisdiction block stops one recipient. Verified with three real recipients, and pinned by tests.
+8. No log line carries a token, an email body or a key. The send events record a Message-ID, an outcome and a snapshot id; the audit entries record the same. Neither carries the subject or either body.
+
+**Uncertain:**
+
+- A real send has not happened, because no Gmail app password is configured in this environment. Every gate in front of the transport is verified; the transport itself has its own tests with a substituted client, but the first genuine send to the operator's own address is still a manual step.
+- The review table renders as cards rather than as a wide table. That is a deliberate mobile-first reading of §12 — every column is present on every card — but on a desktop with forty recipients a real table would scan better. Worth a second opinion.
+- Fourteen days for the claim token expiry is my choice; the spec says "expiring" without naming a duration.
+---
+
 ## Review pass — 11 agents, 5 adversarial lenses
 
 Five reviewers each attacked the build through one lens, reading the code rather than the comments. Two lenses came back clean, one clean with a caveat, two found real defects.
@@ -176,3 +236,6 @@ This deviates from §2.2, which names Argon2id. The reason is deployment, not cr
 `argon2` is removed from the dependency tree entirely. There are now **no native modules in the application at all**, which removes the same risk for every future deploy rather than just this one.
 
 **State:** 668 tests, typecheck and lint clean.
+**One line of that review pass is now out of date, and it matters.** It says "no path sends a real email yet: `sendOneEmail` is the only function that puts a message on the wire and it has no callers." WP7 gave it one — `lib/sending/send-invitation.ts`, reached from the review screen. The three lower-severity gate findings the reviewer left open were left open on the basis that nothing was reachable. They are reachable now, and they should be worked through before a Gmail app password is connected to anything.
+
+The two defects that pass did fix are both ones WP7 depends on completely. The template hash is the entire mechanism behind "editing one character disables sending", which is one of the twelve enforced pre-flight items; and the jurisdiction-list split would have made every imported row block, which is the exact failure the per-recipient gate exists to avoid.
