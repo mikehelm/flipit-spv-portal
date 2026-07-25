@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| Streaming a media response instead of buffering it | 25 Jul session C | 2026-07-26 00:02 | `src/lib/media/store.ts`, `src/lib/media/s3.ts`, `src/lib/media/serve.ts` |
 
 ## Done, so nobody starts it again
 
