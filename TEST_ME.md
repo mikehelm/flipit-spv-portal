@@ -2,7 +2,7 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 7 are complete, and the core of 8.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, and follow the link in that invitation into the investor's own private portal. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: work packages 0 to 7 are complete, the core of 8, and all of 9.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, and now ask and answer questions — privately to one person, or published to everyone with the asker removed. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
 ---
 
@@ -134,11 +134,45 @@ The link in an invitation goes to `/portal/claim/…`. Opening it is what verifi
 
 ---
 
+## Questions and answers
+
+This is the new part. Sign in as an investor (follow a claim link), scroll to **Questions and answers**, and ask something. You get one plain sentence back: *"Thank you — your question has been sent to David. He'll reply by email, and the answer will appear here too."* No promised timeframe, because the app cannot keep one.
+
+Then sign in as the operator and go to **Questions**. The question is there, with who asked, their amount, their percentages, their deadline, their stage and their account status — so you answer with context rather than blind.
+
+**Three separate presses, on purpose.** Save the answer. Publish it. Send the reply email. Nothing about ticking one causes another:
+
+- **Saving** stores the answer. Nobody is emailed. It is not on the shared page.
+- **Publishing** puts an anonymised version on the shared page that every investor sees. The checkbox is unticked every time you open the form.
+- **Sending the reply** is a button underneath the rendered email. You see the exact message first. It does not exist until you press it.
+
+**The anonymity is worth testing properly.** Ask a question, as an investor, that gives you away:
+
+> As we discussed on Tuesday, I'd want to put in more than the 5% you offered me.
+
+Now go to answer it and tick the publish box. Two things happen. First, the form shows the original and a blank box side by side — you have to rewrite it, because the app will not publish an investor's own words on the strength of you having meant to check them. Second, as you type the rewrite, anything that could identify the person is listed underneath: the percentage, the day of the week, the reference to a private conversation. Where it finds something, publishing needs a tick confirming you have read the wording as a stranger would.
+
+Publish it, then look at the shared section as a *different* investor. You will find the rewritten question and the answer, and: no name, no initials, no email, no exact date — the date is a month and a year — and nothing of the original wording. The original is still on the private record and in the audit log, unchanged.
+
+**Other things worth trying:**
+
+- Take an entry down again. It leaves the shared page, and the app tells you plainly that unpublishing does not un-see it. The removal is logged.
+- Pin an entry. It sorts to the top for everybody, labelled "Start here".
+- Write a question-and-answer pair yourself, under **Write an entry yourself**. There is no asker behind it, so there is nobody to anonymise — that is how the section looks useful on day one rather than empty.
+- Try to send a reply on an entry you wrote yourself. It refuses, and says why: there is nobody to reply to.
+- Ask a follow-up on a thread you have already had an answer to. It joins the same thread and puts it back at the top of the queue.
+- Turn off **"Shared Q&A visible during the raise"** in owner settings. The shared section disappears for investors and private answers carry on exactly as before. Anything you publish while it is off is stored and appears the moment the round closes — nothing is lost and nothing needs republishing.
+- Suspend an investor and look at their portal. The question box, the shared section and their own thread all go together.
+
+**With no mail connection configured**, the notification email to David cannot go out. The question is still recorded, and the queue shows in red that the notification failed and why, with a button to try again. What the investor sees does not change — whether the mail server is connected is not their business.
+
+---
+
 ## What is not built yet
 
-- **The rest of the portal.** The conversation thread, documents, and the operator-side status advancement with its two-step confirmation for funds received.
+- **The rest of the portal.** Documents, and the operator-side status advancement with its two-step confirmation for funds received.
 - **The email carrying a sign-in link.** The link is created correctly; sending it is part of a later package.
-- **Questions and answers, the register of interest, updates, reminders.** All later packages.
+- **The register of interest, updates, reminders.** All later packages.
 - **Two-factor sign-in.** Optional in version one. The database is ready for it; there is no code behind it.
 - **The AI spend cap.** You can set a monthly ceiling in settings, but nothing yet counts spending against it.
 

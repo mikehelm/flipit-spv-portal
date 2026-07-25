@@ -767,6 +767,16 @@ export const qaEntries = pgTable(
     publishedAt: timestamp('published_at', { withTimezone: true }),
     unpublishedAt: timestamp('unpublished_at', { withTimezone: true }),
     answerEmailSentAt: timestamp('answer_email_sent_at', { withTimezone: true }),
+    /**
+     * §6.7.1 — "a new question emails David immediately". A question is
+     * recorded whether or not that email got out, so the outcome is stored on
+     * the entry rather than being allowed to fail the investor's submission.
+     * `notifyFailure` holds the send gate's own operator-facing sentence; it
+     * never holds a credential, and the queue shows it so an unnoticed
+     * notification failure cannot look like an empty queue.
+     */
+    notifiedAt: timestamp('notified_at', { withTimezone: true }),
+    notifyFailure: text('notify_failure'),
     pinned: boolean('pinned').notNull().default(false),
     sortOrder: integer('sort_order').notNull().default(0),
     updatedAtLabel: timestamp('updated_at_label', { withTimezone: true }),
