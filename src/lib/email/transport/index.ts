@@ -3,6 +3,7 @@ import { db } from '@/db'
 import { serviceConfig } from '@/db/schema'
 import { audit, type Actor } from '@/lib/audit'
 import { readServiceConfig, SERVICE_CONFIG_ID } from '@/lib/auth/service-config'
+import { operatorTwoFactorEnrolled } from '@/lib/auth/two-factor-state'
 import { readSmtpCredential } from './credentials'
 import { GmailApiTransport } from './gmail-api'
 import { assertCanSend, type SendGuardConfig, type SendIntent } from './guard'
@@ -157,7 +158,9 @@ export interface SendOneEmailInput {
   retry?: RetryOptions
   transportDeps?: SmtpTransportDeps
   /** Pre-read configuration, to save a query when the caller already has it. */
-  config?: SendGuardConfig & TransportSelectionConfig
+  config?: Omit<SendGuardConfig, 'operatorTwoFactorEnrolled'> &
+    Partial<Pick<SendGuardConfig, 'operatorTwoFactorEnrolled'>> &
+    TransportSelectionConfig
   now?: Date
 }
 
@@ -174,7 +177,17 @@ export interface SendOneEmailInput {
  * skips them is not made safe by this one.
  */
 export async function sendOneEmail(input: SendOneEmailInput): Promise<SendAttemptResult> {
-  const config = input.config ?? (await readServiceConfig())
+  const base = input.config ?? (await readServiceConfig())
+
+  // §2.2's release gate. Read here rather than taken from the caller, because
+  // every send in the application comes through this function and a gate the
+  // caller supplies the evidence for is a gate the caller can get wrong.
+  const supplied = (base as Partial<SendGuardConfig>).operatorTwoFactorEnrolled
+  const config: SendGuardConfig & TransportSelectionConfig = {
+    ...base,
+    operatorTwoFactorEnrolled:
+      typeof supplied === 'boolean' ? supplied : await operatorTwoFactorEnrolled(),
+  }
 
   try {
     assertCanSend({

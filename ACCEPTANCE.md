@@ -128,6 +128,8 @@ Where a check runs:
 - `src/lib/auth/credentials.test.ts` — unit — "creates nothing for an unknown address"
 - `src/lib/auth/sign-in-policy.test.ts` — unit — "has no self-registration path of any kind"
 - `src/lib/portal/sign-in-timing.test.ts` — unit — "settles on every single return, with none left unpadded"
+- `src/lib/auth/second-factor-guard.test.ts` — unit — "the check lives in currentAdmin, which every guard already goes through"
+- `scripts/verify-second-factor.ts` — database — "the other session is still waiting — a stolen password left open stays useless"
 
 ## 19. The operator cannot record, amend, or void a compliance approval; the control is owner-only and the attempt is logged.
 

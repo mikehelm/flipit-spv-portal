@@ -216,6 +216,17 @@ export const sessions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     expires: timestamp('expires', { withTimezone: true }).notNull(),
+    /**
+     * When the second factor was satisfied — BUILD_SPEC §2.2.
+     *
+     * Null means one of two things and the difference does not matter to a
+     * caller: either the account has no TOTP enrolled, in which case the
+     * session is complete, or it has and this session has not yet passed it,
+     * in which case the session reaches the second-factor form and nothing
+     * else. `currentAdmin()` resolves which, and returns null for the second —
+     * so a guard that forgets to ask fails closed rather than open.
+     */
+    secondFactorAt: timestamp('second_factor_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [index('sessions_user_idx').on(t.userId)],

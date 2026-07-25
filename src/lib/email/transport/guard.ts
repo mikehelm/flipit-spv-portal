@@ -50,7 +50,7 @@ import { parseVerifyResult } from './verify-result'
  */
 export type SendIntent = 'INVITATION' | 'REMINDER' | 'NOTIFICATION' | 'REPLY' | 'TEST'
 
-/** The subset of `service_config` this gate reads. */
+/** The subset of `service_config` this gate reads, plus one thing beside it. */
 export interface SendGuardConfig {
   serviceMode: 'ACTIVE' | 'READ_ONLY' | 'SUNSET' | 'DISABLED'
   emailTransport: 'SMTP' | 'GMAIL_API'
@@ -58,6 +58,22 @@ export interface SendGuardConfig {
   smtpPasswordEncrypted: string | null
   smtpLastVerifiedAt: Date | null
   smtpLastVerifyResult: string | null
+  /**
+   * Whether the operator's account has TOTP two-factor switched on.
+   * BUILD_SPEC §2.2: *"mandatory before the production deployment sends
+   * anything real."*
+   *
+   * It is on `users`, not on `service_config`, and it is here anyway because
+   * this is the gate and a gate that has to be told separately is a gate
+   * somebody forgets to tell. **Required, not optional** — so a new call site
+   * has to state it rather than inherit a default that might be the wrong one.
+   *
+   * The operator's account rather than the acting user's, because the
+   * scheduled sends — reminders, notifications — have no acting user, and
+   * because §2.2 names the stake as *"the ability to send mail as the
+   * operator"*. It is the operator's mailbox every one of these leaves from.
+   */
+  operatorTwoFactorEnrolled: boolean
 }
 
 export interface SendGuardInput {
@@ -83,6 +99,7 @@ export type SendBlockReason =
   | 'VERIFICATION_STALE'
   | 'SERVICE_MODE_NOT_ACTIVE'
   | 'NOT_PRODUCTION_DEPLOYMENT'
+  | 'SECOND_FACTOR_NOT_ENROLLED'
   | 'TEST_SEND_TO_OTHER_ADDRESS'
 
 /**
@@ -98,6 +115,7 @@ const REASON_PRIORITY: readonly SendBlockReason[] = [
   'VERIFICATION_STALE',
   'SERVICE_MODE_NOT_ACTIVE',
   'NOT_PRODUCTION_DEPLOYMENT',
+  'SECOND_FACTOR_NOT_ENROLLED',
   'TEST_SEND_TO_OTHER_ADDRESS',
 ]
 
@@ -236,6 +254,32 @@ export function evaluateSendGuard(input: SendGuardInput): SendGuardDecision {
         'this domain, so every link issued from here would be dead the moment the app moves, ' +
         'leaving investors holding broken links to a securities offer. Test sends to the ' +
         'operator remain available meanwhile.',
+    })
+  }
+
+  // --- 5b. Two-factor on the operator's account (§2.2) -----------------------
+  //
+  // §2.2: TOTP is "optional in v1 and strongly recommended, **mandatory before
+  // the production deployment sends anything real**". So it binds exactly
+  // where that sentence says it does: a real send, on the production
+  // deployment. A test send to the operator's own address is not "anything
+  // real", and neither is anything on the testing deployment — which is what
+  // keeps the whole of §19's pre-flight rehearsable before the last gate
+  // closes.
+  //
+  // This gate ADDS a condition and removes none. There is no override, no
+  // setting and no environment variable that turns it off, because §2.2 does
+  // not offer one.
+  if (!isTest && isProduction && !config.operatorTwoFactorEnrolled) {
+    blocks.push({
+      reason: 'SECOND_FACTOR_NOT_ENROLLED',
+      message:
+        'Two-factor authentication is not switched on for the operator account, and the ' +
+        'specification makes it mandatory before the production deployment sends anything ' +
+        'real. Dropping Google sign-in made the password the only thing between an attacker ' +
+        'and the ability to send mail as the operator; this is the other half of that trade. ' +
+        'Switch it on under Two-factor in the admin area — it takes a minute with any ' +
+        'authenticator app. Test sends to the operator remain available meanwhile.',
     })
   }
 

@@ -1,4 +1,4 @@
-import { and, eq, gt, lt } from 'drizzle-orm'
+import { and, eq, gt, isNull, lt } from 'drizzle-orm'
 import { cookies } from 'next/headers'
 import { db } from '@/db'
 import { sessions, users } from '@/db/schema'
@@ -47,23 +47,73 @@ function cookieOptions() {
 export interface AdminSession {
   userId: string
   expires: Date
+  /**
+   * When the second factor was satisfied, or null. BUILD_SPEC §2.2.
+   *
+   * Null on an account with no TOTP enrolled means the session is complete;
+   * null on an account that has enrolled means it is **pending** and reaches
+   * the second-factor form and nothing else. `currentAdmin()` in guards.ts
+   * resolves which, and that is the only place that should.
+   */
+  secondFactorAt: Date | null
 }
 
 /**
  * Issues a session and sets the cookie. Callers must already have established
  * that the sign-in was valid — this function authenticates nobody.
+ *
+ * `secondFactorSatisfied` defaults to **false**, which is the conservative
+ * direction: a caller that forgets to pass it produces a session that reaches
+ * the second-factor form rather than one that reaches the investor records. A
+ * setup link, which proves possession of the mailbox and nothing else, passes
+ * nothing and gets exactly that.
  */
-export async function createAdminSession(userId: string): Promise<void> {
+export async function createAdminSession(
+  userId: string,
+  options: { secondFactorSatisfied?: boolean } = {},
+): Promise<void> {
   const { token, hash } = issueToken()
   const expires = new Date(Date.now() + ADMIN_SESSION_MAX_AGE_SECONDS * 1000)
 
-  await db.insert(sessions).values({ sessionToken: hash, userId, expires })
+  await db.insert(sessions).values({
+    sessionToken: hash,
+    userId,
+    expires,
+    secondFactorAt: options.secondFactorSatisfied ? new Date() : null,
+  })
 
   const jar = await cookies()
   jar.set(ADMIN_SESSION_COOKIE, token, {
     ...cookieOptions(),
     maxAge: ADMIN_SESSION_MAX_AGE_SECONDS,
   })
+}
+
+/**
+ * Marks the current session as having passed the second factor.
+ *
+ * It stamps **this session only**, by its own token hash. Elevating by user id
+ * would elevate every other session that user holds, including one an attacker
+ * had opened with a stolen password and left waiting.
+ */
+export async function markSecondFactorSatisfied(): Promise<boolean> {
+  const jar = await cookies()
+  const token = jar.get(ADMIN_SESSION_COOKIE)?.value
+  if (!token) return false
+
+  const updated = await db
+    .update(sessions)
+    .set({ secondFactorAt: new Date() })
+    .where(
+      and(
+        eq(sessions.sessionToken, hashToken(token)),
+        gt(sessions.expires, new Date()),
+        isNull(sessions.secondFactorAt),
+      ),
+    )
+    .returning({ id: sessions.id })
+
+  return updated.length > 0
 }
 
 /**
@@ -93,7 +143,7 @@ export async function readAdminSession(): Promise<AdminSession | null> {
     return null
   }
 
-  return { userId: row.userId, expires: row.expires }
+  return { userId: row.userId, expires: row.expires, secondFactorAt: row.secondFactorAt }
 }
 
 export async function readAdminSessionUser() {
@@ -101,7 +151,9 @@ export async function readAdminSessionUser() {
   if (!session) return null
 
   const user = await db.query.users.findFirst({ where: eq(users.id, session.userId) })
-  return user ?? null
+  if (!user) return null
+
+  return { user, session }
 }
 
 /** Ends this session only. */

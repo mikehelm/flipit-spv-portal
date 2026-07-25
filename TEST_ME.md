@@ -2,7 +2,7 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 14 and 16 to 20 are complete — every package except 15, images and video, which is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: work packages 0 to 14 and 16 to 20 are complete — every package except 15, images and video, which is deferred until somewhere to store a file is chosen. Two-factor sign-in, the last release gate, is now built too.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
 The most recent package went over every screen for how it looks and how it reads: the brand colours, how it behaves on a phone, and whether somebody using a keyboard or a screen reader can get around it. There is a section on that below, and it is worth ten minutes with your phone.
 
@@ -374,10 +374,25 @@ pnpm backup              # writes a backup file
 
 **One thing found while doing this, worth knowing:** the verification page — the one an investor is meant to be able to find — was being hidden from search engines by a mistake in the configuration, and had been for several packages. It is fixed, and there is now a check that asks a running copy of the application rather than reading the configuration file, because reading the file is what missed it.
 
+## Two-factor
+
+**Admin → Two-factor.** A code from an authenticator app on top of your password, for the owner and the operator. Any standard app works — Google Authenticator, 1Password, Authy, Bitwarden.
+
+The specification makes this **mandatory before real invitations go out**, so it is not a preference: the application refuses to send a real invitation from the production address until the operator's account has it switched on. Test messages to your own address are unaffected, so you can rehearse everything before turning it on.
+
+Worth trying, because these are all meant to work:
+
+- Switch it on. You get ten recovery codes, **shown once**. Each works once. Save them somewhere that is not the same phone.
+- Sign out and back in. After your password you are asked for a code, and until you give one you can reach nothing — try typing an admin address into the browser and see.
+- Use a recovery code instead of your phone. It works, and then it does not work a second time.
+- Get the code wrong repeatedly. It throttles exactly as the password does.
+- Turn it off. It asks for your password, not a code — a code proves you are holding the phone, and someone who has walked off with your open laptop is holding that too.
+
+**If you lose the phone and the codes**, there is deliberately no button. It is a change made directly in the database, on purpose.
+
 ## What is not built yet
 
 - **Documents, images and video.** All need somewhere to store a file, which has not been chosen yet. Nothing else depends on them.
-- **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet. **This is the last thing standing between the build and a real send.**
 
 ## The round, and closing it
 

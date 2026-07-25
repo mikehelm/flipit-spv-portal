@@ -305,6 +305,14 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
         'src/lib/portal/sign-in-timing.test.ts',
         'settles on every single return, with none left unpadded',
       ),
+      unit(
+        'src/lib/auth/second-factor-guard.test.ts',
+        'the check lives in currentAdmin, which every guard already goes through',
+      ),
+      database(
+        'scripts/verify-second-factor.ts',
+        'the other session is still waiting — a stolen password left open stays useless',
+      ),
     ],
   },
   {

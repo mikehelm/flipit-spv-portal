@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { actionError, actionOk, type ActionState } from '@/components/admin/action-state'
@@ -28,6 +27,7 @@ import {
   readAdminSession,
 } from '@/lib/auth/session'
 import { env } from '@/lib/env'
+import { clientIp } from './client-ip'
 
 /**
  * Authentication and operator-access actions. BUILD_SPEC §2, §2.2.
@@ -35,20 +35,6 @@ import { env } from '@/lib/env'
  * Every one of these re-establishes who is calling before it does anything. The
  * page having hidden the button is not a reason to trust the request.
  */
-
-/**
- * The address a request appears to come from, for rate limiting.
- *
- * Behind a proxy this is a header and therefore forgeable, which is exactly why
- * the address key exists alongside it: someone rotating a forged IP still runs
- * into the per-address counter. Never used for anything but throttling.
- */
-async function clientIp(): Promise<string> {
-  const headerList = await headers()
-  const forwarded = headerList.get('x-forwarded-for')
-  if (forwarded) return forwarded.split(',')[0]!.trim()
-  return headerList.get('x-real-ip') ?? 'unknown'
-}
 
 const signInSchema = z.object({
   email: z.string().min(1),
