@@ -12,6 +12,7 @@ import { requireOwner } from '@/lib/auth/guards'
 import { isPlausibleContactNumber } from '@/lib/auth/onboarding'
 import { SERVICE_CONFIG_ID, readServiceConfig } from '@/lib/auth/service-config'
 import { encrypt } from '@/lib/crypto'
+import { checkbox, optionalText, zodFieldErrors as fieldErrors } from '@/lib/form-values'
 
 /**
  * Owner-only service configuration. BUILD_SPEC §7, §9.1, §10, §11.2, §6.7.5.
@@ -29,23 +30,6 @@ const SETTINGS_PATH = '/admin/settings'
 
 /** §7: moving to `disabled` requires a recent export or a logged override. */
 const EXPORT_FRESHNESS_DAYS = 7
-
-function optionalText(value: FormDataEntryValue | null): string | null {
-  const text = typeof value === 'string' ? value.trim() : ''
-  return text === '' ? null : text
-}
-
-function checkbox(value: FormDataEntryValue | null): boolean {
-  return value === 'on' || value === 'true'
-}
-
-function fieldErrors(error: z.ZodError): Record<string, string> {
-  const result: Record<string, string> = {}
-  for (const issue of error.issues) {
-    result[String(issue.path[0] ?? 'form')] = issue.message
-  }
-  return result
-}
 
 // ---------------------------------------------------------------------------
 // Service mode and portal behaviour

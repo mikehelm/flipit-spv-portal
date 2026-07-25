@@ -91,8 +91,16 @@ export interface SmtpClient {
 
 export type SmtpClientFactory = (options: SmtpClientOptions) => SmtpClient
 
+/**
+ * The one place nodemailer is touched. `SmtpClientOptions` is a deliberately
+ * narrow, readable description of the connection this application makes, and
+ * the cast is what keeps that description from being widened to whatever
+ * nodemailer's option type happens to allow.
+ */
 const defaultFactory: SmtpClientFactory = (options) =>
-  nodemailer.createTransport(options) as unknown as SmtpClient
+  nodemailer.createTransport(
+    options as unknown as Parameters<typeof nodemailer.createTransport>[0],
+  ) as unknown as SmtpClient
 
 export interface SmtpTransportDeps {
   createClient?: SmtpClientFactory

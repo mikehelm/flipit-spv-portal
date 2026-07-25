@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { SectionHeading } from '@/components/admin/ui'
 import { requireImportActor } from '@/lib/import/authz'
 import { ImportWizard } from './import-wizard'
 
@@ -17,12 +18,10 @@ export const dynamic = 'force-dynamic'
  * This check decides what is rendered; it is not what protects the data.
  */
 export default async function ImportPage() {
-  let actorEmail: string | null = null
   let refusal: string | null = null
 
   try {
-    const actor = await requireImportActor()
-    actorEmail = actor.email
+    await requireImportActor()
   } catch (error) {
     refusal =
       error instanceof Error
@@ -30,34 +29,29 @@ export default async function ImportPage() {
         : 'You do not have access to the recipient import.'
   }
 
+  // The `(admin)` layout supplies the page frame, the signed-in identity and
+  // the navigation. This page adds its own heading and nothing else — two
+  // wrappers and two "signed in as" lines were the visible seam between two
+  // work packages.
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
-      <header className="mb-6">
-        <p className="text-xs uppercase tracking-[0.18em] text-dim">Flipit SPV</p>
-        <h1 className="mt-1 text-2xl font-semibold text-ftext sm:text-3xl">
-          Import recipients
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-dim">
-          Upload the spreadsheet in whatever shape it is in. The columns are matched
-          for you, you confirm or correct every one of them, and nothing is created
-          until you have seen each value exactly as it would be stored.
-        </p>
-      </header>
+    <>
+      <SectionHeading eyebrow="Recipients" title="Import recipients">
+        Upload the spreadsheet in whatever shape it is in. The columns are matched
+        for you, you confirm or correct every one of them, and nothing is created
+        until you have seen each value exactly as it would be stored.
+      </SectionHeading>
 
       {refusal ? (
         <section
-          className="rounded-lg border hairline bg-paper p-5 text-sm leading-relaxed text-ftext"
+          className="rounded-sm border hairline bg-paper p-5 text-sm leading-relaxed text-ftext"
           role="alert"
         >
           <h2 className="mb-2 font-semibold text-warn">Not available</h2>
           <p className="text-dim">{refusal}</p>
         </section>
       ) : (
-        <>
-          <p className="mb-4 text-xs text-dim">Signed in as {actorEmail}</p>
-          <ImportWizard />
-        </>
+        <ImportWizard />
       )}
-    </main>
+    </>
   )
 }

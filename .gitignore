@@ -5,4 +5,6 @@ node_modules
 *.log
 .DS_Store
 coverage
-tsconfig.tsbuildinfo
+
+# build artefacts — must never be committed, they conflict on every merge
+*.tsbuildinfo

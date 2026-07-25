@@ -8,6 +8,7 @@ import {
   setContactMethodAction,
 } from '@/actions/onboarding'
 import { ActionForm } from '@/components/admin/action-form'
+import { MailConnectionPanel } from '@/components/admin/mail-connection-panel'
 import {
   Card,
   Field,
@@ -29,6 +30,7 @@ import {
 import { readOnboardingSnapshot } from '@/lib/auth/onboarding-store'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { maskConfigured } from '@/lib/crypto'
+import { describeMailConnection } from '@/lib/email/transport'
 
 /**
  * Operator onboarding. BUILD_SPEC §2.1 — five steps plus 4b.
@@ -206,6 +208,16 @@ export default async function OnboardingPage() {
               like any other secret, and revoke it at Google the moment it is no longer
               needed.
             </Notice>
+          </div>
+
+          {/*
+            Saving the password is not the same as it working. §8.1 asks for a
+            test that authenticates without sending, and §19's pre-flight
+            refuses to send unless one has passed recently — so the test has to
+            be reachable from the step that sets the credential.
+          */}
+          <div className="mt-6">
+            <MailConnectionPanel health={describeMailConnection(config)} showDisconnect />
           </div>
         </Card>
 
