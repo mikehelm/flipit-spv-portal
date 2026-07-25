@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| Document packages — §5 status 3, §13 "documents issued to them, downloadable" | opus-5 / WP15 session | 2026-07-25 22:55 | `src/lib/documents/**`, `src/actions/documents.ts`, `src/app/portal/document/**`, `src/app/(admin)/investors/**`, `src/lib/media/formats.ts` (a document kind), `scripts/verify-documents.ts` |
 
 ## Done, so nobody starts it again
 
