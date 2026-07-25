@@ -805,3 +805,62 @@ The pairing §13.2 actually names, `--dim` on `--bg`, was fine all along at 6.95
 - `--muted` at 4.81:1 clears AA and does not clear AAA's 7:1. §13.2 asks for AA. If the intent was ever AAA, the whole dark palette needs revisiting rather than one token.
 - The palette is still "lifted from the demo file, which is a faithful copy but not the source of truth" — §13.2's own words. Nothing here verified it against flipit.com, and the note in `brand.ts` still says to.
 - `forbiddenWordsInTileLabel` is a gate ahead of a surface that does not exist yet, the same shape as WP17's follow-up. The word list is mine, from §13.1's prose; somebody should read it before tiles become editable.
+
+## WP19 — Tests — done
+
+**Built.** The mapping the package is actually for, and the tests that had to exist before it could be honest.
+
+`src/acceptance/criteria.ts` records, for each of BUILD_SPEC §22's forty-eight acceptance criteria, where it is proved: Vitest tests by exact name, `scripts/verify-*.ts` checks by exact `check()` label, a manual note, or an `outstanding` note saying what it waits on. `src/acceptance/criteria.test.ts` makes every one of those references falsifiable — a renamed test or a deleted check label fails the suite rather than quietly becoming a claim about nothing. `ACCEPTANCE.md` is generated from the registry by `pnpm acceptance:table`, and a test fails when the checked-in copy is stale.
+
+The suite is **1,457 tests across 79 files**, up from 1,122 across 72. The eight database-backed verification scripts pass 311 checks between them, re-run in full after this package's two source changes.
+
+**Where the forty-eight now stand:** 46 have a Vitest test; 23 of those additionally have a database-backed script; 1 (AC34) carries a manual note because "was the test invitation *reviewed*" is a judgement, which is why §19 lists it as an attestation; 3 are outstanding — AC32 and AC33 are WP15's deferred media and video, and AC30 is new, below.
+
+**Six new test files, each filling a criterion that had no direct coverage:**
+
+- `src/lib/sending/snapshot.test.ts` — AC3 and AC4. The preview and the sent snapshot are one document: both sides load the same source, build the renderer input from the same fields, and resolve sender defaults through the same loader, and there is no second rendering path anywhere in the application. A regression check confirmed the test catches a divergent renderer added under `src/`. The snapshot is stored rather than re-rendered at read time, is written before the transport is touched, and no update path rewrites it.
+- `src/lib/portal/links.test.ts` — AC5. A claim link carries a token and nothing else: no part of the name or address in any encoding, no offer id, account id, amount, percentage or jurisdiction; 256 bits, URL-safe, stored only as a hash, and looked up by hash so the raw value never reaches a query. A link cannot be pointed at a caller-supplied host — scheme, `//`, traversal, query and fragment all stay one path segment. The portal has exactly two dynamic segments, both opaque, and reads no search parameter anywhere.
+- `src/lib/audit-coverage.test.ts` — AC12, AC29, AC41, the half of each that says a mutation *is logged*. A registry of `{ module, function, expected action }` scanned by brace-matching from the declaration, so a neighbouring function's `audit()` call cannot satisfy the check; plus the funds-received two-step proved functionally — nothing is recorded without the tick, or when the re-typed amount is a cent out, and there is no parameter that skips the comparison.
+- `src/lib/export/secrets.test.ts` — AC25's "never displayed, never logged, never exported", and AC14's "the owner retains access and export throughout". No export header or schema field names a credential; a credential smuggled onto a row is stripped at the Zod boundary in both CSV and XLSX; the settings action never selects, decrypts or returns the stored key, and one screen reads it as a boolean. The service-mode half is an absence proof: the export path never reads `service_mode`, and the one §7 gate near an export is on *entering* `disabled`.
+- `src/lib/qa/defaults.test.ts` — AC36's confirmation and AC37's explicit tick. An unchecked box submits nothing, so the helper reads absence as unticked and never coerces truthiness; the publish flag can only come from the form; the asker's confirmation is one constant with nothing interpolated, identical for every account, and arrives even when the notification to the operator could not get out.
+- `src/db/second-offer.test.ts` — AC15. Nothing unique names `account_id` alone or the pair, the index that exists is deliberately plain, the account carries no round-shaped column, the recipient row is unique on (round, email) rather than on email, and the import path matches an incoming row to the account that already exists rather than making a second copy of a person.
+
+**Decisions.**
+
+- *The registry holds evidence, never criterion text.* The wording is parsed out of BUILD_SPEC §22 every time the table is written. A copy would be a second source of truth, and the second one is always the one that goes stale — so a test asserts the registry contains no criterion's opening words, and another asserts the spec still numbers exactly forty-eight.
+- *A verification script is evidence, but not the same evidence as a test.* The scripts are automated, but they need a database, a build or a browser, so they run before a release rather than on every commit. The table names the kind, so "proved" never quietly means "proved by something nobody has run since March".
+- *An outstanding criterion must name its blocker.* A test enforces it: an `outstanding` note has to exceed twelve words and match on waiting, deferral or absence. A one-word note is not an explanation, and WP19 asks for a reason.
+- *AC34 is manual for the part that is a judgement, and only that part.* The prompt, the test send and the pre-flight tick are all enforced and tested; whether the operator actually read the email is not assertable. Its video half waits on WP15.
+- *`refreshQueue`'s audit actor defaults to `systemActor` rather than staying silent.* The alternative — requiring an actor — would have made the scheduled run's signature lie about who is calling it.
+- *`assertNoSecrets` reads keys at every depth, and still never reads values.* Depth matters because metadata is serialised verbatim into the audit export cell. Values stay unread because `scripts/verify-export.ts` scanned them once and refused `{ method: 'password' }`, which is an audit log doing its job; the false alarm is how a real check ends up switched off.
+- *A booleaned key is admitted.* `{ openAiKeyReplaced: true }` records that the owner changed the key, which is the point of auditing the settings screen. A boolean, a number, null or an empty string cannot carry a credential; anything with text under a forbidden name is refused.
+
+**Deviations.** Two source changes, both fixes to defects the new tests surfaced, and neither in scope for a test package — recorded here rather than silently folded in:
+
+- `src/lib/reminders/queue.ts`: `refreshQueue` audited only `if (input.actor && …)`, and the scheduled run at `run.ts:278` calls it without one. The unattended path created and deleted queued reminders with no audit entry at all. Now falls back to `systemActor`.
+- `src/lib/audit.ts`: `assertNoSecrets` matched top-level key names only, and `openAiKey` — the field name `updateAiSettingsAction` itself uses — matched none of the forbidden words. Now recursive, with `openai` and `passphrase` added, and gated on whether the value could carry a secret at all. Three characterisation tests that had pinned the old behaviour were rewritten to assert the new.
+
+No schema change. No migration.
+
+**Checklist.** Points 8 and 2 are this package's; the rest were re-checked because the package touched the audit helper, which every mutation calls.
+
+1. No monetary value is a JavaScript number. The two changed source files handle no money. `src/lib/money.ts`, `lib/sending`, `lib/compliance` and `lib/email` are untouched by this diff.
+2. No send path bypasses anything. `lib/sending` and `lib/compliance` are unmodified. The queue change adds an audit call and touches no eligibility check; `schedule.test.ts`'s "has no send path that skips the eligibility re-check" still passes.
+3. A jurisdiction block still stops one recipient. Untouched, and `verify-register.ts` re-run: 49 checks pass.
+4. The operator still cannot record, amend or void an approval. Untouched; `actions/compliance.test.ts` unchanged and passing.
+5. No investor-facing response reveals another investor. This package added tests only on that front — `links.test.ts` adds four assertions that a link cannot carry another person's data, and the eight verification scripts, each of which runs with a second investor present, pass 311 checks.
+6. Claim and sign-in tokens are single-use, hashed and expiring — now asserted from the URL end as well: the raw token is not a column anywhere, and lookup is by hash.
+7. Suspension revokes sessions and refuses new links. Untouched; `verify-lifecycle.ts` re-run, 30 checks pass.
+8. No log line carries a token, a body or a key — strengthened, not merely re-checked. The guard now reads nested keys, and `verify-export.ts` re-confirms against the real database that no metadata key looks like a credential or a body.
+9. The verification page is still the only indexable route. Nothing here touches `robots.ts`, `sitemap.ts` or any route's metadata.
+10. A published Q&A entry carries nothing identifying. Untouched; `verify-qa.ts` re-run, 51 checks pass.
+11. The AI path cannot change a calculated figure. Untouched, and now cited under AC27 by the test that proves the figures are byte-identical either way.
+12. The app still refuses to send when its base URL is not the production value. Untouched.
+
+**Uncertain.**
+
+- *AC30 is a real gap, not a test gap.* The tiles render and their wording is gated, but nothing writes `roadmap_tiles` except the seed, so "configurable by the owner" is not met. `forbiddenWordsInTileLabel` is the gate the missing surface must call at write time — it has been waiting since WP18 for a surface to guard. It is small, and it is the next thing worth building.
+- *`recordExport` stamps `lastExportAt` only for a recipients export*, so an audit-log export never satisfies §7's precondition for entering `disabled`. That is the stricter reading and is left standing, but it is undocumented and the operator gets no message explaining which export counts.
+- *`cancelMany` writes no entry of its own.* The trail is the per-reminder `reminder.cancelled` entries, which satisfies AC29, but a bulk cancellation is not recoverable from the log as a single act.
+- *`it.each` inflates the count.* The mapping file contributes 219 of the 1,457 tests, one per cited reference. That is the point — each is a real assertion about a real string — but the headline number is no longer comparable with WP18's.
+- *The verification scripts are cited but not gated.* `pnpm test` does not run them, and nothing enforces that they have been run recently. Whoever sets up CI should decide where they belong; the argument for a release stage rather than a commit hook is unchanged from WP18.

@@ -2,9 +2,9 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 14 and 16 to 18 are complete. 15 — images and video — is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: work packages 0 to 14 and 16 to 19 are complete. 15 — images and video — is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
-The most recent package went over every screen for how it looks and how it reads: the brand colours, how it behaves on a phone, and whether somebody using a keyboard or a screen reader can get around it. There is a section on that below, and it is worth ten minutes with your phone.
+The most recent package is the one that checks all the others. The specification ends with a list of forty-eight things the finished application has to do, and there is now a table saying, for every single one, which test proves it — and a test that fails the moment any of those claims stops being true. **ACCEPTANCE.md** is that table. The plain-English version is a few sections down, under "The forty-eight things it has to do".
 
 ---
 
@@ -337,9 +337,36 @@ pnpm verify:viewport
 
 That starts the application, opens a real browser at phone size, signs itself in as both an administrator and an investor, and walks twenty-one screens measuring every one — a hundred and four checks. It needs a database and takes about a minute.
 
+## The forty-eight things it has to do
+
+The specification finishes with forty-eight numbered statements — "sending is impossible without a current compliance approval", "no investor-facing screen reveals the existence of any other investor", and forty-six more. They are the definition of finished.
+
+Open **ACCEPTANCE.md**. It is a table with one row per statement: the statement in the specification's own words, and the name of the test that proves it. You do not have to read the tests. What matters is that the table is not a document somebody typed and hoped stayed accurate:
+
+- The wording in the left-hand column is read out of the specification each time the table is written, so it cannot quietly disagree with it.
+- Every test named in the right-hand column is checked to exist, by that name, in the file it is attributed to. Rename a test and the table's claim about it fails — loudly, in the ordinary test run.
+- If somebody adds a forty-ninth statement to the specification, the table notices, and the build stops until it has somewhere to point.
+
+Run `pnpm test` and it checks itself along with everything else. **1,457 tests, all passing.**
+
+**Where things stand:**
+
+- **Forty-six of the forty-eight** are proved by tests that run in seconds, with no database.
+- **Twenty-three of those** are additionally proved end to end, against a real database, by the `pnpm tsx scripts/verify-*.ts` scripts — three hundred and eleven checks that drive the real flow with a second investor present throughout, to be sure nothing leaks between them.
+- **One** carries a note rather than a test, and the note explains why: number 34 asks that the test invitation be *reviewed*, and whether a person read an email properly is not something a machine can assert. It is a tick on the pre-flight checklist for exactly that reason.
+- **Three are outstanding**, and each says what it is waiting for. Two of them (32 and 33) are the images and video that need somewhere to store a file. The third is below.
+
+**The one that came out of this package.** Number 30 says the "Coming to your portal" tiles must be *configurable by the owner*. The rules about what a tile may say are enforced and tested — no dates, no "soon", nothing that reads as a promised return — but the only way to change a tile today is to edit the seed file. There is no screen for it. That is now written down as an outstanding item rather than sitting unnoticed inside a criterion that looked covered.
+
+**Two faults this package found and fixed**, both in the audit log:
+
+- The reminder queue recorded who changed it only when a person did. The scheduled run — the one that creates and deletes queued reminders overnight, with nobody watching — recorded nothing at all. Unattended changes are precisely the ones most in need of a trail; they are now recorded against "system".
+- The guard that keeps secrets out of the audit log read only the top level of an entry and missed the name the settings screen actually uses for the OpenAI key. It now reads every level. It still reads *names* and never *values* — a sign-in legitimately records that the method was a password, and a check that cries wolf is a check somebody eventually switches off.
+
 ## What is not built yet
 
 - **Documents, images and video.** All need somewhere to store a file, which has not been chosen yet. Nothing else depends on them.
+- **Editing the "Coming to your portal" tiles.** The tiles are there and the rules about their wording are enforced; the screen to change them is not built. See number 30 above.
 - **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet.
 
 ## The round, and closing it
