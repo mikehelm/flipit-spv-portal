@@ -17,6 +17,7 @@
 
 import 'dotenv/config'
 import { runDueReminders } from '@/lib/reminders/run'
+import { roundsNeedingDigest, sendRoundDigest } from '@/lib/rounds/digest'
 
 async function main(): Promise<void> {
   const started = new Date()
@@ -33,6 +34,15 @@ async function main(): Promise<void> {
     if (outcome.kind === 'SENT') continue
     // The reason, never the recipient.
     console.log(`  ${outcome.kind}: ${outcome.reason.slice(0, 160)}`)
+  }
+
+  // BUILD_SPEC §6.6 — "on the deadline date the app emails David". It rides
+  // along with this job because it is the only scheduled thing in the system,
+  // and it goes to the operator alone. It closes nothing.
+  const due = await roundsNeedingDigest(started)
+  for (const roundId of due) {
+    const outcome = await sendRoundDigest({ roundId, now: started })
+    console.log(`  round digest: ${outcome.sent ? 'sent' : outcome.reason.slice(0, 140)}`)
   }
 }
 

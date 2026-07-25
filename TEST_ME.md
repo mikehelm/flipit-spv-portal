@@ -2,7 +2,7 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 14 are complete.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: work packages 0 to 14 and 16 are complete. 15 — images and video — is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
 ---
 
@@ -281,11 +281,33 @@ Issuing an offer does not send anything and does not take anybody off the regist
 
 ## What is not built yet
 
-- **Documents.** Uploading and issuing the subscription pack is still to come.
+- **Documents, images and video.** All need somewhere to store a file, which has not been chosen yet. Nothing else depends on them.
 - **The email carrying a sign-in link.** The link is created correctly; sending it is part of a later package.
 - **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet.
 
 The export was built early, out of order, in a parallel session. It is in the codebase and tested, but it is not yet linked from anywhere you would find by clicking.
+
+---
+
+## The round, and closing it
+
+Open **The round**. It shows where things stand: how many were invited, how many answered, how many did not, how many asked for more time, and the four money totals against the aggregate raise.
+
+**The thing to test here is that nothing happens by itself.** Set somebody's deadline to a date in the past and reload. Nothing closes. The round is still open, their offer is untouched, and they can still respond from their portal — a deadline passing is not an event that takes anything away from anybody.
+
+What it does do is queue an email to David: a summary of who answered and who did not, the totals, and a sentence saying plainly that it is his call — close the round now, extend for everyone, extend for named people, or do nothing. It says "if you do nothing, the round stays open" in those words, and it chases again a week later. No investor is ever told a deadline has passed.
+
+**Extending:**
+
+- Give one person longer. Their portal shows the new date at once. Their original deadline is remembered, so they show up under "asked for more time" from then on.
+- Extend for everyone. Only people who have not responded move — somebody who already answered keeps the date they were given, because otherwise their portal would disagree with the email in their inbox.
+- Try to bring a deadline forward, or to a date in the past. Both refused.
+
+**Closing** is owner-only and takes two ticks if anybody still has time left: one confirming you mean to close, and a second acknowledging how many people that cuts short. Miss either and nothing closes. Close it and responses stop — but nobody's account closes, nothing is deleted, and investors can still read their own records.
+
+Closed by mistake? The owner can reopen it with a recorded reason. A mis-click at the end of a raise should not be permanent.
+
+Nobody is emailed when you extend or close. Telling investors is an update, written by you.
 
 ---
 

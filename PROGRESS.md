@@ -567,3 +567,44 @@ Neither is visible to `tsc`, to eslint, or to vitest, because none of them draws
 **Uncertain:**
 
 - `/verify` is a memorable path but it is not obviously *ours*. Somebody who has thrown the email away has to remember the domain as well. §15.1 wants it "safe to reach by typing", which it is, but the practical version of that is the address being on something they already have — worth a line in the invitation's plain-text part beyond the footer link.
+
+---
+
+## WP16 — Service modes and closing the round — done. WP15 deferred, with the reason.
+
+**§7 was already in place** and this package verified it rather than rebuilding it: the four modes, the investor behaviour in each, the admin side staying full in every mode but `disabled`, sending requiring `active`, and the export precondition on moving to `disabled` with its logged owner override. Thirty-five database checks include every mode against an active investor.
+
+**§6.6 is new.** The whole section turns on its last three sentences: *"If David does nothing, nothing happens. The round stays open and he is reminded again on a configurable cadence. **Silence never closes anyone's opportunity.**"*
+
+So there is no scheduled job that closes anything, nothing that closes on a date, and exactly one function anywhere that writes `rounds.closed_at`. It takes `confirmed: true` and refuses without it — and there is a source test asserting the count of writes is one, that the parameter exists, and that no function in the module is named anything like `autoClose`, `closeIfDue` or `expireRound`.
+
+What a passed deadline does is send the operator an email saying it is his call. It goes to his own address, taken from the allowlist and never from a parameter, and no investor is copied — the email says so in its own footer. It names the three options §6.6 lists and the fourth: *"If you do nothing, the round stays open."*
+
+**Verified against the real database.** Thirty-five checks in `scripts/verify-rounds.ts`, with one recipient past their deadline, one still with time, and one who has answered: a passed deadline leaves the round open, the offer untouched and the investor able to respond; a deadline can be extended but never brought forward and never into the past; the original deadline survives so "who asked for more time" stays answerable; a global extension moves the non-responders and leaves the person who already answered alone; closing without the confirmation and closing early without acknowledging it both refuse *and leave the round open*; and a closed round refuses a second close, an extension and a digest.
+
+**Decisions:**
+
+- *Closing and reopening are owner-only; extending is the operator's.* §6.6 says "David decides" about *when*, and giving somebody more time is process. Closing marks unfilled allocations available and unlocks §21, which is a decision about the raise. Where the spec is silent on who, the conservative reading wins.
+- *Reopening exists, and needs a reason.* §6.6 does not mention it. A mis-click at the end of a raise being permanent is a worse state than a reopen with a recorded reason.
+- *Closing while somebody still has time needs a second, separate acknowledgement* naming how many people it affects. He is allowed to do it — they may all have answered — but not by accident.
+- *A global extension moves only the non-responders.* Somebody who has answered does not need more time, and moving their deadline would make their portal disagree with the email they were sent.
+- *A deadline can only be extended from this screen, never brought forward.* That would take away time an investor has already been told they have.
+- *`original_deadline` is written once and never overwritten.* It is the entire basis of "who asked for more time"; an extension that overwrote it would leave nothing to compare against.
+- *The digest is due whenever a deadline has been reached and the cadence has elapsed — not only on the day itself.* A scheduler that misses a day must not mean the email never arrives and the operator waits for something that is not coming.
+- *The digest rides along with the reminder job*, because that is the only scheduled thing in the system. It sends and closes nothing, and a source test asserts the module contains neither `closedAt:` nor `closeRound`.
+- *Extending emails nobody.* Telling an investor their deadline moved is an update or a reminder, written deliberately. The screen says so.
+- *Closing emails nobody either*, and the confirmation says so.
+- *The digest states USD explicitly.* The columns are named `*_usd` and `formatMoney` produces a bare grouped figure; a total in an email with no currency beside it is a figure waiting to be misread.
+
+**WP15 — media and video — is deferred, and this is the reason.** §13.2 and §13.3 need somewhere to put a file: uploaded images, EXIF stripped and served from the app's own domain, and recorded video served only to authenticated investors. This deployment has no blob store, and the two ways to fake one are both worse than waiting — base64 in Postgres puts multi-megabyte video in the row that every portal read touches, and a writable disk does not survive a serverless invocation. WP13's certificate avoided the problem by being regenerable from eight fields; a photograph is not. **What it needs is a decision about storage** — the natural fits alongside Netlify are Netlify Blobs, S3 or R2 — and then it is a straightforward package. Nothing else depends on it: the portal, the emails and the certificate all work without a single uploaded file.
+
+**Checklist:** points 1, 2 and 5 are this package's.
+
+1. No monetary value is a JavaScript number. The four totals are summed with `sumDecimals` and formatted at the edge; a source test asserts `parseFloat`, `.toNumber(` and bare `Number(` appear nowhere in `lib/rounds`.
+2. No send path bypasses anything. The digest goes through `sendOneEmail` and was refused in verification with the gate's own message, and a source test asserts no module here constructs a transport.
+5. No investor-facing response reveals another investor. The digest is the one message in this package and it goes to the operator alone — it is not investor-facing at all, and its footer says so. Nothing about a deadline or a closure reaches an investor unless somebody writes an update.
+
+**Uncertain:**
+
+- Seven days between digests is my number; §6.6 says "configurable cadence" and it is currently a constant rather than a setting. One field on the settings page would fix that, and I would rather it were chosen than defaulted.
+- Closing "marks unfilled allocations as available" in §6.6. What that unlocks is §21, which is not built, so today closing stops responses and records itself and nothing more. That is honest but incomplete, and the register of interest (WP10) is where an available allocation would go.
