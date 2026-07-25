@@ -30,6 +30,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 import { createId } from '@/lib/id'
 
@@ -687,10 +688,33 @@ export const documentPackages = pgTable(
     contentType: text('content_type').notNull(),
     sizeBytes: integer('size_bytes').notNull(),
     issuedAt: timestamp('issued_at', { withTimezone: true }),
+    /**
+     * Version history, in the same shape as `participationCertificates`.
+     * BUILD_SPEC §5: a correction is *"never a silent overwrite"*.
+     *
+     * `supersedesId` points at the document this one replaces, so the chain is
+     * the record and there is no denormalised lineage column to disagree with
+     * it. `supersededAt` is set on the OLD row at the moment the new one is
+     * issued — not when it is uploaded — so an investor keeps the document
+     * they were given until there is a replacement actually issued to them.
+     *
+     * A superseded document stays downloadable, exactly as a superseded
+     * certificate does (§5.1, "the superseded version retained"). Hiding it
+     * would not unsend it, and an investor who has a copy should be able to see
+     * what it was and that it was replaced.
+     */
+    version: integer('version').notNull().default(1),
+    supersededAt: timestamp('superseded_at', { withTimezone: true }),
+    supersedesId: text('supersedes_id').references((): AnyPgColumn => documentPackages.id, {
+      onDelete: 'set null',
+    }),
     uploadedById: text('uploaded_by_id').references(() => users.id),
     createdAt: createdAt(),
   },
-  (t) => [index('document_packages_offer_idx').on(t.offerId)],
+  (t) => [
+    index('document_packages_offer_idx').on(t.offerId),
+    index('document_packages_supersedes_idx').on(t.supersedesId),
+  ],
 )
 
 /**

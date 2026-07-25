@@ -154,6 +154,14 @@ describe('the shape the rules depend on', () => {
     expect(fn).toContain('issuedOnly(')
   })
 
+  /** The issue action alone, so an assertion about it cannot pass on another. */
+  function issueOnly(source: string): string {
+    return source.slice(
+      source.indexOf('export async function issueDocumentAction'),
+      source.indexOf('export async function correctDocumentAction'),
+    )
+  }
+
   it('exactly one file issues a document, and it needs an explicit confirmation', () => {
     const writers = walk('src')
       .filter((file) => !file.endsWith('.test.ts'))
@@ -163,9 +171,77 @@ describe('the shape the rules depend on', () => {
 
     const source = code('src/actions/documents.ts')
     expect(source).toContain("formData.get('confirm') !== 'ISSUE'")
-    // Issuing is one statement. Uploading explicitly stores null.
-    expect(source.match(/issuedAt: null/g)?.length).toBe(2) // upload, and withdraw
-    expect(source.match(/issuedAt,?\s*\}/g)?.length).toBe(1)
+
+    /**
+     * Three occurrences of `issuedAt: null`, not two, since corrections
+     * landed: an upload, **a correction**, and a withdrawal. The third is the
+     * reason for the widening rather than a concession to it — a corrected
+     * version arriving already issued would put an unchecked file on the
+     * investor's portal the moment it was uploaded, which is the exact failure
+     * the gap between uploading and issuing exists to prevent. The assertion
+     * below pins it inside the correction action, so the count cannot be
+     * satisfied by three ordinary uploads.
+     */
+    expect(source.match(/issuedAt: null/g)?.length).toBe(3)
+
+    const correction = source.slice(source.indexOf('export async function correctDocumentAction'))
+    expect(correction).toContain('issuedAt: null')
+    expect(correction).not.toMatch(/issuedAt:\s*new Date/)
+    /**
+     * Still exactly one place that puts a date on one.
+     *
+     * The pattern gained a leading `[{,]` because `supersededAt: issuedAt }`
+     * now ends in the same three tokens the old one matched — a false positive
+     * on a substring, not a second writer. Requiring the shorthand to start at
+     * a property boundary is a narrower expression of the same rule, and the
+     * assertion above it pins the one writer by name.
+     */
+    expect(source.match(/[{,]\s*issuedAt,?\s*\}/g)?.length).toBe(1)
+    expect(issueOnly(source)).toContain('.set({ issuedAt })')
+  })
+
+  /**
+   * Superseding is the other half of issuing, and must not become a third way
+   * to change what an investor is holding.
+   */
+  it('a document is only ever superseded by issuing its replacement', () => {
+    const source = code('src/actions/documents.ts')
+
+    expect(source.match(/supersededAt: issuedAt/g)?.length).toBe(1)
+    const issue = source.slice(
+      source.indexOf('export async function issueDocumentAction'),
+      source.indexOf('export async function correctDocumentAction'),
+    )
+    expect(issue).toContain('supersededAt: issuedAt')
+    // Both statements in one transaction, so there is no window in which both
+    // versions are current or neither is.
+    expect(issue).toContain('db.transaction(')
+
+    // Clearing it happens once, in withdrawal, which is issuing's inverse.
+    expect(source.match(/supersededAt: null/g)?.length).toBe(1)
+    const withdraw = source.slice(source.indexOf('export async function withdrawDocumentAction'))
+    expect(withdraw).toContain('supersededAt: null')
+    expect(withdraw).toContain('db.transaction(')
+  })
+
+  it('the correction rules live in one tested module, not inside the mutation', () => {
+    const source = code('src/actions/documents.ts')
+
+    expect(source).toContain('whyNotCorrectable(')
+    expect(source).toContain('correctionRefusalMessage(')
+    expect(source).toContain('nextVersion(')
+    // No second copy of a rule. A version number is never computed inline.
+    expect(source).not.toMatch(/version:\s*\w+\.version\s*\+\s*1/)
+  })
+
+  it('a correction is still one document, on one offer, for one person', () => {
+    const source = code('src/actions/documents.ts')
+    const correction = source.slice(source.indexOf('export async function correctDocumentAction'))
+
+    // It inherits the predecessor's offer rather than accepting one, so a
+    // correction cannot move a document onto somebody else's record.
+    expect(correction).toContain('offerId: predecessor.offerId')
+    expect(correction).not.toMatch(/formData\.get\('offerId'\)/)
   })
 
   it('an issued document cannot be deleted out from under the investor', () => {

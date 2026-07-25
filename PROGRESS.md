@@ -1370,3 +1370,186 @@ request leaves the process. `pnpm test` — 1711 tests, 89 files. `verify:media`
   which are entered through the UI and encrypted at rest. The distinction is
   deliberate — one is set by whoever deploys, the other by whoever signs in — but
   it is a distinction worth knowing about rather than discovering.
+
+---
+
+## Versioning for a corrected document — §5's "never a silent overwrite", made real
+
+Not a numbered work package. The largest of the items left under Uncertain after
+the document packages landed, and named as such in CLAIMS.md.
+
+Correcting a document meant withdrawing it and uploading another, and the only
+thing connecting the two was the audit log. That is a record of the correction
+for whoever reads the log, and nothing at all for the investor holding a copy of
+the old one — who is the person §5's rule is for. The participation certificate
+has had real version history since WP13 because §5.1 asks for it by name; §5
+does not ask for it here in those words, but it does say a correction is *"never
+a silent overwrite"*, and a withdrawal followed by an unrelated upload is
+exactly a silent overwrite from the investor's side of the glass.
+
+**Built.**
+
+- **Three columns on `document_packages`** — `version`, `superseded_at`, and
+  `supersedes_id` pointing at the document a version replaces. Migration
+  `0007_strange_multiple_man.sql`. The same shape as
+  `participation_certificates`, deliberately.
+- **`lib/documents/versions.ts`** — the rules, pure and tested on their own:
+  what may be corrected and why not, the next version number, and the walk that
+  turns a flat list of rows into chains.
+- **`correctDocumentAction`** — uploads a corrected version against an existing
+  document. It arrives *not issued*, like every other upload.
+- **Issuing a correction supersedes its predecessor**, both statements in one
+  transaction.
+- **Withdrawing a correction restores its predecessor**, also in one
+  transaction.
+- **Both screens** — the operator sees the current version, its history, a
+  waiting correction, and a form to upload one; the investor sees the current
+  version and, when there is one, a plain sentence saying it replaced something
+  they were sent, with the earlier versions still openable.
+- **`pnpm verify:documents` grew from 28 checks to 48**, covering the whole
+  correction lifecycle against the real database with two investors present.
+
+**Decisions.**
+
+- ***A correction is uploaded unissued, and the investor keeps what they have
+  until it is issued.*** This is the same gap the original document package was
+  built around, applied to the second version. Superseding at upload time would
+  take the document off the investor's portal the moment the operator picked a
+  file, leaving them with nothing while he checked it.
+- ***Superseding happens at the moment of issue, in the same transaction.*** Two
+  statements outside one would have a window in which both versions are current
+  or neither is — and "which document does this investor hold" is not a question
+  that may have two answers, even for a few milliseconds.
+- ***A superseded version stays issued and stays downloadable.*** This is §5.1's
+  rule for certificates and there is no reason for documents to differ. Hiding
+  the old version would not unsend it — the investor may have it on their
+  desktop — and an investor who is told "this replaced what you were sent" and
+  cannot see what they were sent is being told less than they already know.
+- ***Withdrawal is the exact inverse of issuing.*** Issuing a correction did two
+  things, so withdrawing it undoes two. Leaving the predecessor superseded would
+  move the investor from "the corrected document" to no document at all, which is
+  worse than the state before the correction existed. A predecessor withdrawn
+  separately in the meantime stays withdrawn — the restore only reverses what
+  this issuance did.
+- ***A draft cannot be corrected.*** It was never issued, so there is nothing to
+  correct and nobody has seen it; Remove and upload again is already there and
+  leaves no half-version behind. It also keeps the chain meaningful: every
+  version in one was issued at some point.
+- ***A superseded version cannot itself be corrected.*** Correct the current one.
+  Allowing a branch would make the chain a tree and "which one do they hold" a
+  question with two answers again.
+- ***One waiting correction at a time.*** Two drafts both claiming to be version
+  2 and both pointing at version 1 would make issuing them in either order
+  produce a different history. Refused, with a message saying to issue or remove
+  the one already there.
+- ***A correction inherits its predecessor's offer rather than accepting one.***
+  There is no form field that could move a document onto somebody else's record,
+  and a test asserts the action reads no `offerId` at all.
+- *Version 1 of a document nobody corrected says nothing on screen.* "Version 1"
+  on a document with no history is noise; the label appears the moment there is
+  a second version, on both.
+- *The chain is walked from `supersedes_id` rather than stored in a lineage
+  column.* One source of truth, nothing to disagree with itself. The walk carries
+  a cycle guard — nothing here can create a cycle, and a walk that trusts data to
+  be acyclic is a walk that hangs when it is not.
+- *The investor's list is issued-only, so a chain reaching it may be missing its
+  earliest links.* `lineagesOf` starts a chain at the first row present rather
+  than requiring a root, so a filtered list groups instead of fragmenting. There
+  is a test for exactly that.
+
+**Deviations.** One migration, additive: three nullable-or-defaulted columns and
+an index. Nothing existing changed shape, and every document already in a
+database becomes version 1 with no history, which is what it is.
+
+**Two pre-existing tests widened, each with the reason written into it.**
+
+- `access.test.ts` counted `issuedAt: null` and expected two. It is three now —
+  upload, correction, withdrawal — and the third is the *reason* for the change
+  rather than a concession to it: a correction arriving already issued would put
+  an unchecked file on the investor's portal the instant it was uploaded. The
+  count is now pinned by a second assertion that finds it inside
+  `correctDocumentAction` specifically, so three ordinary uploads could not
+  satisfy it.
+- The same test matched `/issuedAt,?\s*\}/` to prove one writer sets a date. It
+  now matches twice, because `supersededAt: issuedAt }` ends in the same three
+  tokens — a substring collision, not a second writer. The pattern gained a
+  leading `[{,]` so it tests the property shorthand it meant to, and an
+  assertion pinning `.set({ issuedAt })` inside the issue action was added
+  beside it.
+- A third assertion — that no audit metadata in `actions/documents.ts` mentions
+  `bytes`, `stored` or `file.name` — was **not** touched. A metadata key named
+  `restored` tripped it on the substring "stored"; the local variable and the
+  key were renamed to `reinstated` instead, so the test stands exactly as it
+  was. Renaming the code was the cheaper of the two and the assertion is worth
+  more intact.
+
+Four new shape tests were added alongside: that superseding happens only through
+issuing, that clearing it happens only through withdrawal, that both are inside
+transactions, that the rules live in the tested module rather than inline, and
+that a correction cannot take an offer id.
+
+**Checklist.** Point 5 is this change's; the rest were re-checked because it
+changes what an investor's portal renders.
+
+1. **No monetary value is a JavaScript number.** A version number is an integer
+   count and is never money; `nextVersion` adds one to it and nothing else
+   arithmetic happens in this change.
+2. **No send path bypasses anything.** Nothing here sends — issuing a
+   correction, like issuing anything, emails nobody. `verify:deployment` re-run:
+   41 checks pass.
+3. **A jurisdiction block still stops one recipient.** Untouched.
+4. **The operator still cannot record, amend or void an approval.** Untouched.
+5. **No investor-facing response reveals another investor.** The version chain is
+   built from rows already selected through the requesting account's own offers —
+   `investorDocuments` is unchanged and still joins on the account. `lineagesOf`
+   is pure and groups only what it is given. `verify:documents` runs the whole
+   correction lifecycle with two investors present and checks that Alice's list
+   never mentions Bruno or his account id, that Bruno's list is unmoved
+   throughout, and that Alice is still refused his document by id.
+6. **Claim and sign-in tokens are single-use, hashed and expiring.** Untouched.
+7. **Suspension revokes sessions and refuses new links.** Untouched, and a
+   superseded document follows the same `portalAccess` result as the current one.
+   `verify:lifecycle` re-run: 39 checks pass.
+8. **No log line carries a token, a body or a key.** The four new audit entries
+   record ids, a title and a version number. The metadata assertion in
+   `access.test.ts` is unmodified and passes.
+9. **The verification page is still the only indexable route.** No new route —
+   an earlier version is served by the existing document route, by its own id.
+10. A published Q&A entry carries nothing identifying. Untouched.
+11. The AI path cannot change a calculated figure. Untouched.
+12. The app still refuses to send when its base URL is not the production value.
+    Untouched, confirmed by `verify:deployment`.
+
+**Verified.** `pnpm verify:documents` — 48 checks against the real database with
+two investors throughout: a correction uploaded while the investor still holds
+version 1 and cannot see version 2, a second correction refused while one waits,
+issuing producing one chain rather than two documents, the superseded version
+still downloadable by her with its file still in the store, an already-superseded
+version refused for correction, none of it reaching Bruno, and withdrawing the
+correction putting her back to version 1 as current. `pnpm test` — 1732 tests, 90
+files. `pnpm verify:viewport` — 130 checks, both changed screens still passing
+375px and WCAG AA in Chromium.
+
+**Uncertain.**
+
+- *A correction tells the investor nothing.* Issuing version 2 puts it on their
+  portal, marked, and emails nobody — consistent with issuing anything else, and
+  the operator's confirmation says so. But a *corrected* document is more likely
+  to need saying out loud than a first one, and the application does not say it.
+  Whether §5's status 3 should notify at all is still the open question the
+  document packages left; a correction sharpens it.
+- *Nothing warns an operator whose correction contradicts the timeline.* The same
+  gap the original packages had, unchanged.
+- *There is no diff.* An investor is told version 2 replaced version 1 and can
+  open both. What changed between them is in neither the application nor the
+  audit log — only in the description field, if somebody types it. Making the
+  description mandatory on a correction was the alternative, and forcing a
+  sentence tends to produce "corrected" rather than a reason.
+- *A correction's file is never removed, and cannot be.* Both versions are
+  issued at some point, so neither is eligible for removal, and a chain of five
+  corrections is five PDFs in the store forever. That is the conservative answer
+  and it is also a bill somebody pays.
+- *`lineagesOf` runs in memory over the documents already loaded.* Correct at
+  this scale — a handful per offer — and it would be the wrong shape for an
+  offer with hundreds. A recursive query is the answer if that ever happens, and
+  it is not the shape of this problem.

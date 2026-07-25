@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Versioning for a corrected document | 25 Jul session C | 2026-07-25 23:30 | `src/db/schema.ts` + a migration, `src/actions/documents.ts`, `src/app/(admin)/investors/documents-panel.tsx`, `src/app/portal/**`, `scripts/verify-documents.ts` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -49,7 +49,12 @@ real S3-compatible client as of 25 July, with `pnpm verify:object-store` behind
 it. Nobody has pointed it at a real provider yet; that is a configuration step,
 not a package.
 
+**Versioning for a corrected document is done too** — `document_packages` has
+`version`, `superseded_at` and `supersedes_id` as of 25 July, and
+`pnpm verify:documents` is 48 checks covering the whole correction lifecycle.
+
 What is left is not a package either. The open items are listed under Uncertain
-at the end of each PROGRESS.md section. The largest now are versioning for a
-corrected document, range requests on a video, and a reconciliation pass for
-objects whose rows are gone.
+at the end of each PROGRESS.md section. The largest now are range requests on a
+video, a reconciliation pass for objects whose rows are gone, EBML stripping for
+an uploaded WebM, and the open question — sharpened by corrections — of whether
+issuing a document should notify the investor at all.

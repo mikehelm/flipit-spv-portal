@@ -23,7 +23,13 @@ import { db } from '@/db'
 import { documentPackages, investorAccounts, offers, rounds, users } from '@/db/schema'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { mayDownloadDocument } from '@/lib/documents/access'
-import { documentWithOwner, documentsByAccount, investorDocuments } from '@/lib/documents/data'
+import {
+  documentWithOwner,
+  documentsByAccount,
+  documentsForOffer,
+  investorDocuments,
+} from '@/lib/documents/data'
+import { lineagesOf, nextVersion, whyNotCorrectable } from '@/lib/documents/versions'
 import { resetEnvCache } from '@/lib/env'
 import { ingest } from '@/lib/media/ingest'
 import { mediaStore, resetMediaStoreCache } from '@/lib/media/store'
@@ -293,6 +299,123 @@ async function main(): Promise<void> {
   check(
     "and Bruno's is untouched",
     (await investorDocuments(bruno!.account.id)).length === 1,
+  )
+
+  // --- A correction, end to end -------------------------------------------
+  console.log('\n§5 — a correction is never a silent overwrite')
+
+  // Put Alice's document back on her portal so there is something to correct.
+  const reissuedAt = new Date()
+  await db
+    .update(documentPackages)
+    .set({ issuedAt: reissuedAt })
+    .where(eq(documentPackages.id, aliceDoc!.document.id))
+
+  const v1 = (await documentWithOwner(aliceDoc!.document.id))!
+  check('version 1 is version 1', v1.version === 1)
+  check('and is not superseded', v1.supersededAt === null)
+
+  const siblings = await documentsForOffer(v1.offerId)
+  check('an issued, current document may be corrected', whyNotCorrectable(v1, siblings) === null)
+
+  const correctedFile = await ingest('document', pdfBytes(`${PREFIX} corrected for alice`))
+  if (!correctedFile.ok) throw new Error('the corrected file was refused')
+
+  const [v2row] = await db
+    .insert(documentPackages)
+    .values({
+      offerId: v1.offerId,
+      title: v1.title,
+      description: 'Corrected.',
+      storageKey: correctedFile.storageKey,
+      contentType: correctedFile.format,
+      sizeBytes: correctedFile.sizeBytes,
+      issuedAt: null,
+      version: nextVersion(v1),
+      supersedesId: v1.id,
+    })
+    .returning()
+
+  check('the correction is version 2', v2row!.version === 2)
+  check('and points at the version it replaces', v2row!.supersedesId === v1.id)
+
+  const duringUpload = await investorDocuments(alice!.account.id)
+  check(
+    'while it waits, she still has exactly one document',
+    duringUpload.length === 1 && duringUpload[0]!.id === v1.id,
+  )
+  check(
+    'and the correction is not on her portal',
+    !duringUpload.some((d) => d.id === v2row!.id),
+  )
+
+  check(
+    'a second correction of the same document is refused while one waits',
+    whyNotCorrectable(v1, await documentsForOffer(v1.offerId)) === 'CORRECTION_ALREADY_WAITING',
+  )
+
+  // Issue it, the way the action does: both statements, one transaction.
+  const supersededAt = new Date()
+  await db.transaction(async (tx) => {
+    await tx
+      .update(documentPackages)
+      .set({ issuedAt: supersededAt })
+      .where(eq(documentPackages.id, v2row!.id))
+    await tx
+      .update(documentPackages)
+      .set({ supersededAt })
+      .where(eq(documentPackages.id, v1.id))
+  })
+
+  const afterIssue = await investorDocuments(alice!.account.id)
+  check('after issuing, she has both versions listed', afterIssue.length === 2)
+
+  const lineages = lineagesOf(afterIssue)
+  check('and they are one chain, not two documents', lineages.length === 1)
+  check('whose current version is the correction', lineages[0]!.current.id === v2row!.id)
+  check('with version 1 kept as history', lineages[0]!.superseded.map((d) => d.id).join() === v1.id)
+  check('and nothing pending', lineages[0]!.pending === null)
+
+  // §5.1's rule for certificates, applied here: the superseded version is
+  // retained and stays downloadable.
+  const oldStill = await documentWithOwner(v1.id)
+  check('the superseded version is still downloadable by her', mayDownloadDocument({
+    audience: 'INVESTOR',
+    issuedAt: oldStill!.issuedAt,
+    belongsToRequester: oldStill!.accountId === alice!.account.id,
+    portalReadable: true,
+  }))
+  check('and its file is still in the store', (await mediaStore()!.get(v1.storageKey)) !== null)
+  check('and it is marked superseded', oldStill!.supersededAt !== null)
+
+  check(
+    'an already superseded version cannot itself be corrected',
+    whyNotCorrectable(oldStill!, await documentsForOffer(v1.offerId)) === 'ALREADY_SUPERSEDED',
+  )
+
+  check(
+    'none of this reached Bruno',
+    (await investorDocuments(bruno!.account.id)).length === 1 &&
+      !JSON.stringify(await investorDocuments(alice!.account.id)).includes(bruno!.account.id),
+  )
+
+  // Withdrawing the correction puts her back where she was.
+  await db.transaction(async (tx) => {
+    await tx.update(documentPackages).set({ issuedAt: null }).where(eq(documentPackages.id, v2row!.id))
+    await tx
+      .update(documentPackages)
+      .set({ supersededAt: null })
+      .where(eq(documentPackages.id, v1.id))
+  })
+
+  const afterWithdraw = await investorDocuments(alice!.account.id)
+  check(
+    'withdrawing the correction leaves her holding version 1 again',
+    afterWithdraw.length === 1 && afterWithdraw[0]!.id === v1.id,
+  )
+  check(
+    'and version 1 is current again, not superseded',
+    (await documentWithOwner(v1.id))!.supersededAt === null,
   )
 
   // --- The operator's grouped view ---------------------------------------

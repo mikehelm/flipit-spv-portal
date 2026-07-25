@@ -1,4 +1,5 @@
 import { documentSizeLabel, type DocumentRecord } from '@/lib/documents/data'
+import { lineagesOf, versionLabel } from '@/lib/documents/versions'
 import { env } from '@/lib/env'
 
 /**
@@ -33,23 +34,52 @@ export function DocumentsSection({ documents }: { documents: DocumentRecord[] })
         </p>
 
         <ul className="mt-4 space-y-3">
-          {documents.map((document) => (
-            <li key={document.id} className="border-t hairline pt-3 first:border-t-0 first:pt-0">
+          {lineagesOf(documents).map(({ current, superseded }) => (
+            <li key={current.id} className="border-t hairline pt-3 first:border-t-0 first:pt-0">
               <a
-                href={`${env().BASE_PATH}/portal/document/${document.id}`}
+                href={`${env().BASE_PATH}/portal/document/${current.id}`}
                 className="inline-flex min-h-11 items-center text-sm font-semibold text-orange underline-offset-4 hover:underline"
               >
-                {document.title}
+                {current.title}
               </a>
-              {document.description ? (
-                <p className="mt-1 text-sm leading-relaxed text-silver2">
-                  {document.description}
-                </p>
+              {current.description ? (
+                <p className="mt-1 text-sm leading-relaxed text-silver2">{current.description}</p>
               ) : null}
               <p className="mt-1 text-xs text-muted">
-                PDF · {documentSizeLabel(document.sizeBytes)} · issued{' '}
-                {formatDate(document.issuedAt)}
+                PDF · {documentSizeLabel(current.sizeBytes)} · issued{' '}
+                {formatDate(current.issuedAt)}
+                {versionLabel(current, superseded.length)
+                  ? ` · ${versionLabel(current, superseded.length)}`
+                  : ''}
               </p>
+
+              {/*
+                §5: a correction is never a silent overwrite. If this document
+                replaced one they were given, they are told so plainly, and the
+                version they had stays openable — hiding it would not unsend it.
+              */}
+              {superseded.length > 0 ? (
+                <div className="mt-2 rounded-sm border hairline bg-bg2 p-3">
+                  <p className="text-xs leading-relaxed text-silver2">
+                    This replaced {superseded.length === 1 ? 'an earlier version' : 'earlier versions'}{' '}
+                    you were sent. The version above is the current one. What you had before is
+                    still here:
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {superseded.map((older) => (
+                      <li key={older.id}>
+                        <a
+                          href={`${env().BASE_PATH}/portal/document/${older.id}`}
+                          className="inline-flex min-h-11 items-center text-xs font-medium text-silver2 underline-offset-4 hover:underline"
+                        >
+                          Version {older.version} · issued {formatDate(older.issuedAt)} · replaced{' '}
+                          {formatDate(older.supersededAt)}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>

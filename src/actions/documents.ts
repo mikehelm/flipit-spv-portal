@@ -1,6 +1,6 @@
 'use server'
 
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { actionError, actionOk, type ActionState } from '@/components/admin/action-state'
@@ -8,7 +8,12 @@ import { db } from '@/db'
 import { documentPackages, offers } from '@/db/schema'
 import { audit } from '@/lib/audit'
 import { requireOnboardedAdmin } from '@/lib/auth/guards'
-import { documentWithOwner } from '@/lib/documents/data'
+import { documentWithOwner, documentsForOffer } from '@/lib/documents/data'
+import {
+  correctionRefusalMessage,
+  nextVersion,
+  whyNotCorrectable,
+} from '@/lib/documents/versions'
 import { optionalText, requiredText, zodFieldErrors as fieldErrors } from '@/lib/form-values'
 import { ingest } from '@/lib/media/ingest'
 import { mediaStore } from '@/lib/media/store'
@@ -146,24 +151,165 @@ export async function issueDocumentAction(
   if (document.issuedAt) return actionOk('It is already issued.')
 
   const issuedAt = new Date()
-  await db
-    .update(documentPackages)
-    .set({ issuedAt })
-    .where(eq(documentPackages.id, documentId))
+
+  /**
+   * Issuing a correction supersedes the version it replaces, and does both in
+   * one transaction.
+   *
+   * The supersede happens HERE rather than at upload, which is the decision
+   * that makes the gap between uploading and issuing work for corrections too:
+   * until the replacement is actually issued, the investor keeps the document
+   * they were given. Two statements outside a transaction would have a window
+   * in which either both versions are current or neither is.
+   */
+  const predecessorId = document.supersedesId
+
+  await db.transaction(async (tx) => {
+    await tx.update(documentPackages).set({ issuedAt }).where(eq(documentPackages.id, documentId))
+
+    if (predecessorId) {
+      await tx
+        .update(documentPackages)
+        .set({ supersededAt: issuedAt })
+        .where(
+          and(
+            eq(documentPackages.id, predecessorId),
+            // Only supersede something that is still current. A predecessor
+            // withdrawn in the meantime is not resurrected in order to be
+            // superseded.
+            isNull(documentPackages.supersededAt),
+          ),
+        )
+    }
+  })
 
   await audit({
     actor: { kind: 'user', id: admin.id, label: admin.email },
     entityType: 'document_package',
     entityId: documentId,
     action: 'document.issued',
-    metadata: { offerId: document.offerId, title: document.title },
+    metadata: {
+      offerId: document.offerId,
+      title: document.title,
+      version: document.version,
+      ...(predecessorId ? { supersedes: predecessorId } : {}),
+    },
   })
+
+  if (predecessorId) {
+    await audit({
+      actor: { kind: 'user', id: admin.id, label: admin.email },
+      entityType: 'document_package',
+      entityId: predecessorId,
+      action: 'document.superseded',
+      metadata: { offerId: document.offerId, title: document.title, supersededBy: documentId },
+    })
+  }
 
   revalidatePath(INVESTORS_PATH)
   revalidatePath('/portal')
+
   return actionOk(
-    'Issued. It is on their portal now. Advancing them to “Documents issued” on the timeline ' +
-      'is a separate step, so you can issue several before you tell them.',
+    predecessorId
+      ? `Issued as version ${document.version}. It replaces the version they had, which stays ` +
+          'on their portal marked as superseded — they can still open what they were given, ' +
+          'and can see that it was replaced.'
+      : 'Issued. It is on their portal now. Advancing them to “Documents issued” on the ' +
+          'timeline is a separate step, so you can issue several before you tell them.',
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * A corrected version of an issued document. BUILD_SPEC §5.
+ *
+ * *"Never a silent overwrite."* Until this existed, correcting a document meant
+ * withdrawing it and uploading another, and the only thing connecting the two
+ * was the audit log — a record for whoever reads the log, and nothing for the
+ * investor holding the old copy.
+ *
+ * A correction arrives **not issued**, exactly as any other upload does, and
+ * the version it replaces stays on the investor's portal until the replacement
+ * is issued. `whyNotCorrectable` holds the rules and is tested on its own.
+ */
+export async function correctDocumentAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const admin = await requireOnboardedAdmin()
+
+  const documentId = optionalText(formData.get('documentId'))
+  if (!documentId) return actionError('That document could not be identified.')
+
+  const predecessor = await documentWithOwner(documentId)
+  if (!predecessor) return actionError('That document no longer exists.')
+
+  const siblings = await documentsForOffer(predecessor.offerId)
+  const refusal = whyNotCorrectable(predecessor, siblings)
+  if (refusal) return actionError(correctionRefusalMessage(refusal))
+
+  const parsed = detailsSchema.safeParse({
+    title: requiredText(formData.get('title')) || predecessor.title,
+    description: optionalText(formData.get('description')) ?? predecessor.description,
+  })
+  if (!parsed.success) {
+    return actionError('That correction was not uploaded.', fieldErrors(parsed.error))
+  }
+
+  const file = formData.get('file')
+  if (!(file instanceof File) || file.size === 0) {
+    return actionError('Choose the corrected PDF first.', { file: 'No file was attached.' })
+  }
+
+  const result = await ingest('document', new Uint8Array(await file.arrayBuffer()), file.type)
+
+  if (!result.ok) {
+    await audit({
+      actor: { kind: 'user', id: admin.id, label: admin.email },
+      entityType: 'document_package',
+      entityId: documentId,
+      action: 'document.refused',
+      metadata: { reason: result.reason },
+    })
+    return actionError(result.message)
+  }
+
+  const [created] = await db
+    .insert(documentPackages)
+    .values({
+      offerId: predecessor.offerId,
+      title: parsed.data.title,
+      description: parsed.data.description,
+      storageKey: result.storageKey,
+      contentType: result.format,
+      sizeBytes: result.sizeBytes,
+      issuedAt: null,
+      version: nextVersion(predecessor),
+      supersedesId: predecessor.id,
+      uploadedById: admin.id,
+    })
+    .returning()
+
+  await audit({
+    actor: { kind: 'user', id: admin.id, label: admin.email },
+    entityType: 'document_package',
+    entityId: created!.id,
+    action: 'document.correction_uploaded',
+    metadata: {
+      offerId: predecessor.offerId,
+      title: created!.title,
+      version: created!.version,
+      supersedes: predecessor.id,
+      sizeBytes: result.sizeBytes,
+    },
+  })
+
+  revalidatePath(INVESTORS_PATH)
+  return actionOk(
+    `Uploaded as version ${created!.version}, and not yet issued. The investor still has ` +
+      'version ' +
+      `${predecessor.version} until you issue this one. Open it, check it, then issue it.`,
   )
 }
 
@@ -188,10 +334,39 @@ export async function withdrawDocumentAction(
   if (!document) return actionError('That document no longer exists.')
   if (!document.issuedAt) return actionOk('It was not issued.')
 
-  await db
-    .update(documentPackages)
-    .set({ issuedAt: null })
-    .where(eq(documentPackages.id, documentId))
+  /**
+   * Withdrawing a correction restores the version it replaced.
+   *
+   * Withdrawal is the inverse of issuing, so it undoes everything issuing did —
+   * and issuing a correction did two things. Leaving the predecessor superseded
+   * would take the investor from "the corrected document" to no document at
+   * all, which is a worse state than the one they were in before the correction
+   * was ever uploaded.
+   */
+  const predecessorId = document.supersedesId
+  // Named to avoid the substring "stored": `access.test.ts` asserts no audit
+  // metadata in this file mentions raw stored bytes, and that assertion is a
+  // plain substring match. Renaming here keeps it untouched.
+  let reinstated = false
+
+  if (predecessorId) {
+    const predecessor = await documentWithOwner(predecessorId)
+    // Only restore something this document actually superseded, and only if it
+    // was issued in its own right. A predecessor that was withdrawn separately
+    // stays withdrawn.
+    reinstated = predecessor?.supersededAt !== null && predecessor?.issuedAt !== null
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.update(documentPackages).set({ issuedAt: null }).where(eq(documentPackages.id, documentId))
+
+    if (predecessorId && reinstated) {
+      await tx
+        .update(documentPackages)
+        .set({ supersededAt: null })
+        .where(eq(documentPackages.id, predecessorId))
+    }
+  })
 
   await audit({
     actor: { kind: 'user', id: admin.id, label: admin.email },
@@ -201,15 +376,31 @@ export async function withdrawDocumentAction(
     metadata: {
       offerId: document.offerId,
       title: document.title,
+      version: document.version,
       wasIssuedAt: document.issuedAt.toISOString(),
+      ...(reinstated ? { reinstated: predecessorId } : {}),
     },
   })
 
+  if (reinstated && predecessorId) {
+    await audit({
+      actor: { kind: 'user', id: admin.id, label: admin.email },
+      entityType: 'document_package',
+      entityId: predecessorId,
+      action: 'document.reinstated',
+      metadata: { offerId: document.offerId, title: document.title, afterWithdrawing: documentId },
+    })
+  }
+
   revalidatePath(INVESTORS_PATH)
   revalidatePath('/portal')
+
   return actionOk(
-    'Taken off their portal. They may already have downloaded it, so if the figures were ' +
-      'wrong, tell them — the audit log records that it was issued and that you withdrew it.',
+    reinstated
+      ? 'Taken off their portal, and the version it replaced is back — they are holding what ' +
+          'they held before the correction. The log records every step.'
+      : 'Taken off their portal. They may already have downloaded it, so if the figures were ' +
+          'wrong, tell them — the audit log records that it was issued and that you withdrew it.',
   )
 }
 

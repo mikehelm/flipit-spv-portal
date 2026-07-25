@@ -401,6 +401,23 @@ Unlike an uploaded image, a document is stored **exactly as you uploaded it** �
 
 **Issuing a document emails nobody.** Telling an investor is an update or a message, written on purpose. And advancing their timeline to *Documents issued* is a separate step, so you can issue several before you tell them.
 
+### Correcting a document you have already issued
+
+This is new. Until now the only way to fix a document was to withdraw it and upload another, and nothing connected the two except a line in the log — which is a record for you, and nothing at all for the investor holding the old copy.
+
+On any issued document there is now a **Correct this document** panel. Upload the fixed PDF and it becomes **version 2**, waiting, not issued — exactly like any other upload. Nothing has changed on the investor's portal yet: they still have version 1, and they will keep it until you issue the correction.
+
+**Things worth trying:**
+
+- **Upload a correction and then look at the investor's portal.** Unchanged. They still have version 1, and version 2 is nowhere on it.
+- **Issue the correction.** Now their portal shows the new version, and underneath it a plain sentence saying it replaced something they were sent — with the earlier version still openable. That is deliberate: they may already have version 1 saved on their desktop, and hiding it would not unsend it. They should be able to see what they were given and that it changed.
+- **Try to upload a second correction while one is waiting.** Refused, with the reason: issue the one you have or remove it first.
+- **Try to correct an earlier version.** Refused — correct the current one, which is the one they hold.
+- **Try to correct a document you have not issued yet.** Refused, and it points you at *Remove it* instead. Nobody has seen it, so there is nothing to correct.
+- **Withdraw a correction after issuing it.** They go back to holding version 1, and version 1 stops being marked as replaced. Withdrawal undoes exactly what issuing did.
+
+**What it does not do:** it does not tell the investor. Issuing a correction emails nobody, the same as issuing anything else — so if a figure was wrong, send them a message or an update as well. And it does not say *what* changed between the versions. The description field is the only place that can, and only if you type it.
+
 ---
 
 ## The media library
@@ -493,7 +510,8 @@ Worth trying, because these are all meant to work:
 
 ## What is not built yet
 
-- **Versioning for a corrected document.** Replacing an issued document is a withdrawal and a fresh upload, and the two are connected only by the audit log. The participation certificate does keep real version history, because §5.1 asks for it.
+- **A note saying what changed in a correction.** A corrected document is versioned and both versions stay readable, but nothing records what was different — only the description, if somebody writes one.
+- **An email when a document is issued or corrected.** Deliberate, but somebody will expect it. Send a message or an update alongside.
 - **A real storage bucket, actually connected.** The code to use one is now written and tested (see "The media library"), but only against a stand-in on the same machine. Pointing it at a real Amazon or Cloudflare bucket and uploading one image is the last step, and it is minutes rather than work.
 - **A video that plays before it has finished downloading.** A published video is sent as one whole file, so a browser waits for all of it. Fine for the two-minute personal video this was built for; wrong for anything long.
 

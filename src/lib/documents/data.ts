@@ -27,6 +27,10 @@ export interface DocumentRecord {
   contentType: string
   sizeBytes: number
   issuedAt: Date | null
+  /** §5's version history. See `lib/documents/versions.ts`. */
+  version: number
+  supersededAt: Date | null
+  supersedesId: string | null
   createdAt: Date
 }
 
@@ -58,6 +62,9 @@ export async function investorDocuments(accountId: string): Promise<DocumentReco
       contentType: documentPackages.contentType,
       sizeBytes: documentPackages.sizeBytes,
       issuedAt: documentPackages.issuedAt,
+      version: documentPackages.version,
+      supersededAt: documentPackages.supersededAt,
+      supersedesId: documentPackages.supersedesId,
       createdAt: documentPackages.createdAt,
     })
     .from(documentPackages)
@@ -89,6 +96,9 @@ export async function documentWithOwner(documentId: string): Promise<
       contentType: documentPackages.contentType,
       sizeBytes: documentPackages.sizeBytes,
       issuedAt: documentPackages.issuedAt,
+      version: documentPackages.version,
+      supersededAt: documentPackages.supersededAt,
+      supersedesId: documentPackages.supersedesId,
       createdAt: documentPackages.createdAt,
       accountId: offers.accountId,
     })
@@ -149,6 +159,9 @@ export async function documentsByAccount(): Promise<Map<string, AccountOfferDocu
       contentType: documentPackages.contentType,
       sizeBytes: documentPackages.sizeBytes,
       issuedAt: documentPackages.issuedAt,
+      version: documentPackages.version,
+      supersededAt: documentPackages.supersededAt,
+      supersedesId: documentPackages.supersedesId,
       createdAt: documentPackages.createdAt,
     })
     .from(offers)
@@ -179,6 +192,9 @@ export async function documentsByAccount(): Promise<Map<string, AccountOfferDocu
         contentType: row.contentType!,
         sizeBytes: row.sizeBytes!,
         issuedAt: row.issuedAt,
+        version: row.version!,
+        supersededAt: row.supersededAt,
+        supersedesId: row.supersedesId,
         createdAt: row.createdAt!,
       })
     }
