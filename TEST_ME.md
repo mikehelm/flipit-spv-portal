@@ -2,9 +2,7 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 7 are complete.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, and send an invitation to one person at a time. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
-
-The investor's own portal is the next package. Right now the link in an invitation goes to a page that does not exist yet.
+**Current state: work packages 0 to 7 are complete, and the core of 8.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, and follow the link in that invitation into the investor's own private portal. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
 ---
 
@@ -119,9 +117,27 @@ Compliance approval state and mail connection health sit at the top of the revie
 
 ---
 
+## The investor's side
+
+The link in an invitation goes to `/portal/claim/…`. Opening it is what verifies the mailbox — there is no button to press and no password to choose. The account moves from "invited" to "active", and the investor lands on their own record: their amount, their two percentages, their deadline, and the eight-step timeline showing where things stand.
+
+**Things worth trying:**
+
+- Open the same claim link twice. It works once.
+- Make up a link and open it. It fails with exactly the same page as an expired one, a spent one, and one belonging to somebody who has been suspended. There is no wording anywhere that confirms an address exists.
+- At `/portal/signin`, ask for a link with an address that has a record, and then with one that does not. The answer is the same sentence both times.
+- Suspend an investor. Their session dies on their very next click, their unused links stop working, and asking for a new one is accepted politely and produces nothing.
+- Close an investor's account. By default they can still sign back in and read their own record — an investor who has sent money should not lose the record of it.
+- Look at a timeline step that has not been reached. It says "Not yet reached. There is nothing for you to do at this stage." and shows no amount, no date and no blank where one would go.
+
+**What an investor cannot see, by design:** that any other investor exists. No count, no total raised, no position in any queue, and no wording that hints at any of it. The code that loads their page is bound to their own account and never loads anybody else's data at all.
+
+---
+
 ## What is not built yet
 
-- **The investor portal.** The link in an invitation does not go anywhere yet. That is the next package.
+- **The rest of the portal.** The conversation thread, documents, and the operator-side status advancement with its two-step confirmation for funds received.
+- **The email carrying a sign-in link.** The link is created correctly; sending it is part of a later package.
 - **Questions and answers, the register of interest, updates, reminders.** All later packages.
 - **Two-factor sign-in.** Optional in version one. The database is ready for it; there is no code behind it.
 - **The AI spend cap.** You can set a monthly ceiling in settings, but nothing yet counts spending against it.

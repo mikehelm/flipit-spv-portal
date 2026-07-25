@@ -216,3 +216,39 @@ The reviewer also confirmed the negative: no function anywhere loops over recipi
 **One line of that review pass is now out of date, and it matters.** It says "no path sends a real email yet: `sendOneEmail` is the only function that puts a message on the wire and it has no callers." WP7 gave it one — `lib/sending/send-invitation.ts`, reached from the review screen. The three lower-severity gate findings the reviewer left open were left open on the basis that nothing was reachable. They are reachable now, and they should be worked through before a Gmail app password is connected to anything.
 
 The two defects that pass did fix are both ones WP7 depends on completely. The template hash is the entire mechanism behind "editing one character disables sending", which is one of the twelve enforced pre-flight items; and the jurisdiction-list split would have made every imported row block, which is the exact failure the per-recipient gate exists to avoid.
+
+---
+
+## WP8 — Investor portal core — done (the core; the extras are not)
+
+**Built:** the claim flow, passwordless return sign-in, investor sessions, the §4.2 account lifecycle, the eight-step timeline and the investor's own record.
+
+Opening an emailed link claims it: single use enforced by a conditional update rather than a read-then-write, the account moves `invited` → `active`, the email is marked verified, and a session is established. Return visits use the passwordless flow — the investor types their address and a fresh link is minted, provided the account is in a state that may have one.
+
+The lifecycle is the part worth reading. §4.2 spells out the sign-in rules "explicitly, because revocation alone does not answer it", and `lib/portal/access.ts` is that table transcribed as a pure function with nothing else in it. Suspension, closure and archiving all revoke every session and every unspent link in one function, so a later caller cannot do one and forget the other.
+
+**Verified against the real database, with a second investor present throughout.** Twenty-four checks, all passing: a claim token works once and is refused the second time; an invented token, a revoked one and one belonging to a suspended account are all refused; suspension revokes every live session and every unspent link immediately, and then refuses to issue a new one; a status change with no reason is refused; an operator cannot archive an account; a closed account with the default `read_only` setting can still sign back in and reaches a read-only view of its own record; and no other investor's name or address appears anywhere in the loaded view.
+
+**Decisions:**
+
+- *The sign-in response is one string with no variants anywhere in the application.* An unknown address, a suspended account, an archived one and a live one all produce "If that address has a record with us, a sign-in link is on its way." The list of people invited into a private securities round is itself confidential, and a portal that answers "no such address" publishes it one guess at a time. The same reasoning gives every failed claim one page.
+- *The service mode can only ever narrow access, never widen it.* An account that is suspended stays unreachable in every mode. Widening would mean a service setting could undo a suspension, which is the wrong way round — one is an operational posture, the other is a decision about a person. There is a test that checks every combination of five states and four modes.
+- *A timeline step not yet reached shows the standard sentence and no facts whatsoever* — not a blank value, not a placeholder date, not a zero. A greyed-out step reading "Amount: —" invites the reader to fill in the blank themselves. Where a fact is genuinely missing on a step that *has* been reached, the sentence is written without it: "Your personalised invitation was sent." rather than "…was sent on ."
+- *Sunset mode still issues sign-in links.* §7 says the portal is closing and investors should take their records with them; refusing sign-in during sunset would defeat the point of announcing it.
+- *An investor session lasts thirty days, against the administrator's twelve hours.* An investor visits occasionally over months, and forcing a fresh emailed link every time turns a private record into a chore — and trains people to expect unprompted "sign in" emails, which is the exact habit §15.1 exists to break. Suspension kills the session immediately whatever its age.
+- *Archiving is owner-only.* §4.2 gives the owner suspend and close over any account and says an operator cannot close the owner's access, but is silent on archiving. Archiving is a retention decision rather than day-to-day process management, so it went to the owner — the conservative reading.
+- *A reason is required by the type signature, not only by the form.* A required field on a screen is something a future caller can route around by calling the function from somewhere else.
+- *A claim is refused when the service is disabled.* §7 disables the portal, not merely its sign-in form.
+
+**Deviations:** this is the core of WP8, not all of it. Still to do, and listed honestly rather than buried: the conversation thread, documents, the operator-side status advancement with its two-step confirmation and amount re-entry for funds received, and Google sign-in for an exactly-matching address. The response actions, the timeline, the immutable snapshot and the "coming to your portal" tiles are done. The sign-in link is minted, stored hashed and audited, but the email carrying it is not sent yet — a sign-in link is a notification and notifications go through the same gated transport as everything else, which is WP12's.
+
+**Checklist:** points 5, 6 and 7 are this package's.
+
+5. No investor-facing page, response or error reveals that another investor exists. `lib/portal/data.ts` is bound to one account id taken from the session and never from anything the browser sent; it loads no count, total or aggregate, so it has nothing to leak. Verified with a second investor in the database and their name and address absent from the serialised view. The timeline has a test asserting no wording about positions, queues, totals or other participants at any stage.
+6. Claim and sign-in tokens are random, stored only as a hash, single-use by conditional update, and expiring — fourteen days for a claim link, forty-five minutes for a requested sign-in link.
+7. Suspension revokes existing sessions *and* refuses new links. Both halves verified against the database.
+
+**Uncertain:**
+
+- Requesting a second sign-in link revokes the first. That is safer, and it is what the invite flow does, but somebody who clicks "email me a link" twice and then opens the first email will find it dead. I think that is the right trade; it is worth a second opinion.
+- Forty-five minutes for a sign-in link and thirty days for a session are both my numbers. The spec says "expiring" without naming a duration for either.
