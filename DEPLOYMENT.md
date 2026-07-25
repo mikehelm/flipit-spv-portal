@@ -51,6 +51,7 @@ starts with a half-configured base URL is a portal issuing dead links.
 | `OWNER_EMAILS` | the two owner addresses | the same |
 | `OPERATOR_EMAILS` | the operator address | the same |
 | `RESTORE_DATABASE_URL` | unset | unset except during a restore |
+| `MEDIA_STORE` | `filesystem` or empty | `object-store` — see §1.1 |
 
 **`ENCRYPTION_KEY` is not portable between the two.** It encrypts the stored
 SMTP app password and the OpenAI key. Moving the database without moving the key
@@ -58,6 +59,51 @@ leaves rows that decrypt to nothing, and the failure shows up as "no sending
 credential is stored" rather than as a key error. Either carry the key across
 with the data, or re-enter both secrets after the move. **Re-entering is the
 safer of the two** and takes two minutes.
+
+### 1.1 Where uploaded files go
+
+Three settings, and the right one depends on whether the deployment has a disk
+that survives a restart.
+
+| `MEDIA_STORE` | What it means |
+|---|---|
+| *(empty)* | Nowhere. Uploads are refused with a message saying what to set. **This is a supported state** — the portal, the invitation, the certificate and every screen are complete with an empty media library. |
+| `filesystem` | A directory named by `MEDIA_DIR`. Correct on a machine you control. **Wrong on anything serverless**, where the disk is gone on the next request. |
+| `object-store` | An S3-compatible bucket. The right answer for a serverless or containerised deployment, which is most of them. |
+
+For `object-store`, five variables, and it is all or nothing — the application
+**refuses to start** if some are set and others are not, rather than starting,
+looking configured, and failing on the first upload.
+
+| Variable | Example |
+|---|---|
+| `MEDIA_S3_ENDPOINT` | `https://<account>.r2.cloudflarestorage.com` — scheme and host only, no path |
+| `MEDIA_S3_REGION` | `auto` for R2, the real region on AWS |
+| `MEDIA_S3_BUCKET` | `flipit-spv-media` |
+| `MEDIA_S3_ACCESS_KEY_ID` | from the provider |
+| `MEDIA_S3_SECRET_ACCESS_KEY` | from the provider |
+
+**The bucket must be private.** Nothing in this application makes an object
+public. Every byte an investor reads is served through a route that checks the
+session first — a public bucket would put a document package on the open
+internet behind nothing but an unguessable name, which is a different security
+model from the one the rest of this application uses.
+
+**Scope the key pair to the one bucket**, with put, get and delete and nothing
+else. It is never logged, never written to the database and never returned to a
+browser.
+
+**The bucket does not travel with `pnpm backup`.** The backup covers the
+database, which holds the rows that *name* the objects. Moving deployments means
+copying the bucket separately, or pointing the new deployment at the same one —
+the second is easier and is what §4.3 assumes. A database restored without its
+bucket produces rows whose files are missing, which shows up as broken images
+and a document that will not download.
+
+`pnpm verify:object-store` exercises the whole path — signing, put, get, delete,
+retry, and the refusals — against a signature-checking server on localhost. It
+does not talk to a real provider; the first upload after configuring one is
+still the moment to watch.
 
 ---
 
@@ -236,12 +282,11 @@ Worth knowing before you meet one at speed.
 
 ## 7. Not built, and what it would need
 
-- **Images and video (§13.2, §13.3).** WP15, deferred: no blob store has been
-  chosen. Netlify Blobs, S3 or R2 all fit. Nothing else depends on it.
-- **Two-factor sign-in.** §2 makes it mandatory before the production deployment
-  sends anything real, so it is a **release gate rather than an optional
-  extra**. The database is ready; there is no code behind it. This blocks the
-  first real send, not the migration.
+- **A real object store, actually talked to.** The adapter is built, signed and
+  tested (§1.1), but every test of it answers from a server on localhost. AWS,
+  R2 and MinIO have not been on the other end of it. Configure one, upload one
+  image, and watch it — that is the whole outstanding step, and it is minutes
+  rather than work.
 - **A managed queue.** Reminders run from `pnpm reminders:run`, which needs a
   scheduler. Anything that can run a command on a cadence will do; §18 suggests
   a managed queue and at this scale a scheduled task is enough.

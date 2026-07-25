@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Object store behind the media seam | 25 Jul session C | 2026-07-25 23:10 | `src/lib/media/store.ts`, a new `src/lib/media/s3.ts`, `src/lib/env.ts`, `.env.example`, `scripts/verify-object-store.ts` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -44,7 +44,12 @@ generated from the tests rather than typed, so it is the one to trust.
 
 Document packages — §5's status 3 — landed after WP15 and are done too.
 
-What is left is not a package. The open items are listed under Uncertain at the
-end of each PROGRESS.md section; the largest are an object-store adapter behind
-the media seam, a picker for library images in the email template editor, and
-versioning for a corrected document.
+**The object store behind the media seam is done** — `ObjectMediaStore` is a
+real S3-compatible client as of 25 July, with `pnpm verify:object-store` behind
+it. Nobody has pointed it at a real provider yet; that is a configuration step,
+not a package.
+
+What is left is not a package either. The open items are listed under Uncertain
+at the end of each PROGRESS.md section. The largest now are versioning for a
+corrected document, range requests on a video, and a reconciliation pass for
+objects whose rows are gone.

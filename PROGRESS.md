@@ -1197,3 +1197,176 @@ The address shown is the absolute one. An email client has no idea where the mes
 **Decisions:** none beyond the above. **Deviations:** none. **Checklist:** point 2 — the compliance gate is unmodified, and this change is the reason it stays sufficient: three source tests assert that no image variable was added to the resolver, that the panel offers an address rather than a placeholder, and that the screen says a fresh approval is required.
 
 **Uncertain:** §11.5 asks the invitation to be *"legible with images blocked"*, and nothing enforces that a template with an image still is. The hint asks for a real `alt` on every one; a pre-flight item that rendered the text part and checked it still carried the whole message would be the enforcement, and does not exist.
+
+---
+
+## The object store — the seam WP15 left with nothing behind it
+
+Not a numbered work package. Every package 0–20 is complete; this is the largest
+of the items left under Uncertain, and the only one that stands between this
+application and a deployment that can keep a file.
+
+`store.ts` has declared an object store since WP15 and refused to be one. The
+refusal was the right thing to ship — a stub that returned success would have
+lost an investor's subscription agreement quietly — but it left the filesystem
+store as the only working option, and a filesystem store needs a disk that
+survives a restart. Serverless hosting does not have one. This is the class the
+refusal was standing in for.
+
+**Built.**
+
+- **`lib/media/s3.ts`** — AWS Signature Version 4 and three verbs against any
+  S3-compatible endpoint. Signing is pure and takes the clock as a parameter, so
+  the canonical request, the string to sign and the finished `Authorization`
+  header are all pinned character-for-character in tests.
+- **`ObjectMediaStore`** now wraps it, applying the same `isValidStorageKey`
+  check the filesystem store applies, and answering `null` for an absent object
+  so that the two implementations are indistinguishable to a caller.
+- **Five environment variables**, validated at boot: selecting the object store
+  with some of them set is a refusal to start.
+- **`pnpm verify:object-store`** — 36 checks against a real socket and the real
+  database, running the real `ingest`.
+- **`DEPLOYMENT.md §1.1`**, and §7 rewritten: it still listed WP15 and two-factor
+  as unbuilt, both of which landed days ago.
+
+**Decisions.**
+
+- ***Written by hand, not installed.*** The AWS SDK is tens of megabytes and
+  brings a credential-resolution chain that reads instance metadata, shared
+  config files and environment variables this application deliberately does not
+  use — a second way for a credential to get in, on the path that handles an
+  investor's documents. What is actually needed is three verbs and one signature
+  algorithm, and the algorithm is forty lines. There is no new dependency.
+- ***Path-style addressing, not virtual-host.*** `endpoint/bucket/key`. Virtual
+  host style needs a DNS entry and a certificate per bucket and is the one of
+  the two that S3, R2, MinIO and Backblaze do *not* all support identically.
+- ***Boot-time validation, not upload-time.*** Selecting the object store with
+  three of the five variables set used to be the kind of deployment that starts,
+  shows a configured store on the Media screen, and refuses the first upload.
+  The conventions say the app refuses to start when a required variable is
+  missing; this makes "required" conditional on `MEDIA_STORE` and keeps the
+  behaviour.
+- ***The endpoint must be scheme and host only.*** A trailing path segment would
+  silently address a different prefix, and every key stored before somebody
+  noticed would be unreadable afterwards. Refused at boot with a message saying
+  why.
+- ***A 404 is not automatically an absence.*** This is the one that matters. A
+  deployment pointed at a bucket that does not exist answers 404 to everything,
+  and a client reading every 404 as "not there" would show an empty media
+  library and a missing document on every investor's record — a portal that
+  looks like it has lost its files rather than one that is misconfigured. The
+  body is read for the error code: `NoSuchKey`, or an empty body, is absence;
+  `NoSuchBucket` or anything else is an error. Empty is treated as absence
+  because some stores answer a 404 with no body at all, and refusing on silence
+  would break normal "not there" on those.
+- ***Only the error code comes out of an error body, and only letters of it.***
+  An S3 `SignatureDoesNotMatch` body quotes the canonical request and the string
+  that was signed back at you. That is not the secret, but it is a rendering of a
+  request that carried one. The pattern admits `[A-Za-z]{1,64}`, so the worst a
+  hostile endpoint can put into an exception somebody prints is a made-up code.
+- ***Redirects are refused.*** `redirect: 'error'` on every request. A redirect
+  off a signed request goes somewhere the signature was not computed for, and if
+  the endpoint is misconfigured that somewhere is a stranger holding the bytes.
+- ***Three attempts, on 5xx and on silence only.*** All three verbs are
+  idempotent — the same bytes to the same key, and a delete of something absent
+  is the state that was wanted — so a retry cannot do half of something twice. A
+  4xx is an answer and is not retried.
+- ***`get` returns `application/octet-stream` from both stores*** rather than the
+  type the object store echoes back. The type is a column on the row, sniffed
+  from the file's own leading bytes at ingest; what a store echoes is whatever
+  was declared to it, which is the thing ingest exists to distrust.
+- *The bucket must be private, and nothing in the code makes an object public.*
+  Written into `.env.example` and the runbook, because it is the one part of this
+  that the application cannot enforce for itself.
+
+**Deviations.** No migration — no schema change. Nothing outside `lib/media`,
+`lib/env.ts` and the two documents was touched; the ingest, the routes, the
+screens and the audit calls are unchanged, which is what the seam was for.
+
+**A bug this found in code that was already green.** The parity suite runs both
+implementations through the same expectations, and the filesystem store failed
+one: `get` and `remove` resolved the key *inside* the `try`, so a malformed key
+was swallowed by the same `catch` that turns a missing file into `null`. A caller
+asking about a key that could not exist was told "not there" rather than "that is
+not a key", and the object store — which refuses — behaved differently for the
+same input. Both now resolve before the try. A seam whose two implementations
+disagree is not a seam, and no single-implementation test would have caught it.
+
+**Checklist.** Points 8 and 12 are this change's; the rest were re-checked
+because it touches the path that stores an investor's documents.
+
+1. **No monetary value is a JavaScript number.** Nothing here handles money; a
+   byte count and a retry delay are not monetary values and are never used as
+   ones. The existing test asserting `parseFloat` and `.toNumber(` appear in no
+   media module now covers `s3.ts` too.
+2. **No send path bypasses anything.** Nothing here sends. The existing test
+   asserting no media module names `sendOneEmail`, `SmtpTransport` or
+   `assertCanSend` covers the new module. `verify:deployment` re-run — 41 checks
+   pass.
+3. **A jurisdiction block still stops one recipient.** Untouched.
+4. **The operator still cannot record, amend or void an approval.** Untouched.
+5. **No investor-facing response reveals another investor.** The store is keyed
+   by an unguessable storage key and knows nothing else; the existing boundary
+   test asserting no media module imports an investor table or session now covers
+   `s3.ts`. `verify:media` re-run with two investors present — 31 checks pass;
+   `verify:documents` re-run — 28 checks pass.
+6. **Claim and sign-in tokens are single-use, hashed and expiring.** Untouched.
+7. **Suspension revokes sessions and refuses new links.** Untouched — the store
+   is below the layer that decides who may read.
+8. **No log line carries a token, a body or a key.** `s3.ts` contains no
+   `console` call at all, and a test asserts it. `describe()` carries the
+   endpoint and the bucket and is asserted not to contain either credential. A
+   thrown error is asserted to contain no secret, no access key id, no
+   `Signature=`, no `AWS4-HMAC` and no URL. An error body reaches the message
+   only as an error code matched by `[A-Za-z]{1,64}`, with a test feeding it a
+   body containing a `StringToSign` block and asserting none of it survives. The
+   signature comparison in the verifier is `timingSafeEqual`.
+9. **The verification page is still the only indexable route.** No new route.
+10. A published Q&A entry carries nothing identifying. Untouched.
+11. The AI path cannot change a calculated figure. Untouched.
+12. **The app still refuses to send when its base URL is not the production
+    value.** Untouched, and `verify:deployment` re-run to confirm — including
+    that a real invitation is refused off the production deployment while a test
+    send to the operator is still allowed.
+
+**Verified.** `pnpm verify:object-store` — 36 checks, against a server on a real
+socket that re-derives every signature from the secret and refuses anything it
+cannot reproduce: the stripped file in the bucket and not the uploaded one, the
+location string the upload carried absent from the stored bytes, the original
+never written at all, a bucket that does not exist raising rather than reading
+as an empty library, a wrong secret refused with the code and not the body, two
+transient failures retried into one stored object rather than three, and both
+stores returning identical bytes, identical content types, identical nulls and
+identical refusals for a traversal key — which the object store refuses before a
+request leaves the process. `pnpm test` — 1711 tests, 89 files. `verify:media`,
+`verify:documents` and `verify:deployment` all re-run green.
+
+**Uncertain.**
+
+- ***No real provider has ever answered this client.*** Every test and every
+  check answers from `127.0.0.1`. The signing chain is anchored to AWS's own
+  published signing-key vector, so the derivation is theirs rather than merely
+  self-consistent, and the canonical request is pinned character-for-character —
+  but "correct by construction and pinned" is not "S3 accepted it". The first
+  upload against a real bucket is a real test and nobody has run it. This is
+  written into `DEPLOYMENT.md §7` and `TEST_ME.md` in those words.
+- *There are no range requests, so a video still downloads whole before it
+  plays.* The object store makes them possible for the first time — `Range` on a
+  GET is a header this client could pass through — and it is still not done. It
+  is the next thing to write in this file if a longer video ever matters.
+- *Nothing prunes an object whose row is gone.* Removing an asset removes both,
+  but a database restored from a backup taken before an upload leaves the object
+  behind with nothing naming it. Harmless and invisible, and it is storage
+  somebody pays for. A reconciliation script is perhaps thirty lines and does not
+  exist.
+- *The bucket is not covered by `pnpm backup`.* The runbook now says so plainly.
+  Making the backup carry the objects is a real piece of work and arguably the
+  wrong one — pointing a new deployment at the same bucket is easier and is what
+  §4.3 assumes — but a database restored without its bucket produces rows whose
+  files are missing, and only the runbook stops that happening.
+- *A key pair is an environment variable rather than an encrypted row.* That
+  matches the convention for every other secret this application boots with, and
+  it is a different treatment from the SMTP app password and the OpenAI key,
+  which are entered through the UI and encrypted at rest. The distinction is
+  deliberate — one is set by whoever deploys, the other by whoever signs in — but
+  it is a distinction worth knowing about rather than discovering.

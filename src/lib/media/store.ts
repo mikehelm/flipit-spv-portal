@@ -27,6 +27,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { env } from '@/lib/env'
+import { S3ObjectClient } from './s3'
 
 export interface StoredObject {
   bytes: Uint8Array
@@ -91,8 +92,16 @@ class FilesystemMediaStore implements MediaStore {
   }
 
   async get(key: string): Promise<StoredObject | null> {
+    // Resolved OUTSIDE the try, deliberately. A malformed key used to be
+    // swallowed by the same catch that turns a missing file into null, so a
+    // caller asking about a key that could not exist was told "not there"
+    // rather than "that is not a key" — and the object store, which refuses,
+    // then behaved differently from this one for the same input. A seam whose
+    // two implementations disagree is not a seam.
+    const file = this.resolve(key)
+
     try {
-      const bytes = await readFile(this.resolve(key))
+      const bytes = await readFile(file)
       // The content type is not read back from disk. It is a column on the
       // row that names this key, sniffed at ingest, and the caller has it.
       return { bytes: new Uint8Array(bytes), contentType: 'application/octet-stream' }
@@ -102,8 +111,10 @@ class FilesystemMediaStore implements MediaStore {
   }
 
   async remove(key: string): Promise<void> {
+    const file = this.resolve(key)
+
     try {
-      await rm(this.resolve(key))
+      await rm(file)
     } catch {
       // Removing something that is not there is the state we wanted.
     }
@@ -111,39 +122,53 @@ class FilesystemMediaStore implements MediaStore {
 }
 
 /**
- * The object-store implementation. Declared, selectable, and not yet wired.
+ * The object store. Selected by configuration, and now actually one.
  *
- * It exists so that "which store" is configuration rather than a code change,
- * and so that the decision recorded in PROGRESS.md has somewhere to land. Every
- * method refuses with the same sentence, naming the variables a deployment
- * would have to set. A stub that returned success would be worse than no stub
- * at all.
+ * This used to be a class that refused with a message naming what was missing,
+ * which was the right thing to ship and the wrong thing to leave. It is the
+ * implementation a deployment without a persistent disk needs, and every
+ * deployment this application is likely to get is one of those.
+ *
+ * It is deliberately a thin wrapper. The key validation is the same call the
+ * filesystem store makes, and for the same reason: a key that cannot express a
+ * slash cannot address a bucket it was not given, and cannot leave the prefix
+ * that names it. `get` returns null for an absent object rather than throwing,
+ * so the two stores are indistinguishable to a caller who is asking whether
+ * something is there.
  */
 class ObjectMediaStore implements MediaStore {
   readonly kind = 'object-store' as const
 
+  constructor(private readonly client: S3ObjectClient) {}
+
   describe(): string {
-    return 'Object store — selected but not yet wired up'
+    return `Object store at ${this.client.describe()}`
   }
 
-  private refuse(): never {
-    throw new Error(
-      'The object store is selected but has no client behind it yet. Set MEDIA_STORE ' +
-        '"filesystem" with MEDIA_DIR on a deployment that has a persistent disk, or finish ' +
-        'the object-store adapter before selecting it. Nothing has been stored.',
-    )
+  private checked(key: string): string {
+    if (!isValidStorageKey(key)) {
+      throw new Error('Refusing to touch a storage key that is not a storage key.')
+    }
+    return key
   }
 
-  async put(): Promise<void> {
-    this.refuse()
+  async put(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
+    await this.client.putObject(this.checked(key), bytes, contentType)
   }
 
-  async get(): Promise<StoredObject | null> {
-    this.refuse()
+  async get(key: string): Promise<StoredObject | null> {
+    const bytes = await this.client.getObject(this.checked(key))
+    if (bytes === null) return null
+
+    // Deliberately not the response's own content type, so that both stores
+    // answer identically. The type is a column on the row that names this key,
+    // sniffed from the bytes at ingest; what an object store echoes back is
+    // whatever was declared to it, which is the thing ingest refuses to trust.
+    return { bytes, contentType: 'application/octet-stream' }
   }
 
-  async remove(): Promise<void> {
-    this.refuse()
+  async remove(key: string): Promise<void> {
+    await this.client.deleteObject(this.checked(key))
   }
 }
 
@@ -164,7 +189,18 @@ export function mediaStore(): MediaStore | null {
   const configured = env().MEDIA_STORE
 
   if (configured === 'object-store') {
-    cached = new ObjectMediaStore()
+    // Every one of these is guaranteed non-empty by the environment schema:
+    // selecting the object store without them is a refusal to start, not a
+    // client that gets built and fails on first use.
+    cached = new ObjectMediaStore(
+      new S3ObjectClient({
+        endpoint: env().MEDIA_S3_ENDPOINT,
+        region: env().MEDIA_S3_REGION,
+        bucket: env().MEDIA_S3_BUCKET,
+        accessKeyId: env().MEDIA_S3_ACCESS_KEY_ID,
+        secretAccessKey: env().MEDIA_S3_SECRET_ACCESS_KEY,
+      }),
+    )
   } else if (configured === 'filesystem') {
     cached = new FilesystemMediaStore(env().MEDIA_DIR)
   } else {

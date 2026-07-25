@@ -421,7 +421,15 @@ Every image is served from this application's own address, at a long random URL 
 
 **Using one in the invitation email.** The **Email templates** screen lists every library image with the exact address to paste into the template. It is a copy-and-paste rather than a button on purpose: putting an image in the template changes the template, which changes the hash the compliance approval covers, so **sending is blocked until a fresh approval is recorded**. That is the right behaviour — an approval has to cover the document that actually goes out, images included — and the screen warns you before you do it rather than after.
 
-**One thing to know before you start:** by default there is nowhere to put a file, and the screen says so plainly rather than failing. Set `MEDIA_STORE="filesystem"` and `MEDIA_DIR` in `.env` to a folder, and restart. That is deliberate — a filesystem needs a disk that survives a restart, and the hosting this eventually runs on may not have one, so the application refuses rather than storing files somewhere they will vanish from. Everything else in the portal works perfectly with an empty library.
+**One thing to know before you start:** by default there is nowhere to put a file, and the screen says so plainly rather than failing. Everything else in the portal works perfectly with an empty library. There are two ways to give it somewhere, and which one is right depends on where this is running.
+
+**On your own machine**, set `MEDIA_STORE="filesystem"` and `MEDIA_DIR` in `.env` to a folder, and restart. Files go in that folder.
+
+**On a real deployment**, set `MEDIA_STORE="object-store"` and point it at a private storage bucket — Amazon S3, Cloudflare R2, Backblaze, or anything that speaks the same language. This is new, and it is the piece that was missing: most modern hosting has no permanent disk, so a file written to one is gone by the next page load. A bucket is somewhere files actually stay. `DEPLOYMENT.md §1.1` lists the five settings.
+
+Two details worth knowing about it. **The bucket must be private** — nothing here ever makes a file public, and every image or document an investor sees is handed to them by this application after it has checked who they are. And **if you set only some of the five settings, the application refuses to start**, rather than starting, looking fine, and failing the first time somebody uploads something.
+
+**The honest caveat:** the bucket code has been tested hard, but only against a stand-in server running on the same machine. Nobody has yet pointed it at a real Amazon or Cloudflare bucket. When somebody does, upload one image and check it appears — that is the whole test, and it is the last unproven step in this part of the system.
 
 ---
 
@@ -486,7 +494,8 @@ Worth trying, because these are all meant to work:
 ## What is not built yet
 
 - **Versioning for a corrected document.** Replacing an issued document is a withdrawal and a fresh upload, and the two are connected only by the audit log. The participation certificate does keep real version history, because §5.1 asks for it.
-- **A durable place to put files on a real deployment.** The filesystem store works and needs a disk that survives a restart. An object store is selectable and refuses until somebody writes the client behind it — roughly one class.
+- **A real storage bucket, actually connected.** The code to use one is now written and tested (see "The media library"), but only against a stand-in on the same machine. Pointing it at a real Amazon or Cloudflare bucket and uploading one image is the last step, and it is minutes rather than work.
+- **A video that plays before it has finished downloading.** A published video is sent as one whole file, so a browser waits for all of it. Fine for the two-minute personal video this was built for; wrong for anything long.
 
 ## The round, and closing it
 

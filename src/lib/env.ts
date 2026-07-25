@@ -69,6 +69,79 @@ const schema = z.object({
    */
   MEDIA_STORE: z.enum(['', 'filesystem', 'object-store']).default(''),
   MEDIA_DIR: z.string().default('.media'),
+
+  /**
+   * The S3-compatible object store, for `MEDIA_STORE="object-store"`.
+   *
+   * Ignored entirely for any other value of MEDIA_STORE, and required for that
+   * one — see the refinement below. The application refuses to start rather
+   * than refusing at upload time, which is the difference between finding out
+   * on deployment and finding out when somebody tries to put a document on an
+   * investor's record.
+   *
+   * Region defaults to `auto` because Cloudflare R2 wants exactly that and the
+   * others do not care what is in the signature scope as long as it matches
+   * the bucket's. A deployment on AWS proper must set its real region.
+   */
+  MEDIA_S3_ENDPOINT: z.string().default(''),
+  MEDIA_S3_REGION: z.string().default('auto'),
+  MEDIA_S3_BUCKET: z.string().default(''),
+  MEDIA_S3_ACCESS_KEY_ID: z.string().default(''),
+  MEDIA_S3_SECRET_ACCESS_KEY: z.string().default(''),
+})
+
+/**
+ * The object store is all-or-nothing.
+ *
+ * Selecting it with three of the five variables set is the failure this is
+ * here to stop: it would start, look configured on the settings screen, and
+ * refuse the first upload. The endpoint is additionally required to be an
+ * absolute URL with no path, because the client appends `/bucket/key` to it
+ * and a trailing path segment would silently address the wrong prefix.
+ */
+const withObjectStore = schema.superRefine((value, ctx) => {
+  if (value.MEDIA_STORE !== 'object-store') return
+
+  const required = [
+    'MEDIA_S3_ENDPOINT',
+    'MEDIA_S3_BUCKET',
+    'MEDIA_S3_ACCESS_KEY_ID',
+    'MEDIA_S3_SECRET_ACCESS_KEY',
+  ] as const
+
+  for (const name of required) {
+    if (value[name] === '') {
+      ctx.addIssue({
+        code: 'custom',
+        path: [name],
+        message: `${name} is required when MEDIA_STORE is "object-store"`,
+      })
+    }
+  }
+
+  if (value.MEDIA_S3_ENDPOINT !== '') {
+    let parsed: URL | null = null
+    try {
+      parsed = new URL(value.MEDIA_S3_ENDPOINT)
+    } catch {
+      parsed = null
+    }
+
+    if (!parsed || !/^https?:$/.test(parsed.protocol)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['MEDIA_S3_ENDPOINT'],
+        message: 'MEDIA_S3_ENDPOINT must be an absolute http or https URL',
+      })
+    } else if (parsed.pathname !== '/' || parsed.search !== '') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['MEDIA_S3_ENDPOINT'],
+        message:
+          'MEDIA_S3_ENDPOINT must be scheme and host only — the bucket and key are appended to it',
+      })
+    }
+  }
 })
 
 type Env = z.infer<typeof schema> & {
@@ -89,7 +162,7 @@ function splitList(value: string): string[] {
 }
 
 function load(): Env {
-  const parsed = schema.safeParse(process.env)
+  const parsed = withObjectStore.safeParse(process.env)
 
   if (!parsed.success) {
     const detail = parsed.error.issues
