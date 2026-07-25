@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| EBML stripping for an uploaded WebM | 25 Jul session C | 2026-07-25 23:45 | `src/lib/media/strip.ts`, `src/lib/media/fixtures.ts`, `src/lib/media/strip.test.ts`, `scripts/verify-media.ts` |
 
 ## Done, so nobody starts it again
 
