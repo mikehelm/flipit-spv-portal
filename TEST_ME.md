@@ -135,7 +135,8 @@ The link in an invitation goes to `/portal/claim/…`. Opening it is what verifi
 
 - Open the same claim link twice. It works once.
 - Make up a link and open it. It fails with exactly the same page as an expired one, a spent one, and one belonging to somebody who has been suspended. There is no wording anywhere that confirms an address exists.
-- At `/portal/signin`, ask for a link with an address that has a record, and then with one that does not. The answer is the same sentence both times — **and takes the same time**. That second part matters more than it sounds: the form is public and nobody has to be signed in to use it, so if a known address came back faster than an unknown one, anyone could work out who is on the list by timing it.
+- At `/portal/signin`, ask for a link with an address that has a record. **The email now actually arrives** — it did not until recently, which meant every investor whose session lapsed was told a link was on its way and got nothing. It carries the link, how long it lasts, and a line saying that if they did not ask for it they can safely ignore it. No name, no amount, no mention of the offer: a sign-in email lands in a mailbox that may be the reason the person is signing in again, and it is the message an attacker would most like to trigger for somebody else's address.
+- Then ask with an address that has no record. The answer is the same sentence both times — **and takes the same time**. That second part matters more than it sounds: the form is public and nobody has to be signed in to use it, so if a known address came back faster than an unknown one, anyone could work out who is on the list by timing it.
 - Suspend an investor, from **Investors** (see below). Their session dies on their very next click, their unused links stop working, and asking for a new one is accepted politely and produces nothing.
 - Close an investor's account. By default they can still sign back in and read their own record — an investor who has sent money should not lose the record of it.
 - Look at a timeline step that has not been reached. It says "Not yet reached. There is nothing for you to do at this stage." and shows no amount, no date and no blank where one would go.
@@ -305,7 +306,6 @@ Issuing an offer does not send anything and does not take anybody off the regist
 ## What is not built yet
 
 - **Documents, images and video.** All need somewhere to store a file, which has not been chosen yet. Nothing else depends on them.
-- **The email carrying a sign-in link.** The link is created correctly; sending it is part of a later package.
 - **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet.
 
 ## The round, and closing it

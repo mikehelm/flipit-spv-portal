@@ -707,3 +707,35 @@ The admin path has done this correctly since WP2: it always verifies a hash, rea
 - The floor is 150ms. It has to exceed the slowest legitimate path or it achieves nothing for the case that matters most; four round trips to a same-region Postgres fits inside it comfortably, but a database on the far side of an ocean would not. Worth re-measuring once the production database is real.
 - There is still no rate limit on the portal sign-in form. The admin form has progressive throttling by address and by IP; the investor form has none. With the timing closed there is nothing obvious left to learn from sampling it, but a bare public form that mints tokens deserves the same treatment, and that is a small package rather than a line.
 - Two related gaps found in the same audit and **not** fixed here, because both are known and documented rather than accidental: the sign-in link is minted and never emailed, so a returning investor is told a link is on its way and receives nothing; and re-sending an invitation leaves the previous claim token live, where the sign-in path revokes the old one first. The first is the larger of the two — it locks out every investor whose session lapses — and it is a small, self-contained package.
+
+---
+
+## Hardening — the sign-in link is now actually sent
+
+Not a work package. The third defect from the same audit, and the one an investor would hit first.
+
+`requestSignInLink` has minted a token, hashed it and stored it since WP8. Nothing sent it. So the portal told every returning investor *"If that address has a record with us, a sign-in link is on its way"*, wrote a row that expired unused forty-five minutes later, and sent nothing. **Anybody whose session lapsed was locked out by a sentence that was not true**, with no way back in short of the operator issuing a fresh invitation.
+
+**Built:** `lib/portal/sign-in-email.ts`, the message, and `lib/portal/send-sign-in-link.ts`, the one function that delivers it.
+
+**It is not compliance-gated, and that is a decision rather than an omission.** §8.2's approval covers the invitation and the reminder — the two emails that communicate an offer of securities. This one says somebody asked to sign in and here is the door. It is the same category as the update notification (§6) and the Q&A reply (§6.7.6). Registering it would mean one word changed in an operational email voids the approval that lets invitations go out, which is not a stricter reading of §8.2 but a broken one. A test asserts the module hashes no template and names no template kind.
+
+**Decisions:**
+
+- *It carries the link and nothing else.* `buildSignInEmail` takes two links and a duration, and has no parameter for a name, an amount, a percentage, a deadline or the round. Two reasons, and the second is the one that decided it: a sign-in email lands in a mailbox that may be the very reason the person is signing in again, and it is the message an attacker would most like to trigger for somebody else's address. Neither is a good place for the terms of a private placement. A test asserts the arity, that the visible text carries no digit outside the link and the stated expiry, and that the words "allocation", "deadline", "invitation" and "SPV" appear nowhere once the links are stripped.
+- *The lead says "Somebody asked", not "You asked".* An unrequested sign-in email is exactly what an attempt on somebody's account looks like from the inside, and the recipient is the only person positioned to notice. "You asked for this" would be a false statement in precisely the case that matters. It is followed by a plain line saying that ignoring it is safe and the link expires on its own — more use to them than any warning the application could raise on its own.
+- *The address is never a parameter.* `deliverSignInLink` takes an account id and looks the address up. This is the one email an unauthenticated stranger can cause to be sent, and the only thing between that and an open relay is that the recipient cannot come from the request. A test asserts there is no `email: string` in the module's signatures and no `to: input.…` anywhere in it.
+- *Delivery runs in `after()`, once the response has gone.* This is load-bearing rather than a performance nicety. The previous commit padded every path through `requestSignInLink` to a fixed floor so a known address cannot be told from an unknown one by timing; awaiting an SMTP round trip in the action would have undone all of it, because the issued path would take seconds and the other two would not. That is a far louder signal than the one just closed. The sentence goes back immediately and identically; the email follows. A test asserts `deliverSignInLink` appears nowhere in the action body before the `after` callback.
+- *A failure is silent to the investor and loud in the audit log.* They have already been told the one sentence §4.1 requires, and telling them the send failed would confirm the address exists — which is the whole thing the identical sentence exists to hide. `portal.sign_in_link_delivered` and `portal.sign_in_link_not_delivered` record which it was, with the failure class and the attempt count and never the address, the token or the body.
+
+**Checklist:** points 2, 5, 6 and 8 are this change's.
+
+2. No send path bypasses anything. It goes through `sendOneEmail`, whose gate covers the credential (§8.1), the service mode (§7) and the deployment (§18.1); a test asserts the module constructs no transport and imports no mail library. It is deliberately outside the compliance approval, for the reason above.
+5. No investor-facing response reveals another investor. The action still has exactly one return carrying one sentence, asserted by a test, and the delivery outcome cannot reach it.
+6. The token is single-use, hashed at rest and expiring — unchanged from WP8. It now travels in exactly one place, the email, and a test asserts it reaches no audit metadata.
+8. No log line carries a token, an address or a body. Asserted against every `metadata:` block in the module.
+
+**Uncertain:**
+
+- Forty-five minutes is WP8's number and it is short for an email. It is right for a link that is one click from being reissued, but somebody who asks from a phone and opens it on a laptop an hour later gets a dead link and has to ask again. Worth a look once real people are using it.
+- `after()` runs the send on the same invocation once the response has flushed. On Netlify that is supported, but it is not a queue: if the function is killed between the response and the send, the link is minted and never delivered and the investor is told it is on its way. The audit log shows nothing at all in that case, which is the one failure mode here that is silent in both directions. A retry surface — the operator seeing "asked for a link, never delivered" — would close it, and that is a small package rather than a line.
