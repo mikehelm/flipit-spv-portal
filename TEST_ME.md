@@ -2,7 +2,7 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 14 and 16 to 19 are complete. 15 — images and video — is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: work packages 0 to 14 and 16 to 20 are complete — every package except 15, images and video, which is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
 The most recent package went over every screen for how it looks and how it reads: the brand colours, how it behaves on a phone, and whether somebody using a keyboard or a screen reader can get around it. There is a section on that below, and it is worth ten minutes with your phone.
 
@@ -349,10 +349,35 @@ It is worth opening even if you never run a test, because it is the honest accou
 
 The document is generated from the tests rather than written alongside them, so it cannot quietly go out of date. A test reads the specification itself and fails if the wording here drifts from the wording there.
 
+## Putting it somewhere real
+
+**`DEPLOYMENT.md` in this repository is the runbook.** It is written to be followed by one person, in order, on the day: what to set, what to check, what to re-enter, and what each refusal means when you meet one.
+
+The short version. It runs in two places, in this order:
+
+1. **Testing, at `mikehelm.com/SPV`** — under a folder rather than at its own address.
+2. **Production, at `spv.flipit.com`** — before a single real invitation goes out.
+
+The order is not a preference. **Every portal link contains the address it was issued from**, so a link created at the testing address stops working the moment the application moves, leaving somebody holding a dead link to an investment offer. The application refuses to send a real invitation until it is at the production address, and says so plainly. Test messages to your own address keep working in both places.
+
+Three things you can check yourself:
+
+```bash
+pnpm verify:deployment   # runs it under the folder and checks every link
+pnpm verify:restore      # backs up, restores into a spare database, compares
+pnpm backup              # writes a backup file
+```
+
+**The restore is the one worth caring about.** A backup nobody has restored is just a file. That command does the whole round trip and then reads the figures back out — a figure that came back as 4750.5 instead of 4750.50 would be caught, and a row count would never notice.
+
+**A privacy policy now lives at `/privacy`.** It is public, needs no sign-in, and has to exist before Google will approve the account that sends the invitations. It describes what is held and what is not, and if you are trying to work out whether a message is genuine it points you at the verification page rather than trying to answer.
+
+**One thing found while doing this, worth knowing:** the verification page — the one an investor is meant to be able to find — was being hidden from search engines by a mistake in the configuration, and had been for several packages. It is fixed, and there is now a check that asks a running copy of the application rather than reading the configuration file, because reading the file is what missed it.
+
 ## What is not built yet
 
 - **Documents, images and video.** All need somewhere to store a file, which has not been chosen yet. Nothing else depends on them.
-- **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet.
+- **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet. **This is the last thing standing between the build and a real send.**
 
 ## The round, and closing it
 

@@ -276,15 +276,18 @@ _No automated check._
 ## 43. The anti-phishing page is publicly reachable without sign-in, is the only indexed route, and names the exact sending address and link domain.
 
 - `src/lib/verify/verify.test.tsx` — unit — "renders without an authentication dependency and uses configured facts"
-- `src/lib/verify/robots.test.ts` — unit — "opts exactly one page into indexing"
+- `src/lib/verify/robots.test.ts` — unit — "opts exactly two pages into indexing, and names them"
 - `src/lib/verify/robots.test.ts` — unit — "allows the verification page back in"
 - `scripts/verify-viewport.ts` — browser — "the verification page is reachable with no session at all"
+- `scripts/verify-deployment.ts` — database — "${BASE_PATH}${path} is indexable"
 
 ## 44. The app refuses to send real invitations when its configured base URL is not the production value.
 
 - `src/lib/email/transport/guard.test.ts` — unit — "4. blocks when this is not the production deployment"
 - `src/lib/env.test.ts` — unit — "marks the testing deployment as not production"
 - `src/lib/env.test.ts` — unit — "production deployment guard (BUILD_SPEC §18.1, AC44)"
+- `scripts/verify-deployment.ts` — database — "a real invitation is refused off the production deployment"
+- `scripts/verify-deployment.ts` — database — "a test send to the operator is still allowed here"
 
 ## 45. The blocked US recipient produces an explanation to the operator, and can only be unblocked with a recorded approval reference.
 

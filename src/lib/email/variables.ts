@@ -54,6 +54,13 @@ export const PORTAL_CLAIM_PATH = '/portal/claim'
  */
 export const VERIFICATION_PATH = '/verify'
 
+/**
+ * The privacy policy. Public and indexable, because §18 requires it to be
+ * reachable from a Google consent screen before Gmail verification can begin,
+ * and reachable by a reviewer who has no account here.
+ */
+export const PRIVACY_PATH = '/privacy'
+
 /** Absolute URL for a path under this deployment. `APP_URL` includes basePath. */
 export function absoluteUrl(path: string): string {
   const base = env().APP_URL.replace(/\/+$/, '')

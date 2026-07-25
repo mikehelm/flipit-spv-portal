@@ -609,12 +609,13 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
         'src/lib/verify/verify.test.tsx',
         'renders without an authentication dependency and uses configured facts',
       ),
-      unit('src/lib/verify/robots.test.ts', 'opts exactly one page into indexing'),
+      unit('src/lib/verify/robots.test.ts', 'opts exactly two pages into indexing, and names them'),
       unit('src/lib/verify/robots.test.ts', 'allows the verification page back in'),
       browser(
         'scripts/verify-viewport.ts',
         'the verification page is reachable with no session at all',
       ),
+      database('scripts/verify-deployment.ts', '${BASE_PATH}${path} is indexable'),
     ],
   },
   {
@@ -628,6 +629,11 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
       ),
       unit('src/lib/env.test.ts', 'marks the testing deployment as not production'),
       unit('src/lib/env.test.ts', 'production deployment guard (BUILD_SPEC §18.1, AC44)'),
+      database(
+        'scripts/verify-deployment.ts',
+        'a real invitation is refused off the production deployment',
+      ),
+      database('scripts/verify-deployment.ts', 'a test send to the operator is still allowed here'),
     ],
   },
   {

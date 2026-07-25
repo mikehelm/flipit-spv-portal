@@ -857,3 +857,51 @@ The two with none are AC32 and AC33 — the image library and the personal video
 
 - The label extraction is a regular expression over source. It handles `it('…')`, `describe("…")` and `check(\`…\`)` including the multi-line form, and it would miss a label built by concatenation. None exist today; if one appears, the citation will fail and read as a missing test, which is the safe direction but a confusing message.
 - AC30 and AC34 are each half-built, and the table says so in prose. There is no machine-readable notion of "partly covered", so somebody reading only the counts will see 46 of 48 and be slightly too cheerful. The notes are where the truth is.
+
+---
+
+## WP20 — Deployment — done, with one part that cannot be done from here
+
+**Two live defects, both found by serving the application and asking it, and both invisible to every test in the suite.**
+
+**The anti-phishing page was `noindex`.** WP14 exempted `/verify` from the blanket `X-Robots-Tag: noindex` in `next.config.ts`, and its test asserted the exemption was in the returned array. It was. The served response carried `noindex` anyway, because **Next.js applies every matching `headers()` entry in order and a later one overwrites an earlier one for the same key** — so the `/:path*` catch-all won. §15.1's whole purpose is a page somebody can find when they are wondering whether an email is real, and AC43 says in as many words that it "is the only indexed route". It was the only route that was *not* indexed, at the domain root and under the prefix alike, and had been since WP14. The catch-all now excludes the public routes by negative lookahead. The landing page needed its own entry alongside, because a path-to-regexp group will not match an empty segment and `/` fell straight through into no policy at all — which the first run of the new verification caught within a minute of the first fix.
+
+**`robots.txt` named the wrong paths under the prefix.** A path in robots.txt is relative to the *domain root*, never to the application. Served from `mikehelm.com/SPV`, `Disallow: /` asks a crawler to stay away from the whole of mikehelm.com — somebody else's site — and `Allow: /verify` names a path that does not exist. Next.js applies `basePath` to the sitemap URL because it is absolute and does not apply it to the rule strings. Now it does.
+
+There is a larger point in that, and it is in the runbook: **under a path prefix, `robots.txt` is not served from the domain root at all, so no crawler will ever read it.** On the testing deployment the `X-Robots-Tag` header is the only layer keeping the application out of an index — which is exactly the layer that was broken.
+
+**`pnpm verify:deployment` is the new thing.** It builds with `BASE_PATH=/SPV`, serves it, and asks a running server forty-one questions: that every route answers under the prefix and 404s without it; that every `href` and `src` in the delivered HTML carries the prefix; that the session cookie is scoped to the prefix rather than offered to the whole domain; that `X-Robots-Tag` is right on both sides of the public/private line; that the crawler files name prefixed paths; that **a real claim link redeems end to end and the portal renders the investor's own figures**; and that a real invitation is refused off the production deployment while a test send to the operator is not. It rebuilds without the prefix afterwards, so it leaves the tree as it found it.
+
+**Backup and restore, with the restore actually performed.** `pnpm backup` writes a custom-format dump; `pnpm backup restore` reads `RESTORE_DATABASE_URL` and refuses if it is `DATABASE_URL` or unset. `pnpm verify:restore` does the whole round trip against a scratch database and then **reads the figures back out** — `4750.50` still `4750.50` with its trailing zero, six decimal places still six, a non-ASCII name intact, the audit log the same length, and the tables, indexes and unique constraints all present. A restore that dropped the unique index on an investor's address passes every row count and fails on the first duplicate.
+
+**A privacy policy at `/privacy`.** §18: *"A real domain is needed before Gmail verification can start, because the privacy policy has to be hosted on it."* Public, indexable, reads no database, and a test asserts it imports nothing that could hand it an investor record. It is the second of exactly two indexable routes and the test that used to say "exactly one" now says "exactly two" and names both.
+
+**`DEPLOYMENT.md`** is the runbook: environment table for both phases, DNS, the data move, what to re-enter and why, the post-migration checks, taking the old deployment down, backup cadence, and a table of the refusals somebody will meet at speed with what each one means.
+
+**Decisions:**
+
+- *There is no Google OAuth callback to update, and the runbook says so rather than leaving a checklist item nobody can complete.* §18 and §20 both mention one; §2.2 and this build do not have one. Sign-in is email and password in this application's own database. Gmail is still involved — for sending, via an SMTP app password — but that is a credential, not an OAuth grant, and it carries no callback URL. What does survive from §18's Gmail paragraph is the hosted privacy policy, which is built.
+- *The privacy policy is public and indexable, and deliberately not a second anti-phishing page.* §15.1 makes `/verify` the one address an investor is told to type, and a second public page describing the process would dilute that. So this one describes data handling and, where somebody might be trying to work out whether a message is genuine, sends them to `/verify` rather than answering.
+- *The two lists of public routes — `next.config.ts` and `robots.ts` — are asserted to agree.* A route indexable in one and not the other is precisely the defect that shipped in WP14.
+- *The dump is custom-format, not plain SQL.* `pg_restore` can be redirected to another database name and refuses a truncated file outright; `psql < file.sql` replays half of it and leaves a database that looks restored.
+- *Restore reads a second environment variable and refuses to write to `DATABASE_URL`.* Restoring last week over this week is the one mistake here that cannot be undone, and the runbook for that day is read by somebody already having a bad morning.
+- *The verification rebuilds without the prefix when it finishes*, in a `finally`. A build with `/SPV` baked in would silently break `pnpm start` for whoever ran it next.
+- *`ENCRYPTION_KEY` is not carried between deployments by default.* It encrypts the SMTP password and the OpenAI key; moving the data without it leaves rows that decrypt to nothing, and the symptom is "no sending credential is stored" rather than a key error. Re-entering two secrets is two minutes and cannot fail quietly.
+- *The old deployment comes down rather than being left running.* A stale copy of a securities portal that still works is worse than one that does not — it shows an investor a record nobody is updating.
+
+**Deviations:** the Google OAuth callback work in the task list does not apply to this build, for the reason above. Everything else in WP20 is built.
+
+**What cannot be done from here.** §20's *"the runbook has been followed once end to end"* needs DNS for `flipit.com`, a hosting account and a managed Postgres. None exists in this environment. What this package could do instead of claiming it: make every step of the runbook that is checkable by machine into a check that runs — the prefix, the links, the cookie path, the headers, the crawler files, the guard, the backup and the restore — so the parts left for a person are DNS, a certificate, and pressing the buttons.
+
+**Checklist:** points 5, 8, 9 and 12 are this package's.
+
+5. No investor-facing response reveals another investor. The privacy policy reads no database, and a test asserts it imports neither `@/db` nor any portal loader. The deployment verification signs in as one investor and asserts the portal shows that investor's figures.
+8. No log line carries a token, a body or a key. The backup script prints where it read from and where it wrote to, and `redactUrl` removes the password first — with a test for a password containing `@` and `:`, and one asserting that a connection string it cannot parse is printed as nothing at all rather than partially.
+9. **This is the package's finding.** The verification page is now genuinely the indexable route rather than nominally, and the privacy policy joins it deliberately, named in a test. Both are checked against a running server, at the domain root and under the prefix.
+12. The app refuses to send when its base URL is not the production value — now demonstrated on a real deployment under a real prefix, with the test-send carve-out shown still working beside it.
+
+**Uncertain:**
+
+- The negative lookahead in `next.config.ts` is a path-to-regexp construction and it is not obvious. It is commented, and the source test asserts the `(?!` is still there, but the thing that would actually catch its removal is `pnpm verify:deployment` — which is not in `pnpm check` because it builds twice and takes a couple of minutes.
+- Two-factor sign-in is still a release gate and still unbuilt. §2 makes it mandatory before the production deployment sends anything real. It blocks the first real send rather than the migration, and the runbook says so.
+- The backup lands on local disk. Off-host storage is a decision about where, and the runbook says not-the-same-host and that a dump is the most sensitive single artefact this system produces — but nothing enforces it.

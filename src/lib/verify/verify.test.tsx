@@ -33,11 +33,14 @@ describe('/verify', () => {
     })
   })
 
-  it('allows only the verification path in the robots policy', () => {
+  it('allows the two public paths in the robots policy and nothing else', () => {
+    // Two since WP20: §15.1's anti-phishing page, and §18's privacy policy,
+    // which Gmail verification requires to be hosted and reachable by a
+    // reviewer who has no account here.
     expect(buildVerificationRobotsPolicy()).toMatchObject({
       rules: {
         userAgent: '*',
-        allow: ['/verify', '/verify/'],
+        allow: ['/verify', '/verify/', '/privacy', '/privacy/'],
         disallow: '/',
       },
     })
