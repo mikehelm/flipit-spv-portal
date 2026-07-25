@@ -662,3 +662,48 @@ It checks two ways, because either alone is insufficient. **Structurally**, whic
 **Checklist:** points 2 and 12 are this change's. No send path can now reach the transport with a template the recorded approval does not cover, and a reminder that carries a figure is refused with a message naming the offending variable or pattern. 978 tests, typecheck, lint and a production build all clean; the reminder, updates and register database verifications all still pass.
 
 **Uncertain:** nothing writes an `email_templates` row yet, so the first fix is closing a gap ahead of the surface that would open it rather than fixing live breakage. Whoever builds template editing should read `approved-source.test.ts` first — it is the statement of what that surface must not break.
+
+---
+
+## Hardening — suspension was unreachable, and the sign-in form leaked by timing
+
+Not a work package. Two live defects found by auditing the twelve-point checklist across the whole codebase rather than package by package, which is how both survived: neither breaks a test, and both sit in code that reads as finished.
+
+### Nobody could suspend an account
+
+`changeAccountStatus` has existed since WP8 and is correct — it writes the status, revokes every session and every unspent link **in the same function** so a caller cannot do one and forget the other, writes the `AccountStatusEvent` with actor, reason and whether the investor was told, and refuses an operator who tries to archive. **It had no callers.** Not an action, not a route, not a script, not a test. `revokeAllPortalAccess` had none either.
+
+So §4.2's *"Suspension and closure take effect immediately — active sessions are terminated, outstanding links are revoked"* was a true statement about unreachable code, and checklist point 7 could not be exercised. TEST_ME told the reader to suspend an investor and watch their session die on the next click; there was no way to do it. If an investor's mailbox were compromised tomorrow, their thirty-day session and their unspent fourteen-day claim link would both stay live and nothing in the application could stop them.
+
+**Built:** `/investors` — every account with its status, its offer count, whether the mailbox is verified, when they last signed in, and the full status history with each reason and who recorded it. Each row shows **how many live sessions and unspent links the person holds right now**, because §4.2's sentence is worth seeing before the decision rather than after it. The change form asks for the destination, a reason of at least ten characters, whether the investor has been told, and the word `SUSPEND`, `CLOSE` or `ARCHIVE` typed out — a click on the wrong row looks exactly like a click on the right one, and typing the word does not.
+
+**The action adds no rule of its own.** Every refusal comes back from `changeAccountStatus`, including the owner-only check on archiving, so a second caller cannot get a different answer from this one. Re-checking the role in the action would create two places that have to agree, which is one place that eventually will not.
+
+**Verified against the real database, with a second investor present throughout.** Thirty checks in `scripts/verify-lifecycle.ts`: a suspension with no reason is refused *and changes nothing*; an operator cannot archive; two live sessions and two unspent links all die at once; the other investor's two and two are untouched; a suspended account cannot claim, cannot be issued a link, and asking for one produces nothing while an unaffected investor still gets theirs; the status event carries the reason, the actor and the notified flag; restoring is possible but does not un-revoke anything; and a closed account on the default `read_only` can still sign back in.
+
+### The public sign-in form told you who was on the recipient list
+
+`requestSignInLink` returns one sentence for every address — §4.1 requires that, and it did it. The **work** was not the same, which is the same leak wearing a different hat:
+
+| address | queries |
+| --- | --- |
+| unknown | one SELECT |
+| known but suspended | one SELECT, one audit INSERT |
+| known and eligible | one SELECT, one UPDATE, two INSERTs |
+
+The portal sign-in form is public, unauthenticated and unthrottled, so an attacker can sample it as often as they like. Three distinct latency bands, keyed exactly on account existence and eligibility, identify anybody holding a private securities invitation — which is precisely what §15 exists to protect, and the identical sentence does nothing to hide it. The module's own header claimed *"the same response and the same delay"*.
+
+The admin path has done this correctly since WP2: it always verifies a hash, real or dummy, and sleeps to a floor. Every exit from `requestSignInLink` is now padded to `SIGN_IN_LINK_FLOOR_MS`, measured from before the first query.
+
+**Padding to a floor rather than equalising the work is deliberate.** Equal work has to be re-established every time somebody adds a query, and nothing fails when they forget. A floor keeps holding. The tests are structural rather than statistical for the same reason a security property should not be a flaky test: they assert that every return settles, that the padding is built before the first query rather than after it, and that the action still has exactly one return carrying one sentence.
+
+**Checklist:** points 5 and 7 are this change's.
+
+5. No investor-facing response reveals another investor. The response body was already identical; the timing is now too. Verified that the operator's account list — which does load every investor, because it is an admin surface — carries no token hash.
+7. Suspension revokes existing sessions **and** refuses new links. Both halves, in one function, now reachable from a screen, and verified against a real database with two investors.
+
+**Uncertain:**
+
+- The floor is 150ms. It has to exceed the slowest legitimate path or it achieves nothing for the case that matters most; four round trips to a same-region Postgres fits inside it comfortably, but a database on the far side of an ocean would not. Worth re-measuring once the production database is real.
+- There is still no rate limit on the portal sign-in form. The admin form has progressive throttling by address and by IP; the investor form has none. With the timing closed there is nothing obvious left to learn from sampling it, but a bare public form that mints tokens deserves the same treatment, and that is a small package rather than a line.
+- Two related gaps found in the same audit and **not** fixed here, because both are known and documented rather than accidental: the sign-in link is minted and never emailed, so a returning investor is told a link is on its way and receives nothing; and re-sending an invitation leaves the previous claim token live, where the sign-in path revokes the old one first. The first is the larger of the two — it locks out every investor whose session lapses — and it is a small, self-contained package.
