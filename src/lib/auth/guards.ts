@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit'
 import type { PrivilegedRole } from '@/lib/roles'
+import { drizzleCredentialStore } from './credential-store'
 import { isOnboardingComplete } from './onboarding'
 import { readOnboardingSnapshot } from './onboarding-store'
 import { readAdminSessionUser } from './session'
@@ -28,6 +29,7 @@ export interface AdminIdentity {
 
 export const SIGN_IN_PATH = '/signin'
 export const NO_ACCESS_PATH = '/admin/no-access'
+export const PASSWORD_PATH = '/admin/password'
 
 /** The signed-in administrator, or null. Never throws, never redirects. */
 export async function currentAdmin(): Promise<AdminIdentity | null> {
@@ -52,8 +54,29 @@ export async function requireAdmin(): Promise<AdminIdentity> {
   return admin
 }
 
-async function requireRole(role: PrivilegedRole): Promise<AdminIdentity> {
+/**
+ * Signed in, and holding a password of their own.
+ *
+ * An account reached through a one-time setup link has a session but no
+ * verifier yet. It is a real session — the link proved possession — but it is
+ * one step short of an account, and letting it wander the application would
+ * mean a spent bearer token was the only thing ever standing between a stranger
+ * and the investor records. So it goes to one page and no further.
+ *
+ * The password page itself calls `requireAdmin`, not this, or it would redirect
+ * to itself for ever.
+ */
+export async function requirePasswordSet(): Promise<AdminIdentity> {
   const admin = await requireAdmin()
+
+  const credential = await drizzleCredentialStore().findByEmail(admin.email)
+  if (!credential || credential.passwordHash === null) redirect(PASSWORD_PATH)
+
+  return admin
+}
+
+async function requireRole(role: PrivilegedRole): Promise<AdminIdentity> {
+  const admin = await requirePasswordSet()
   if (admin.role !== role) {
     // BUILD_SPEC §22 AC19: a refused privileged action is logged, not silent.
     await audit({
@@ -97,7 +120,7 @@ export async function requireOperator(): Promise<AdminIdentity> {
  * Call this from admin pages that are not the onboarding flow itself.
  */
 export async function requireOnboardedAdmin(): Promise<AdminIdentity> {
-  const admin = await requireAdmin()
+  const admin = await requirePasswordSet()
   if (admin.role !== 'OPERATOR') return admin
 
   const snapshot = await readOnboardingSnapshot(admin.id)

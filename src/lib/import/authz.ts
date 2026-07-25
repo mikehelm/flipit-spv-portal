@@ -85,6 +85,16 @@ async function resolveFromSession(): Promise<PrivilegedActor | null> {
   const { currentAdmin } = await import('@/lib/auth/guards')
   const admin = await currentAdmin()
   if (!admin) return null
+
+  // An account that has redeemed a setup link but not yet chosen a password
+  // holds a session, and that session is enough to reach the password page and
+  // nothing else (§2.2). Importing creates investor records, so it is firmly on
+  // the "nothing else" side. The page guards redirect; this resolver returns
+  // null instead, because a server action has nowhere to redirect to.
+  const { drizzleCredentialStore } = await import('@/lib/auth/credential-store')
+  const credential = await drizzleCredentialStore().findByEmail(admin.email)
+  if (!credential || credential.passwordHash === null) return null
+
   return {
     userId: admin.id,
     email: admin.email,

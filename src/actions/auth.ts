@@ -148,10 +148,19 @@ export async function issueOperatorInviteAction(
     const invite = await issueOperatorInvite({ owner, email: parsed.data.email })
     const base = env().APP_URL.replace(/\/+$/, '')
     revalidatePath('/admin/invites')
+    // The link goes to the redemption route, not to the accept page.
+    //
+    // The accept page requires an existing admin session, which the operator
+    // cannot have: the only ways to get one are a password they have not chosen
+    // yet and a setup link nobody has minted for them. Pointing the invitation
+    // at that page made accepting it impossible without console access. The
+    // redemption route takes the token on its own — which is what a single-use
+    // invite is for — and the guard then sends them to choose a password before
+    // they can reach anything else.
     return actionOk(
       `Invitation issued for ${invite.email}. It can be used once, by that address, ` +
         `within ${OPERATOR_INVITE_TTL_HOURS} hours. Send it over a channel you trust.`,
-      `${base}/admin/invite/accept?token=${encodeURIComponent(invite.token)}`,
+      `${base}/api/auth/setup?token=${encodeURIComponent(invite.token)}`,
     )
   } catch (error) {
     return actionError(

@@ -134,13 +134,12 @@ export async function clearFailures(
 }
 
 /**
- * In-process counters.
+ * In-process counters. Used by the tests, and as the fallback if the table is
+ * ever unreachable.
  *
  * Honest about what this is: it resets when the process restarts and it is not
- * shared between instances. For a two-user admin surface on a single managed
- * instance that is a reasonable v1, and the deployment note in PROGRESS.md says
- * so. Moving it to a table or to Redis is a change of this class and nothing
- * else — every caller goes through `RateLimitStore`.
+ * shared between instances. That is why it is not what sign-in uses — see
+ * `drizzleRateLimitStore` below.
  */
 export class InMemoryRateLimitStore implements RateLimitStore {
   private readonly records = new Map<string, AttemptRecord>()
@@ -158,12 +157,63 @@ export class InMemoryRateLimitStore implements RateLimitStore {
   }
 }
 
-const globalForRateLimit = globalThis as unknown as {
-  __spvSignInRateLimit?: InMemoryRateLimitStore
+/**
+ * The counters sign-in actually uses: a row per key in `sign_in_attempts`.
+ *
+ * In the database rather than in memory because an in-memory lock lifts itself
+ * the moment anything restarts, and restarting is not a difficulty an attacker
+ * has to overcome — a deploy, a crash loop or a scale-out does it for them. A
+ * fifteen-minute lock that a redeploy clears is not a fifteen-minute lock.
+ *
+ * Written with an upsert so two simultaneous failed attempts cannot lose one
+ * another's increment.
+ */
+export function drizzleRateLimitStore(): RateLimitStore {
+  return {
+    async get(key: string): Promise<AttemptRecord | undefined> {
+      const { db } = await import('@/db')
+      const { signInAttempts } = await import('@/db/schema')
+      const { eq } = await import('drizzle-orm')
+
+      const row = await db.query.signInAttempts.findFirst({
+        where: eq(signInAttempts.key, key),
+      })
+      if (!row) return undefined
+
+      return {
+        failures: row.failures,
+        firstFailureAt: row.firstFailureAt.getTime(),
+        lockedUntil: row.lockedUntil?.getTime() ?? null,
+      }
+    },
+
+    async set(key: string, record: AttemptRecord): Promise<void> {
+      const { db } = await import('@/db')
+      const { signInAttempts } = await import('@/db/schema')
+
+      const values = {
+        key,
+        failures: record.failures,
+        firstFailureAt: new Date(record.firstFailureAt),
+        lockedUntil: record.lockedUntil === null ? null : new Date(record.lockedUntil),
+      }
+
+      await db
+        .insert(signInAttempts)
+        .values(values)
+        .onConflictDoUpdate({ target: signInAttempts.key, set: values })
+    },
+
+    async delete(key: string): Promise<void> {
+      const { db } = await import('@/db')
+      const { signInAttempts } = await import('@/db/schema')
+      const { eq } = await import('drizzle-orm')
+
+      await db.delete(signInAttempts).where(eq(signInAttempts.key, key))
+    },
+  }
 }
 
-/** Survives hot reloading in development, which a plain module-level Map does not. */
 export function signInRateLimitStore(): RateLimitStore {
-  globalForRateLimit.__spvSignInRateLimit ??= new InMemoryRateLimitStore()
-  return globalForRateLimit.__spvSignInRateLimit
+  return drizzleRateLimitStore()
 }

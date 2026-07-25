@@ -2,8 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { signInWithPasswordAction } from '@/actions/auth'
 import { ActionForm } from '@/components/admin/action-form'
-import { Field, Notice, TextInput } from '@/components/admin/ui'
-import { credentialStorageAvailable } from '@/lib/auth/credential-store'
+import { Field, TextInput } from '@/components/admin/ui'
 import { currentAdmin } from '@/lib/auth/guards'
 
 export const metadata: Metadata = {
@@ -46,8 +45,6 @@ export default async function SignInPage({
   const params = await searchParams
   const rawError = params.error
   const error = messageFor(Array.isArray(rawError) ? rawError[0] : rawError)
-
-  const passwordsAvailable = credentialStorageAvailable()
 
   return (
     <main className="mx-auto w-full max-w-md px-5 py-16 sm:py-24">
@@ -93,16 +90,11 @@ export default async function SignInPage({
         </ActionForm>
       </div>
 
-      {!passwordsAvailable ? (
-        <div className="mt-6">
-          <Notice tone="warn">
-            Password sign-in is not switched on for this deployment yet — the accounts
-            table has no password column, so no password is stored anywhere. Until the
-            migration lands, sign in with the one-time setup link printed on the server
-            console.
-          </Notice>
-        </div>
-      ) : null}
+      {/*
+        There is deliberately no "forgotten password?" link and no hint about
+        which accounts exist. Both would answer the one question this page is
+        built not to answer.
+      */}
 
       <p className="mt-8 text-xs leading-relaxed text-[#9498b5]">
         Investors do not sign in here. If you are an investor, use the link in your

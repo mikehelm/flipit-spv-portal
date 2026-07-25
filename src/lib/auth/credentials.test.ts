@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { attemptPasswordSignIn, type SignInDeps } from './credentials'
-import {
-  CredentialStorageUnavailableError,
-  InMemoryCredentialStore,
-  drizzleCredentialStore,
-} from './credential-store'
+import { InMemoryCredentialStore, type CredentialStore } from './credential-store'
 import { hashPassword } from './password'
 import { InMemoryRateLimitStore, LOCK_AFTER_FAILURES } from './rate-limit'
 
@@ -202,22 +198,46 @@ describe('attemptPasswordSignIn — rate limiting', () => {
 })
 
 describe('attemptPasswordSignIn — storage unavailable', () => {
+  /**
+   * A store that throws for everything. The point of these two tests is that it
+   * throws for every address alike, and is therefore useless for working out
+   * which addresses exist.
+   */
+  const brokenStore: CredentialStore = {
+    async findByEmail(): Promise<never> {
+      throw new Error('connection refused')
+    },
+    async setPasswordHash(): Promise<never> {
+      throw new Error('connection refused')
+    },
+  }
+
   it('says so plainly instead of pretending the password was wrong', async () => {
     const result = await attemptPasswordSignIn(
       { email: 'mike@flipit.com', password: OWNER_PASSWORD, ip: '203.0.113.11' },
-      { ...(await deps()), store: drizzleCredentialStore() },
+      { ...(await deps()), store: brokenStore },
     )
     expect(result).toMatchObject({ ok: false, reason: 'UNAVAILABLE' })
   })
-})
 
-describe('drizzleCredentialStore', () => {
-  it('refuses rather than inventing a hiding place for a password verifier', async () => {
-    await expect(drizzleCredentialStore().findByEmail('mike@flipit.com')).rejects.toBeInstanceOf(
-      CredentialStorageUnavailableError,
+  it('answers a stranger exactly as it answers the owner — AC18', async () => {
+    // The regression this pins down: an earlier version looked an address up
+    // only when it was already on the allowlist, so during an outage the owner
+    // got UNAVAILABLE and everybody else got INVALID_CREDENTIALS. That
+    // difference is a list of the administrators, readable from the sign-in
+    // form by anyone who tries it while the database is down.
+    const known = await attemptPasswordSignIn(
+      { email: 'mike@flipit.com', password: 'whatever', ip: '203.0.113.12' },
+      { ...(await deps()), store: brokenStore },
     )
-    await expect(
-      drizzleCredentialStore().setPasswordHash('user-owner', 'hash', new Date()),
-    ).rejects.toBeInstanceOf(CredentialStorageUnavailableError)
+    const stranger = await attemptPasswordSignIn(
+      { email: 'nobody@example.com', password: 'whatever', ip: '203.0.113.12' },
+      { ...(await deps()), store: brokenStore },
+    )
+
+    expect(known.ok).toBe(false)
+    expect(stranger.ok).toBe(false)
+    if (known.ok || stranger.ok) throw new Error('unreachable')
+    expect(stranger.reason).toBe(known.reason)
   })
 })

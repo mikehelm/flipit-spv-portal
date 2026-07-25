@@ -18,11 +18,15 @@ import { evaluateAllowlist } from './sign-in-policy'
  * `operator_invites` table, which is already what §15 asks for — a single-use,
  * expiring, hashed admin invite — so no new storage was needed for it.
  *
- * Right now redeeming a link signs the administrator straight in, because there
- * is nowhere to store the password they would otherwise choose (see
- * `credential-store.ts`). Once that column exists, redemption should land on a
- * "choose a password" screen instead, and this becomes two steps rather than
- * one. The token handling does not change.
+ * Redeeming a link spends it and establishes a session. That session can reach
+ * exactly one page — "choose a password" — because `requirePasswordSet` in
+ * lib/auth/guards.ts sends an account with no verifier there and nowhere else.
+ * Choosing a password then ends every session including that one, so a spent
+ * bearer token is not what anybody is still relying on a minute later.
+ *
+ * The same route redeems an operator invitation (§3 step 3). Both are rows in
+ * `operator_invites`, both are single-use hashed tokens, and both have to work
+ * for somebody who has no other way to sign in — which is the point of them.
  *
  * The link is printed to a console the owner is already looking at. It is never
  * emailed from here, never placed in an environment variable, and only its hash

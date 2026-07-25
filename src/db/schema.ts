@@ -171,6 +171,32 @@ export const users = pgTable('users', {
   role: roleEnum('role').notNull(),
   image: text('image'),
 
+  // Sign-in — BUILD_SPEC §2.2.
+  //
+  // §2.2 arrived after WP1 froze the data model, so these are added in a second
+  // migration rather than the first. A null password_hash is the normal state
+  // of a freshly seeded account: the seed creates the allowlisted users with no
+  // password and prints a one-time setup link. A password is never read from an
+  // environment variable or a configuration file, so there is no other way for
+  // one to arrive.
+  /** Argon2id verifier. Null until the account holder chooses a password. */
+  passwordHash: text('password_hash'),
+  passwordSetAt: timestamp('password_set_at', { withTimezone: true }),
+  /**
+   * Every session created before this instant is dead. "A password change ends
+   * every other session" has to survive the other session being held on a
+   * machine we cannot reach, so it is enforced by comparison at read time as
+   * well as by deleting rows at write time.
+   */
+  passwordChangedAt: timestamp('password_changed_at', { withTimezone: true }),
+
+  // Two-factor — optional in v1 (§2.2).
+  /** encrypt() from lib/crypto. Never returned to any client. */
+  totpSecretEncrypted: text('totp_secret_encrypted'),
+  totpConfirmedAt: timestamp('totp_confirmed_at', { withTimezone: true }),
+  /** hashToken() of each code. Single use — a spent code is removed. */
+  recoveryCodesHashed: text('recovery_codes_hashed').array().notNull().default([]),
+
   // Operator onboarding — BUILD_SPEC §2.1
   onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
   displayName: text('display_name'),
@@ -194,6 +220,26 @@ export const sessions = pgTable(
   },
   (t) => [index('sessions_user_idx').on(t.userId)],
 )
+
+/**
+ * Sign-in throttling counters — BUILD_SPEC §2.2.
+ *
+ * In a table rather than in process memory because an in-memory lock lifts
+ * itself the moment anything restarts, and "restart the process" is not a
+ * difficulty an attacker has to overcome — a deploy, a crash loop or a
+ * scale-out does it for them. One row per key; the key is either the attempted
+ * address or the source IP, and it is recorded whether or not the address
+ * exists so that a stranger and the owner are throttled identically.
+ *
+ * The key holds an email address, so this table is not exportable and is never
+ * included in the §20 export.
+ */
+export const signInAttempts = pgTable('sign_in_attempts', {
+  key: text('key').primaryKey(),
+  failures: integer('failures').notNull().default(0),
+  firstFailureAt: timestamp('first_failure_at', { withTimezone: true }).notNull(),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
+})
 
 export const oauthAccounts = pgTable(
   'oauth_accounts',

@@ -14,7 +14,8 @@
     "db:seed": "tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "setup-link": "tsx scripts/mint-setup-link.ts"
   },
   "dependencies": {
     "argon2": "^0.45.1",

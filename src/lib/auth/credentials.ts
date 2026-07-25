@@ -82,19 +82,32 @@ export async function attemptPasswordSignIn(
 
   await sleep(verdict.delayMs)
 
+  // The lookup runs for EVERY attempted address, including one that is not on
+  // the allowlist.
+  //
+  // It is tempting to skip it when the allowlist has already said no — the
+  // answer cannot change the outcome, and it saves a query. It also makes the
+  // storage layer observable: an earlier version looked up only allowlisted
+  // addresses, so when the store failed, an allowlisted address returned
+  // UNAVAILABLE while every other address returned INVALID_CREDENTIALS. Two
+  // different answers, keyed exactly on allowlist membership, readable by
+  // anyone with a browser. Whatever the storage layer does, it now does it for
+  // every address alike.
   let credential: AdminCredential | null = null
   let storageFailed = false
-  if (decision.allowed) {
-    try {
-      credential = await deps.store.findByEmail(decision.email)
-    } catch {
-      storageFailed = true
-    }
+  try {
+    credential = await deps.store.findByEmail(email)
+  } catch {
+    storageFailed = true
   }
 
+  // An address off the allowlist can never sign in, whatever the store said.
+  if (!decision.allowed) credential = null
+
   if (storageFailed) {
-    // Not the caller's fault and not a credential signal. Say so plainly rather
-    // than pretending the password was wrong.
+    // A real outage, identical for every caller. Saying so plainly is honest
+    // and — because it no longer depends on who is asking — tells an attacker
+    // nothing they could not learn by watching the service fail.
     return { ok: false, reason: 'UNAVAILABLE', detail: 'STORAGE_UNAVAILABLE' }
   }
 
