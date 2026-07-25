@@ -3,6 +3,9 @@ import Link from 'next/link'
 import { Card, Pill, SectionHeading } from '@/components/admin/ui'
 import { requireOnboardedAdmin } from '@/lib/auth/guards'
 import { formatMoney, formatPercentage } from '@/lib/money'
+
+/** Every figure on this screen is USD, and says so. See lib/portal/data.ts. */
+const money = (value: string) => formatMoney(value, { currencyCode: 'USD' })
 import { loadBatchContext } from '@/lib/sending/data'
 import {
   applyFilters,
@@ -88,7 +91,7 @@ function RecipientCard({
         <div>
           <dt className="text-[#6c7290]">Investment</dt>
           <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
-            {formatMoney(row.proposedAmountUsd)}
+            {money(row.proposedAmountUsd)}
           </dd>
         </div>
         <div>
@@ -255,10 +258,10 @@ export default async function RecipientsPage({
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total proposed" value={formatMoney(summary.totalProposedUsd)} />
-        <StatCard label="Total committed" value={formatMoney(summary.totalCommittedUsd)} />
-        <StatCard label="Total accepted" value={formatMoney(summary.totalAcceptedUsd)} />
-        <StatCard label="Funds received" value={formatMoney(summary.totalReceivedUsd)} />
+        <StatCard label="Total proposed" value={money(summary.totalProposedUsd)} />
+        <StatCard label="Total committed" value={money(summary.totalCommittedUsd)} />
+        <StatCard label="Total accepted" value={money(summary.totalAcceptedUsd)} />
+        <StatCard label="Funds received" value={money(summary.totalReceivedUsd)} />
       </div>
 
       <div className="mb-6">

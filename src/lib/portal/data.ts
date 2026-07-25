@@ -23,6 +23,16 @@ import {
 } from '@/db/schema'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { formatMoney, formatPercentage } from '@/lib/money'
+
+/**
+ * Every amount an investor sees carries its currency.
+ *
+ * "5,000.00" on a securities invitation is not a number with a missing symbol,
+ * it is an ambiguous figure on a document about somebody's money. The round is
+ * denominated in USD throughout — §5, and `proposed_amount_usd` and its three
+ * siblings are named for it.
+ */
+const money = (value: string) => formatMoney(value, { currencyCode: 'USD' })
 import { portalAccess, type AccountStatus, type PortalAccess } from './access'
 import { buildTimeline, showsPaymentSafetyNotice, type OfferStage, type TimelineStep } from './timeline'
 
@@ -118,12 +128,12 @@ export async function loadPortalView(accountId: string): Promise<PortalView | nu
 
     portalOffers.push({
       offerId: row.offerId,
-      proposedAmount: formatMoney(row.proposedAmountUsd),
+      proposedAmount: money(row.proposedAmountUsd),
       spvPercentage: formatPercentage(row.spvPercentage, { decimalPlaces }),
       indirectPercentage: formatPercentage(row.indirectPercentage, { decimalPlaces }),
-      committedAmount: row.committedAmountUsd ? formatMoney(row.committedAmountUsd) : null,
-      acceptedAmount: row.acceptedAmountUsd ? formatMoney(row.acceptedAmountUsd) : null,
-      receivedAmount: row.receivedAmountUsd ? formatMoney(row.receivedAmountUsd) : null,
+      committedAmount: row.committedAmountUsd ? money(row.committedAmountUsd) : null,
+      acceptedAmount: row.acceptedAmountUsd ? money(row.acceptedAmountUsd) : null,
+      receivedAmount: row.receivedAmountUsd ? money(row.receivedAmountUsd) : null,
       responseDeadline: row.responseDeadline,
       responseChoice: row.responseChoice,
       responseNote: row.responseNote,
@@ -133,11 +143,11 @@ export async function loadPortalView(accountId: string): Promise<PortalView | nu
         responseChoice: row.responseChoice,
         respondedOn: formatDate(row.responseAt),
         responseDeadline: row.responseDeadline,
-        committedAmount: row.committedAmountUsd ? formatMoney(row.committedAmountUsd) : null,
-        acceptedAmount: row.acceptedAmountUsd ? formatMoney(row.acceptedAmountUsd) : null,
+        committedAmount: row.committedAmountUsd ? money(row.committedAmountUsd) : null,
+        acceptedAmount: row.acceptedAmountUsd ? money(row.acceptedAmountUsd) : null,
         spvPercentage: formatPercentage(row.spvPercentage, { decimalPlaces }),
         fundsCurrency: row.receivedAmountUsd ? 'USD' : null,
-        fundsAmount: row.receivedAmountUsd ? formatMoney(row.receivedAmountUsd) : null,
+        fundsAmount: row.receivedAmountUsd ? money(row.receivedAmountUsd) : null,
       }),
       showPaymentSafetyNotice: showsPaymentSafetyNotice(row.stage as OfferStage),
       snapshot: snapshotRow
