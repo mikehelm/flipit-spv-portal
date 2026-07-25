@@ -56,14 +56,14 @@ function QueueEntry({ row }: { row: QueueRow }) {
   const pending = row.state === 'QUEUED' || row.state === 'HELD'
 
   return (
-    <li className="rounded-sm border hairline bg-[#14162f] p-4">
+    <li className="rounded-sm border hairline bg-paper p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-white">{row.recipientName}</p>
-          <p className="text-xs text-[#6c7290]">
+          <p className="text-xs text-muted">
             {row.recipientEmail} · reminder {row.sequence} · deadline {row.responseDeadline}
           </p>
-          <p className="mt-1 text-xs tabular-nums text-[#cbd1de]">
+          <p className="mt-1 text-xs tabular-nums text-silver2">
             {formatWhen(row.scheduledFor)}
           </p>
         </div>
@@ -71,13 +71,13 @@ function QueueEntry({ row }: { row: QueueRow }) {
       </div>
 
       {!row.eligibility.eligible ? (
-        <p className="mt-3 border-l-2 border-[#ff5b52] pl-3 text-xs leading-relaxed text-[#9498b5]">
+        <p className="mt-3 border-l-2 border-warn pl-3 text-xs leading-relaxed text-dim">
           {row.eligibility.message}
         </p>
       ) : null}
 
       {row.skippedReason ? (
-        <p className="mt-3 border-l-2 border-[#F59A23] pl-3 text-xs leading-relaxed text-[#9498b5]">
+        <p className="mt-3 border-l-2 border-orange pl-3 text-xs leading-relaxed text-dim">
           {row.skippedReason}
         </p>
       ) : null}
@@ -127,7 +127,7 @@ export default async function RemindersPage() {
           <Notice tone="warn">
             {drift.message} The reminder has its own compliance approval, separate from the
             invitation&rsquo;s, and no reminder sends without it.{' '}
-            <Link href="/compliance" className="text-[#F59A23]">
+            <Link href="/compliance" className="text-orange">
               Compliance
             </Link>
           </Notice>
@@ -156,7 +156,7 @@ export default async function RemindersPage() {
               enabled={schedule?.enabled ?? true}
             />
           ) : (
-            <p className="text-sm text-[#9498b5]">
+            <p className="text-sm text-dim">
               There is no open round, so there is nothing to schedule.
             </p>
           )}
@@ -174,7 +174,7 @@ export default async function RemindersPage() {
 
           {pending.length === 0 ? (
             <Card>
-              <p className="text-sm leading-relaxed text-[#9498b5]">
+              <p className="text-sm leading-relaxed text-dim">
                 Nothing is queued. A reminder is planned only for somebody who has been sent an
                 invitation, has not responded, is not blocked, and whose deadline has not
                 passed — so an empty queue usually means everybody has answered.

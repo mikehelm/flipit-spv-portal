@@ -34,18 +34,18 @@ function formatDate(value: Date | null): string | null {
 
 function QueueEntry({ entry }: { entry: QaQueueEntry }) {
   return (
-    <article className="rounded-sm border hairline bg-[#14162f] p-4 sm:p-5">
+    <article className="rounded-sm border hairline bg-paper p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-white">
             {entry.asker ? entry.asker.name : 'Written by you'}
           </p>
           {entry.asker ? (
-            <p className="text-xs text-[#6c7290]">
+            <p className="text-xs text-muted">
               {entry.asker.email} · account {entry.asker.status.toLowerCase()}
             </p>
           ) : (
-            <p className="text-xs text-[#6c7290]">
+            <p className="text-xs text-muted">
               No investor asked this — it is a seeded entry (§6.7.4).
             </p>
           )}
@@ -61,49 +61,49 @@ function QueueEntry({ entry }: { entry: QaQueueEntry }) {
       {entry.offerSummary ? (
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
           <div>
-            <dt className="text-[#6c7290]">Amount</dt>
-            <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+            <dt className="text-muted">Amount</dt>
+            <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
               {entry.offerSummary.proposedAmount}
             </dd>
           </div>
           <div>
-            <dt className="text-[#6c7290]">SPV share</dt>
-            <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+            <dt className="text-muted">SPV share</dt>
+            <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
               {entry.offerSummary.spvPercentage}
             </dd>
           </div>
           <div>
-            <dt className="text-[#6c7290]">Deadline</dt>
-            <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+            <dt className="text-muted">Deadline</dt>
+            <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
               {entry.offerSummary.responseDeadline}
             </dd>
           </div>
           <div>
-            <dt className="text-[#6c7290]">Stage</dt>
-            <dd className="mt-0.5 font-semibold text-[#e7e9f5]">
+            <dt className="text-muted">Stage</dt>
+            <dd className="mt-0.5 font-semibold text-ftext">
               {entry.offerSummary.stage.toLowerCase().replace(/_/g, ' ')}
             </dd>
           </div>
         </dl>
       ) : null}
 
-      <div className="mt-4 border-l-2 border-[#F59A23] pl-3">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-[#6c7290]">
+      <div className="mt-4 border-l-2 border-orange pl-3">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted">
           {entry.asker ? 'Their question, as they wrote it' : 'The question'}
         </p>
-        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[#e7e9f5]">
+        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ftext">
           {entry.questionOriginal}
         </p>
       </div>
 
       {entry.notifyFailure ? (
-        <p className="mt-4 border-l-2 border-[#ff5b52] pl-3 text-xs leading-relaxed text-[#ff5b52]">
+        <p className="mt-4 border-l-2 border-warn pl-3 text-xs leading-relaxed text-warn">
           The email telling you about this question did not get out. {entry.notifyFailure}
         </p>
       ) : null}
 
       {entry.publishBlock ? (
-        <p className="mt-4 text-xs leading-relaxed text-[#9498b5]">
+        <p className="mt-4 text-xs leading-relaxed text-dim">
           {PUBLISH_BLOCK_MESSAGE[entry.publishBlock]}
         </p>
       ) : null}
@@ -111,7 +111,7 @@ function QueueEntry({ entry }: { entry: QaQueueEntry }) {
       <div className="mt-5">
         <Link
           href={`/questions/${entry.id}`}
-          className="inline-flex min-h-11 items-center rounded-sm bg-[#F59A23] px-4 text-sm font-semibold text-[#0b0c22]"
+          className="inline-flex min-h-11 items-center rounded-sm bg-orange px-4 text-sm font-semibold text-ink"
         >
           {entry.awaitingAnswer ? 'Answer this' : 'Open'}
         </Link>
@@ -152,7 +152,7 @@ export default async function QuestionsPage() {
           </h2>
           {open.length === 0 ? (
             <Card>
-              <p className="text-sm text-[#9498b5]">
+              <p className="text-sm text-dim">
                 Nothing is waiting. New questions appear here and email you as they arrive.
               </p>
             </Card>

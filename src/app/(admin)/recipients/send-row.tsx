@@ -36,7 +36,7 @@ export function SendControl({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-sm font-semibold text-[#e7e9f5] transition-colors hover:border-[#F59A23]"
+        className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-sm font-semibold text-ftext transition-colors hover:border-orange"
       >
         {alreadySent ? 'Resend' : 'Send'}
       </button>
@@ -44,8 +44,8 @@ export function SendControl({
   }
 
   return (
-    <div className="w-full rounded-sm border hairline bg-[#0d0f2e] p-4">
-      <p className="mb-3 text-sm leading-relaxed text-[#e7e9f5]">
+    <div className="w-full rounded-sm border hairline bg-bg2 p-4">
+      <p className="mb-3 text-sm leading-relaxed text-ftext">
         {alreadySent ? 'Send again to ' : 'Send the invitation to '}
         <span className="font-semibold">{recipientName}</span>. This is a real email
         containing a real, single-use portal link.
@@ -78,7 +78,7 @@ export function SendControl({
       <button
         type="button"
         onClick={() => setOpen(false)}
-        className="mt-2 text-xs font-semibold text-[#9498b5] underline underline-offset-2"
+        className="mt-2 text-xs font-semibold text-dim underline underline-offset-2"
       >
         Cancel
       </button>

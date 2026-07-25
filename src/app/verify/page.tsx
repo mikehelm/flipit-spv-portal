@@ -26,16 +26,16 @@ export function VerificationPageContent({
   config: VerificationConfig
 }) {
   return (
-    <main className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
+    <main id="main" className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
       <header>
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#F59A23]">
+        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-orange">
           FLIPIT · Invitation verification
         </p>
         <h1 className="mt-4 text-3xl font-bold leading-tight tracking-tight text-white sm:text-5xl">
           Checking whether the invitation is genuine
         </h1>
-        <div className="mt-5 h-[3px] w-12 bg-[#F59A23]" />
-        <p className="mt-5 text-base leading-7 text-[#cbd1de]">
+        <div className="mt-5 h-[3px] w-12 bg-orange" />
+        <p className="mt-5 text-base leading-7 text-silver2">
           You may have received an unexpected private invitation concerning an
           investment through the Flipit Global SPV. Being cautious is the right
           response. Use the checks below before opening a link or transferring
@@ -43,9 +43,9 @@ export function VerificationPageContent({
         </p>
       </header>
 
-      <section className="mt-8 rounded-sm border hairline bg-[#14162f] p-5 sm:p-7">
+      <section className="mt-8 rounded-sm border hairline bg-paper p-5 sm:p-7">
         <h2 className="text-xl font-semibold text-white">Who is involved</h2>
-        <div className="mt-4 space-y-4 text-sm leading-6 text-[#cbd1de]">
+        <div className="mt-4 space-y-4 text-sm leading-6 text-silver2">
           <p>
             <strong className="text-white">Michael Helm</strong> is the owner
             administrator for this private investor portal, with oversight of
@@ -59,11 +59,11 @@ export function VerificationPageContent({
         </div>
       </section>
 
-      <section className="mt-5 rounded-sm border hairline bg-[#14162f] p-5 sm:p-7">
+      <section className="mt-5 rounded-sm border hairline bg-paper p-5 sm:p-7">
         <h2 className="text-xl font-semibold text-white">Two exact checks</h2>
         <dl className="mt-5 grid gap-5">
           <div>
-            <dt className="text-xs font-bold uppercase tracking-[0.14em] text-[#9498b5]">
+            <dt className="text-xs font-bold uppercase tracking-[0.14em] text-dim">
               Invitation sender
             </dt>
             <dd className="mt-1 break-all font-mono text-base text-white">
@@ -71,7 +71,7 @@ export function VerificationPageContent({
             </dd>
           </div>
           <div>
-            <dt className="text-xs font-bold uppercase tracking-[0.14em] text-[#9498b5]">
+            <dt className="text-xs font-bold uppercase tracking-[0.14em] text-dim">
               Domain used by every legitimate link
             </dt>
             <dd className="mt-1 break-all font-mono text-base text-white">
@@ -79,17 +79,17 @@ export function VerificationPageContent({
             </dd>
           </div>
         </dl>
-        <p className="mt-5 border-l-2 border-[#F59A23] pl-4 text-sm leading-6 text-[#cbd1de]">
+        <p className="mt-5 border-l-2 border-orange pl-4 text-sm leading-6 text-silver2">
           Look at the real sender address and link destination, not only the
           display name or visible link text. A lookalike spelling is not valid.
         </p>
       </section>
 
-      <section className="mt-5 rounded-sm border hairline bg-[#14162f] p-5 sm:p-7">
+      <section className="mt-5 rounded-sm border hairline bg-paper p-5 sm:p-7">
         <h2 className="text-xl font-semibold text-white">
           What the email will and will not ask
         </h2>
-        <ul className="mt-4 space-y-3 text-sm leading-6 text-[#cbd1de]">
+        <ul className="mt-4 space-y-3 text-sm leading-6 text-silver2">
           <li>
             It may ask you to open your private portal, review an offer made to
             you, record a response, or ask David a question.
@@ -109,25 +109,25 @@ export function VerificationPageContent({
         </ul>
       </section>
 
-      <aside className="mt-5 border-2 border-[#ff5b52] bg-[#241326] p-5 sm:p-7">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#ff8a84]">
+      <aside className="mt-5 border-2 border-warn bg-warn-surface p-5 sm:p-7">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-warn-soft">
           Standing payment warning
         </p>
         <h2 className="mt-2 text-xl font-bold leading-snug text-white">
           Payment details will NEVER be changed by email.
         </h2>
-        <p className="mt-3 text-sm leading-6 text-[#e7e9f5]">
+        <p className="mt-3 text-sm leading-6 text-ftext">
           Before any transfer, verify the instructions by voice with David
           using a phone number you already know. Do not use a number supplied
           in the email, a reply, or an unexpected message.
         </p>
       </aside>
 
-      <section className="mt-5 rounded-sm border hairline bg-[#14162f] p-5 sm:p-7">
+      <section className="mt-5 rounded-sm border hairline bg-paper p-5 sm:p-7">
         <h2 className="text-xl font-semibold text-white">
           Verify by another route
         </h2>
-        <p className="mt-3 text-sm leading-6 text-[#cbd1de]">
+        <p className="mt-3 text-sm leading-6 text-silver2">
           Stop and contact David or Michael through details already in your
           address book or through a person who introduced you. Read the sender
           address and destination domain above aloud. If you cannot verify them

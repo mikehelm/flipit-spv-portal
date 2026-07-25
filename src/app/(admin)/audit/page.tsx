@@ -87,13 +87,13 @@ export default async function AuditPage({
         <Card title="Filter" description="By actor, entity or action — BUILD_SPEC §20.">
           <form method="get" className="grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-[#cbd1de]">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-silver2">
                 Actor
               </span>
               <select
                 name="actor"
                 defaultValue={filter.actor ?? ''}
-                className="mt-2 w-full rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5 text-sm text-[#e7e9f5]"
+                className="mt-2 w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext"
               >
                 <option value="">Anyone</option>
                 {options.actors.map((actor) => (
@@ -105,13 +105,13 @@ export default async function AuditPage({
             </label>
 
             <label className="block">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-[#cbd1de]">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-silver2">
                 Entity
               </span>
               <select
                 name="entity"
                 defaultValue={filter.entityType ?? ''}
-                className="mt-2 w-full rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5 text-sm text-[#e7e9f5]"
+                className="mt-2 w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext"
               >
                 <option value="">Anything</option>
                 {options.entityTypes.map((entity) => (
@@ -123,13 +123,13 @@ export default async function AuditPage({
             </label>
 
             <label className="block">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-[#cbd1de]">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-silver2">
                 Action
               </span>
               <select
                 name="action"
                 defaultValue={filter.action ?? ''}
-                className="mt-2 w-full rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5 text-sm text-[#e7e9f5]"
+                className="mt-2 w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext"
               >
                 <option value="">Any action</option>
                 {options.actions.map((action) => (
@@ -142,25 +142,25 @@ export default async function AuditPage({
 
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="block text-xs font-semibold uppercase tracking-wider text-[#cbd1de]">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-silver2">
                   From
                 </span>
                 <input
                   type="date"
                   name="from"
                   defaultValue={filter.from ?? ''}
-                  className="mt-2 w-full rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5 text-sm text-[#e7e9f5]"
+                  className="mt-2 w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext"
                 />
               </label>
               <label className="block">
-                <span className="block text-xs font-semibold uppercase tracking-wider text-[#cbd1de]">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-silver2">
                   To
                 </span>
                 <input
                   type="date"
                   name="to"
                   defaultValue={filter.to ?? ''}
-                  className="mt-2 w-full rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5 text-sm text-[#e7e9f5]"
+                  className="mt-2 w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext"
                 />
               </label>
             </div>
@@ -168,13 +168,13 @@ export default async function AuditPage({
             <div className="sm:col-span-2 flex flex-wrap gap-3">
               <button
                 type="submit"
-                className="inline-flex min-h-11 items-center rounded-sm bg-[#F59A23] px-4 text-sm font-semibold text-[#0b0c22]"
+                className="inline-flex min-h-11 items-center rounded-sm bg-orange px-4 text-sm font-semibold text-ink"
               >
                 Apply
               </button>
               <Link
                 href="/audit"
-                className="inline-flex min-h-11 items-center rounded-sm border hairline px-4 text-sm font-semibold text-[#e7e9f5]"
+                className="inline-flex min-h-11 items-center rounded-sm border hairline px-4 text-sm font-semibold text-ftext"
               >
                 Clear
               </Link>
@@ -189,35 +189,35 @@ export default async function AuditPage({
           <div className="flex flex-wrap gap-3">
             <a
               href={`/export/audit?${query}${query ? '&' : ''}format=csv`}
-              className="inline-flex min-h-11 items-center rounded-sm border hairline px-4 text-sm font-semibold text-[#e7e9f5]"
+              className="inline-flex min-h-11 items-center rounded-sm border hairline px-4 text-sm font-semibold text-ftext"
             >
               Audit log, CSV
             </a>
             <a
               href={`/export/audit?${query}${query ? '&' : ''}format=xlsx`}
-              className="inline-flex min-h-11 items-center rounded-sm border hairline px-4 text-sm font-semibold text-[#e7e9f5]"
+              className="inline-flex min-h-11 items-center rounded-sm border hairline px-4 text-sm font-semibold text-ftext"
             >
               Audit log, Excel
             </a>
           </div>
 
           <div className="mt-5 border-t hairline pt-5">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#cbd1de]">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-silver2">
               Recipients
             </p>
             <div className="grid gap-3">
               {rounds.map((round) => (
                 <div key={round.id} className="flex flex-wrap items-center gap-3">
-                  <span className="text-sm text-[#e7e9f5]">{round.name}</span>
+                  <span className="text-sm text-ftext">{round.name}</span>
                   <a
                     href={`/export/recipients?round=${round.id}&format=csv`}
-                    className="inline-flex min-h-9 items-center rounded-sm border hairline px-3 text-xs font-semibold text-[#e7e9f5]"
+                    className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-xs font-semibold text-ftext"
                   >
                     CSV
                   </a>
                   <a
                     href={`/export/recipients?round=${round.id}&format=xlsx`}
-                    className="inline-flex min-h-9 items-center rounded-sm border hairline px-3 text-xs font-semibold text-[#e7e9f5]"
+                    className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-xs font-semibold text-ftext"
                   >
                     Excel
                   </a>
@@ -236,27 +236,27 @@ export default async function AuditPage({
 
           {rows.length === 0 ? (
             <Card>
-              <p className="text-sm text-[#9498b5]">Nothing matches that filter.</p>
+              <p className="text-sm text-dim">Nothing matches that filter.</p>
             </Card>
           ) : (
             <ul className="grid gap-2">
               {rows.map((row) => (
-                <li key={row.id} className="rounded-sm border hairline bg-[#14162f] p-3">
+                <li key={row.id} className="rounded-sm border hairline bg-paper p-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <p className="font-mono text-xs text-[#e7e9f5]">{row.action}</p>
-                    <p className="text-xs tabular-nums text-[#6c7290]">
+                    <p className="font-mono text-xs text-ftext">{row.action}</p>
+                    <p className="text-xs tabular-nums text-muted">
                       {row.createdAt.toISOString().slice(0, 19).replace('T', ' ')} UTC
                     </p>
                   </div>
-                  <p className="mt-1 text-xs text-[#9498b5]">
+                  <p className="mt-1 text-xs text-dim">
                     <Pill tone="neutral">{row.entityType}</Pill>{' '}
                     <span className="ml-2">{row.actorLabel}</span>
                     {row.entityId ? (
-                      <span className="ml-2 font-mono text-[#6c7290]">{row.entityId}</span>
+                      <span className="ml-2 font-mono text-muted">{row.entityId}</span>
                     ) : null}
                   </p>
                   {describe(row.metadata) ? (
-                    <p className="mt-1 break-words text-xs leading-relaxed text-[#6c7290]">
+                    <p className="mt-1 break-words text-xs leading-relaxed text-muted">
                       {describe(row.metadata)}
                     </p>
                   ) : null}

@@ -2,6 +2,7 @@ import {
   removeOpenAiKeyAction,
   updateAiSettingsAction,
   updateApprovedJurisdictionsAction,
+  updateAttributionAction,
   updateSenderDefaultsAction,
   updateServiceSettingsAction,
 } from '@/actions/settings'
@@ -123,7 +124,7 @@ export default async function SettingsPage() {
                 defaultChecked={config.qaVisibleDuringRaise}
                 label="Shared Q&A visible during the raise"
               />
-              <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+              <p className="mt-2 text-xs leading-relaxed text-dim">
                 A shared Q&amp;A names nobody, but its existence implies other recipients.
                 Switch it off and private answers still work exactly as before —
                 publishing simply queues entries until the round closes.
@@ -248,23 +249,23 @@ export default async function SettingsPage() {
               <div
                 className={`mb-4 rounded-sm border-l-2 p-3 ${
                   spend.state === 'OVER_CAP'
-                    ? 'border-l-[#ff5b52] bg-[#ff5b52]/6'
+                    ? 'border-l-warn bg-warn/6'
                     : spend.state === 'APPROACHING_CAP'
-                      ? 'border-l-[#F59A23] bg-[#F59A23]/6'
-                      : 'border-l-[#2a2d52]'
+                      ? 'border-l-orange bg-orange/6'
+                      : 'border-l-edge'
                 }`}
               >
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#9498b5]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-dim">
                   This month, so far
                 </p>
                 <p className="mt-1.5 text-lg font-bold tabular-nums text-white">
                   ${spend.spentUsd}
-                  <span className="ml-2 text-xs font-normal text-[#6c7290]">
+                  <span className="ml-2 text-xs font-normal text-muted">
                     of ${spend.capUsd}
                   </span>
                 </p>
-                <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">{spend.message}</p>
-                <p className="mt-2 text-[10px] leading-relaxed text-[#6c7290]">
+                <p className="mt-2 text-xs leading-relaxed text-dim">{spend.message}</p>
+                <p className="mt-2 text-[10px] leading-relaxed text-muted">
                   An estimate, calculated from published per-token prices at the time of
                   each call. It is not a bill, and OpenAI&rsquo;s invoice is the figure
                   that counts.
@@ -277,7 +278,7 @@ export default async function SettingsPage() {
                   defaultChecked={config.aiHeadersOnly}
                   label="Headers-only mode — send column names but no sample rows"
                 />
-                <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+                <p className="mt-2 text-xs leading-relaxed text-dim">
                   Normally the column headers and a small bounded sample of rows leave
                   this system and go to OpenAI. Never the full list. Headers-only mode is
                   for when even that sample is not acceptable.
@@ -295,6 +296,51 @@ export default async function SettingsPage() {
               />
             </div>
           ) : null}
+        </Card>
+
+        {/* -------------------------------------------------------------- */}
+        <Card
+          title="The maker's credit"
+          description={
+            <>
+              BUILD_SPEC §13.2 asks for a quiet &ldquo;Made by Make with Mike&rdquo; in the
+              footer, switchable per surface. It never appears in an invitation email or on
+              a participation certificate &mdash; those are formal instruments about
+              someone&rsquo;s money, and there is no setting here that would put it on
+              either.
+            </>
+          }
+        >
+          <ActionForm action={updateAttributionAction} submitLabel="Save the credit">
+            <div className="space-y-3">
+              <Checkbox
+                name="attributionOnAdmin"
+                defaultChecked={config.attributionOnAdmin}
+                label="Show it on the admin side"
+              />
+              <Checkbox
+                name="attributionOnPortal"
+                defaultChecked={config.attributionOnPortal}
+                label="Show it on the investor portal"
+              />
+            </div>
+
+            <div className="mt-4">
+              <Field
+                label="Link (optional)"
+                name="attributionUrl"
+                hint="Opens in a new tab, styled exactly like the surrounding text. Leave blank for plain text. Only http and https addresses are accepted."
+              >
+                <TextInput
+                  name="attributionUrl"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://"
+                  defaultValue={config.attributionUrl ?? ''}
+                />
+              </Field>
+            </div>
+          </ActionForm>
         </Card>
       </div>
     </>

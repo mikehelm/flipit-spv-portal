@@ -17,6 +17,7 @@
     "db:push": "drizzle-kit push",
     "setup-link": "tsx scripts/mint-setup-link.ts",
     "reminders:run": "tsx scripts/run-reminders.ts",
+    "verify:viewport": "tsx scripts/verify-viewport.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
   },
   "dependencies": {
@@ -46,6 +47,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
+    "playwright": "^1.62.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.1",
     "typescript": "^5",

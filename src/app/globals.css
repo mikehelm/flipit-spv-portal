@@ -1,20 +1,43 @@
 @import "tailwindcss";
 
-/* FLIPIT palette — BUILD_SPEC §13.2 */
+/*
+ * FLIPIT palette — BUILD_SPEC §13.2.
+ *
+ * Every value here is duplicated in src/lib/brand.ts, and `palette.test.ts`
+ * fails if the two ever disagree. That test is the reason this comment can
+ * promise it: a CSS file cannot be imported into a TypeScript test, so the
+ * check reads this file as text and compares it token by token.
+ *
+ * Contrast for every pairing is asserted in brand.contrast.test.ts. Do not
+ * add a colour here without adding it there.
+ */
 @theme {
+  /* Surfaces */
   --color-bg: #070823;
   --color-bg2: #0d0f2e;
   --color-paper: #14162f;
   --color-ink: #0b0c22;
-  --color-orange: #f59a23;
-  --color-orange-soft: #ffb84d;
+  --color-warn-surface: #2a1116;
+
+  /* Text */
   --color-ftext: #e7e9f5;
   --color-dim: #9498b5;
+  --color-muted: #7f849f;
+
+  /* Accents */
+  --color-orange: #f59a23;
+  --color-orange-soft: #ffb84d;
   --color-ok: #35d07f;
   --color-warn: #ff5b52;
+  --color-warn-soft: #ff8a84;
+
+  /* The silver page-curl gradient */
   --color-silver1: #f6f8fc;
   --color-silver2: #cbd1de;
   --color-silver3: #98a0b4;
+
+  /* Borders */
+  --color-edge: #616585;
 
   --font-sans: "Helvetica Neue", -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, sans-serif;
@@ -26,19 +49,79 @@
 
 html,
 body {
-  background: #070823;
-  color: #e7e9f5;
+  background: var(--color-bg);
+  color: var(--color-ftext);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Visible focus everywhere — accessibility, BUILD_SPEC §18. */
+/*
+ * Mobile first, and specifically 375px. BUILD_SPEC §13.2: "These are personal
+ * contacts who will open the email on a phone."
+ *
+ * A long unbroken string — an email address, a claim URL, a bank reference —
+ * is the commonest cause of a page that scrolls sideways on a narrow screen,
+ * and sideways scroll on a securities document means a figure can sit off the
+ * edge without the reader knowing it is there. This is the backstop;
+ * individual screens still use `break-words` where they know the content is
+ * long.
+ */
+body {
+  overflow-wrap: break-word;
+}
+
+/*
+ * Visible focus everywhere — BUILD_SPEC §18, WCAG 2.4.7.
+ *
+ * Orange on the darkest surface is 8.92:1, so the ring is visible on every
+ * background in the palette. The offset keeps it clear of the control's own
+ * border, which matters most on the inputs, where border and ring would
+ * otherwise sit on the same pixel.
+ */
 :focus-visible {
-  outline: 2px solid #f59a23;
+  outline: 2px solid var(--color-orange);
   outline-offset: 2px;
   border-radius: 2px;
 }
 
+/*
+ * The keyboard route past the navigation. WCAG 2.4.1.
+ *
+ * Off-screen until focused, which is the only state a mouse user ever sees.
+ */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 50;
+}
+
+.skip-link:focus {
+  left: 0;
+  padding: 0.75rem 1rem;
+  background: var(--color-orange);
+  color: var(--color-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
 .hairline {
   border-color: var(--line);
+}
+
+/*
+ * "Do not animate it aggressively; this is an investment document, not the
+ * product demo." — §13.2, about the page curl. The only motion in the
+ * application is a slow opacity settle on the brand mark, and this removes
+ * even that for anyone who has asked their system for less of it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

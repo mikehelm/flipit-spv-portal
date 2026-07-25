@@ -24,6 +24,7 @@ import {
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { listCertificates } from '@/lib/certificate/issue'
 import { formatMoney, formatPercentage } from '@/lib/money'
+import { forbiddenWordsInTileLabel } from './roadmap'
 
 /**
  * Every amount an investor sees carries its currency.
@@ -186,8 +187,19 @@ export async function loadPortalView(accountId: string): Promise<PortalView | nu
 
   // §13.1 "Coming to your portal". Hidden tiles are hidden from everybody —
   // there is no per-investor variation, so this reveals nothing about anyone.
+  //
+  // A tile whose label breaks §13.1's wording constraint — a promise of
+  // return, a valuation, a liquidity event, a date — is also not shown. §13.1
+  // calls this section "the easiest place in the build to say something
+  // unintended", so the reading here is that a missing tile is a smaller
+  // problem than a tile that reads as a promise on a securities page.
+  //
+  // This is the second of two checks and the quieter one. When a tile-editing
+  // surface is built it must call `forbiddenWordsInTileLabel` at write time
+  // and refuse out loud, naming the word. Nothing writes these today except
+  // the seed, so nothing can currently be dropped without somebody noticing.
   const tiles = (await db.select().from(roadmapTiles).orderBy(roadmapTiles.sortOrder)).filter(
-    (tile) => !tile.hidden,
+    (tile) => !tile.hidden && forbiddenWordsInTileLabel(tile.label).length === 0,
   )
 
   return {

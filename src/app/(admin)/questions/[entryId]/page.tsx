@@ -54,7 +54,7 @@ export default async function QuestionPage({
   return (
     <>
       <SectionHeading eyebrow="Questions and answers" title="Answer a question">
-        <Link href="/questions" className="text-[#F59A23]">
+        <Link href="/questions" className="text-orange">
           Back to the queue
         </Link>
       </SectionHeading>
@@ -67,7 +67,7 @@ export default async function QuestionPage({
                 {entry.asker ? entry.asker.name : 'Written by you'}
               </p>
               {entry.asker ? (
-                <p className="text-xs text-[#6c7290]">
+                <p className="text-xs text-muted">
                   {entry.asker.email} · account {entry.asker.status.toLowerCase()} · asked{' '}
                   {formatDate(entry.createdAt)}
                 </p>
@@ -84,37 +84,37 @@ export default async function QuestionPage({
           {entry.offerSummary ? (
             <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
               <div>
-                <dt className="text-xs text-[#6c7290]">Investment amount</dt>
+                <dt className="text-xs text-muted">Investment amount</dt>
                 <dd className="mt-0.5 font-semibold tabular-nums text-white">
                   {entry.offerSummary.proposedAmount}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-[#6c7290]">Share of the SPV</dt>
+                <dt className="text-xs text-muted">Share of the SPV</dt>
                 <dd className="mt-0.5 font-semibold tabular-nums text-white">
                   {entry.offerSummary.spvPercentage}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-[#6c7290]">Indirect Flipit interest</dt>
+                <dt className="text-xs text-muted">Indirect Flipit interest</dt>
                 <dd className="mt-0.5 font-semibold tabular-nums text-white">
                   {entry.offerSummary.indirectPercentage}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-[#6c7290]">Response deadline</dt>
+                <dt className="text-xs text-muted">Response deadline</dt>
                 <dd className="mt-0.5 font-semibold tabular-nums text-white">
                   {entry.offerSummary.responseDeadline}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-[#6c7290]">Stage</dt>
+                <dt className="text-xs text-muted">Stage</dt>
                 <dd className="mt-0.5 font-semibold text-white">
                   {entry.offerSummary.stage.toLowerCase().replace(/_/g, ' ')}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-[#6c7290]">Round</dt>
+                <dt className="text-xs text-muted">Round</dt>
                 <dd className="mt-0.5 font-semibold text-white">
                   {entry.offerSummary.roundName}
                 </dd>
@@ -125,8 +125,8 @@ export default async function QuestionPage({
 
         {entry.notifyFailure ? (
           <Card tone="warn" title="The notification did not get out">
-            <p className="text-sm leading-relaxed text-[#9498b5]">{entry.notifyFailure}</p>
-            <p className="mt-3 text-xs leading-relaxed text-[#6c7290]">
+            <p className="text-sm leading-relaxed text-dim">{entry.notifyFailure}</p>
+            <p className="mt-3 text-xs leading-relaxed text-muted">
               The question itself is recorded and nothing has been lost. The person who asked
               was not told anything about this.
             </p>
@@ -138,7 +138,7 @@ export default async function QuestionPage({
 
         <Card title="The conversation">
           {messages.length === 0 ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#e7e9f5]">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-ftext">
               {entry.questionOriginal}
             </p>
           ) : (
@@ -147,14 +147,14 @@ export default async function QuestionPage({
                 <li
                   key={message.id}
                   className={`border-l-2 pl-3 ${
-                    message.from === 'YOU' ? 'border-[#F59A23]' : 'border-[#35d07f]'
+                    message.from === 'YOU' ? 'border-orange' : 'border-ok'
                   }`}
                 >
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-[#6c7290]">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted">
                     {message.from === 'YOU' ? 'They asked' : 'You replied'} ·{' '}
                     {formatDate(message.at)}
                   </p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-[#e7e9f5]">
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ftext">
                     {message.body}
                   </p>
                 </li>

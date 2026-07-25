@@ -76,7 +76,7 @@ export default async function OfferPage({
   return (
     <>
       <SectionHeading eyebrow="Investor record" title={row.name}>
-        <Link href="/recipients" className="text-[#F59A23]">
+        <Link href="/recipients" className="text-orange">
           Back to review and send
         </Link>
       </SectionHeading>
@@ -85,8 +85,8 @@ export default async function OfferPage({
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-sm text-[#9498b5]">{row.email}</p>
-              <p className="text-xs text-[#6c7290]">
+              <p className="text-sm text-dim">{row.email}</p>
+              <p className="text-xs text-muted">
                 {row.roundName} · account {row.accountStatus.toLowerCase()}
               </p>
             </div>
@@ -106,32 +106,32 @@ export default async function OfferPage({
               ] as const
             ).map(([label, value]) => (
               <div key={label}>
-                <dt className="text-xs text-[#6c7290]">{label}</dt>
+                <dt className="text-xs text-muted">{label}</dt>
                 <dd className="mt-0.5 font-semibold tabular-nums text-white">
                   {value ? formatMoney(value) : '—'}
                 </dd>
               </div>
             ))}
             <div>
-              <dt className="text-xs text-[#6c7290]">SPV share</dt>
+              <dt className="text-xs text-muted">SPV share</dt>
               <dd className="mt-0.5 font-semibold tabular-nums text-white">
                 {formatPercentage(row.offer.spvPercentage, { decimalPlaces })}
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-[#6c7290]">Indirect Flipit</dt>
+              <dt className="text-xs text-muted">Indirect Flipit</dt>
               <dd className="mt-0.5 font-semibold tabular-nums text-white">
                 {formatPercentage(row.offer.indirectPercentage, { decimalPlaces })}
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-[#6c7290]">Deadline</dt>
+              <dt className="text-xs text-muted">Deadline</dt>
               <dd className="mt-0.5 font-semibold tabular-nums text-white">
                 {row.offer.responseDeadline}
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-[#6c7290]">Response</dt>
+              <dt className="text-xs text-muted">Response</dt>
               <dd className="mt-0.5 font-semibold text-white">
                 {row.offer.responseChoice.toLowerCase().replace(/_/g, ' ')}
               </dd>
@@ -145,10 +145,10 @@ export default async function OfferPage({
               const currentIndex = OFFER_STAGES.indexOf(stage)
               const tone =
                 index < currentIndex
-                  ? 'text-[#35d07f]'
+                  ? 'text-ok'
                   : index === currentIndex
-                    ? 'text-[#F59A23]'
-                    : 'text-[#6c7290]'
+                    ? 'text-orange'
+                    : 'text-muted'
               return (
                 <li key={item} className={`text-sm ${tone}`}>
                   {index + 1}. {STAGE_LABEL[item]}
@@ -200,13 +200,13 @@ export default async function OfferPage({
               {certificates.map((certificate) => (
                 <li
                   key={certificate.id}
-                  className="rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5 text-sm"
+                  className="rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm"
                 >
-                  <span className="text-[#e7e9f5]">
+                  <span className="text-ftext">
                     Version {certificate.version} · {certificate.currency}{' '}
                     {certificate.amountReceived} · value date {certificate.valueDate}
                   </span>
-                  <span className="ml-2 text-xs text-[#6c7290]">
+                  <span className="ml-2 text-xs text-muted">
                     issued {certificate.issuedAt.toISOString().slice(0, 10)}
                     {certificate.supersededAt ? ' · superseded' : ' · current'}
                   </span>
@@ -228,15 +228,15 @@ export default async function OfferPage({
           <Card title="History">
             <ol className="grid gap-3">
               {history.map((event) => (
-                <li key={event.id} className="border-l-2 border-[#2a2d52] pl-3">
-                  <p className="text-sm text-[#e7e9f5]">
+                <li key={event.id} className="border-l-2 border-edge pl-3">
+                  <p className="text-sm text-ftext">
                     {event.fromStage ? `${STAGE_LABEL[event.fromStage as OfferStage]} → ` : ''}
                     {STAGE_LABEL[event.toStage as OfferStage]}
                     {event.isCorrection ? ' (correction)' : ''}
                   </p>
-                  <p className="text-xs text-[#6c7290]">{formatDate(event.createdAt)}</p>
+                  <p className="text-xs text-muted">{formatDate(event.createdAt)}</p>
                   {event.reason ? (
-                    <p className="mt-1 text-xs leading-relaxed text-[#9498b5]">{event.reason}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-dim">{event.reason}</p>
                   ) : null}
                 </li>
               ))}

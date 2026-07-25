@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { signOutAction } from '@/actions/auth'
 import { AdminNav } from '@/components/admin/admin-nav'
+import { PageCurl } from '@/components/page-curl'
+import { SiteFooter } from '@/components/site-footer'
 import { requireAdmin } from '@/lib/auth/guards'
 import { env } from '@/lib/env'
 
@@ -17,6 +19,11 @@ export const metadata: Metadata = {
  * visitor, but it is not the only check: every page and every server action
  * repeats its own. A layout guard is a convenience, not an authorization
  * boundary, because a nested route handler never runs it.
+ *
+ * The header is a `<header>` and the content is a `<main id="main">` so that
+ * the skip link in the root layout has somewhere to land, and so a screen
+ * reader can jump the navigation on every one of the fourteen admin screens
+ * rather than hearing it fourteen times.
  */
 export default async function AdminLayout({
   children,
@@ -27,44 +34,52 @@ export default async function AdminLayout({
   const config = env()
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-10">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#F59A23]">
-            Flipit Global SPV
-          </p>
-          <p className="mt-1 text-sm text-[#9498b5]">
-            Signed in as{' '}
-            <span className="text-[#e7e9f5]">{admin.email}</span>{' '}
-            <span className="text-[#F59A23]">
-              ({admin.role === 'OWNER' ? 'Owner' : 'Operator'})
-            </span>
-          </p>
-        </div>
+    <div className="flex min-h-full flex-col">
+      <div className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6 sm:py-10">
+        <header>
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-orange">
+                <PageCurl size={16} />
+                Flipit Global SPV
+              </p>
+              <p className="mt-1 text-sm break-words text-dim">
+                Signed in as <span className="text-ftext">{admin.email}</span>{' '}
+                <span className="text-orange">
+                  ({admin.role === 'OWNER' ? 'Owner' : 'Operator'})
+                </span>
+              </p>
+            </div>
 
-        <form action={signOutAction}>
-          <button
-            type="submit"
-            className="inline-flex min-h-9 items-center rounded-sm border hairline px-3 text-xs font-semibold text-[#9498b5] transition-colors hover:border-[#F59A23] hover:text-[#e7e9f5]"
-          >
-            Sign out
-          </button>
-        </form>
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+
+          {!config.isProductionDeployment ? (
+            <p className="mt-4 border-l-2 border-warn pl-3 text-xs leading-relaxed text-dim">
+              Testing deployment. Portal links embed this domain, so real invitations are
+              refused from here. Test sends to the operator&rsquo;s own address remain
+              available.
+            </p>
+          ) : null}
+
+          <div className="mt-6 border-t hairline pt-3">
+            <AdminNav role={admin.role} />
+          </div>
+        </header>
+
+        <main id="main" className="mt-8">
+          {children}
+        </main>
       </div>
 
-      {!config.isProductionDeployment ? (
-        <p className="mt-4 border-l-2 border-[#ff5b52] pl-3 text-xs leading-relaxed text-[#9498b5]">
-          Testing deployment. Portal links embed this domain, so real invitations are
-          refused from here. Test sends to the operator&rsquo;s own address remain
-          available.
-        </p>
-      ) : null}
-
-      <div className="mt-6 border-t hairline pt-3">
-        <AdminNav role={admin.role} />
-      </div>
-
-      <div className="mt-8">{children}</div>
+      <SiteFooter surface="ADMIN" />
     </div>
   )
 }

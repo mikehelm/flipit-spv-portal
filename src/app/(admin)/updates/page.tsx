@@ -45,11 +45,11 @@ function UpdateCard({
   const notified = update.recipients.filter((row) => row.notifiedAt !== null).length
 
   return (
-    <article className="rounded-sm border hairline bg-[#14162f] p-4 sm:p-5">
+    <article className="rounded-sm border hairline bg-paper p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-white">{update.title}</p>
-          <p className="text-xs text-[#6c7290]">
+          <p className="text-xs text-muted">
             {update.audienceLabel}
             {published ? ` · published ${formatDate(update.publishedAt)}` : ' · draft'}
             {update.authorEmail ? ` · by ${update.authorEmail}` : ''}
@@ -71,27 +71,27 @@ function UpdateCard({
         </div>
       </div>
 
-      <div className="mt-4 rounded-sm border hairline bg-[#0d0f2e] p-4">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-[#6c7290]">
+      <div className="mt-4 rounded-sm border hairline bg-bg2 p-4">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted">
           As the investor sees it
         </p>
         <p className="mt-2 text-sm font-semibold text-white">{update.title}</p>
-        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[#cbd1de]">
+        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-silver2">
           {update.body}
         </p>
       </div>
 
       {withdrawn ? (
-        <p className="mt-4 border-l-2 border-[#ff5b52] pl-3 text-xs leading-relaxed text-[#9498b5]">
+        <p className="mt-4 border-l-2 border-warn pl-3 text-xs leading-relaxed text-dim">
           Withdrawn {formatDate(update.withdrawnAt)}. Reason recorded:{' '}
-          <span className="text-[#e7e9f5]">{update.withdrawnReason}</span>. It is gone from every
+          <span className="text-ftext">{update.withdrawnReason}</span>. It is gone from every
           portal; anyone who had already read it has already read it.
         </p>
       ) : null}
 
       {!published ? (
         <div className="mt-5 grid gap-4">
-          <details className="rounded-sm border hairline bg-[#0d0f2e] p-4">
+          <details className="rounded-sm border hairline bg-bg2 p-4">
             <summary className="cursor-pointer text-sm font-semibold text-white">
               Edit this draft
             </summary>
@@ -115,18 +115,18 @@ function UpdateCard({
       {published && !withdrawn ? (
         <div className="mt-5 grid gap-4">
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#cbd1de]">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-silver2">
               Recipients ({update.recipients.length})
             </p>
             <ul className="grid gap-2">
               {update.recipients.map((recipient) => (
                 <li
                   key={recipient.accountId}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-sm border hairline bg-bg2 px-3 py-2.5"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm text-[#e7e9f5]">{recipient.name}</p>
-                    <p className="text-xs text-[#6c7290]">
+                    <p className="text-sm text-ftext">{recipient.name}</p>
+                    <p className="text-xs text-muted">
                       {recipient.email}
                       {recipient.readAt ? ' · read it' : ' · not opened yet'}
                     </p>
@@ -191,19 +191,19 @@ export default async function UpdatesPage() {
           title="The notification email, in full"
           description="Every recipient gets exactly this. It carries no amounts, no percentages and nothing personal — there is no way to put any of them in it, because the function that builds it takes only the two links."
         >
-          <dl className="text-xs text-[#9498b5]">
+          <dl className="text-xs text-dim">
             <div className="flex gap-2">
-              <dt className="font-semibold text-[#cbd1de]">Subject</dt>
-              <dd className="text-[#e7e9f5]">{UPDATE_NOTIFICATION_SUBJECT}</dd>
+              <dt className="font-semibold text-silver2">Subject</dt>
+              <dd className="text-ftext">{UPDATE_NOTIFICATION_SUBJECT}</dd>
             </div>
           </dl>
-          <p className="mt-3 text-sm leading-relaxed text-[#cbd1de]">
+          <p className="mt-3 text-sm leading-relaxed text-silver2">
             {UPDATE_NOTIFICATION_LEAD}
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-[#9498b5]">
+          <p className="mt-2 text-sm leading-relaxed text-dim">
             [link to the portal]
           </p>
-          <p className="mt-2 text-xs leading-relaxed text-[#6c7290]">
+          <p className="mt-2 text-xs leading-relaxed text-muted">
             {UPDATE_NOTIFICATION_SECURITY_LINE}
           </p>
         </Card>
@@ -225,7 +225,7 @@ export default async function UpdatesPage() {
           </h2>
           {live.length === 0 ? (
             <Card>
-              <p className="text-sm text-[#9498b5]">
+              <p className="text-sm text-dim">
                 Nothing has been published yet. Investors see an empty updates section with a
                 note that they will be told when one appears.
               </p>

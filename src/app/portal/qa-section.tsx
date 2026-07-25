@@ -32,18 +32,18 @@ function SharedEntry({
   updatedPeriod: string | null
 }) {
   return (
-    <li className="rounded-sm border hairline bg-[#14162f] p-4 sm:p-5">
+    <li className="rounded-sm border hairline bg-paper p-4 sm:p-5">
       {pinned ? (
-        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#F59A23]">
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-orange">
           Start here
         </p>
       ) : null}
       <p className="text-sm font-semibold leading-relaxed text-white">{question}</p>
-      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[#cbd1de]">
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-silver2">
         {answer}
       </p>
       {publishedPeriod ? (
-        <p className="mt-3 text-xs text-[#6c7290]">
+        <p className="mt-3 text-xs text-muted">
           Answered {publishedPeriod}
           {updatedPeriod ? ` · updated ${updatedPeriod}` : ''}
         </p>
@@ -60,8 +60,8 @@ export function QaSection({ view }: { view: InvestorQaView }) {
       <h2 className="text-sm font-semibold text-white">Questions and answers</h2>
 
       {view.canAsk ? (
-        <div className="mt-4 rounded-sm border hairline bg-[#14162f] p-5">
-          <p className="text-sm leading-relaxed text-[#cbd1de]">
+        <div className="mt-4 rounded-sm border hairline bg-paper p-5">
+          <p className="text-sm leading-relaxed text-silver2">
             Have a question about the SPV, the structure, or your allocation? Ask it here and
             David will come back to you by email. You&rsquo;ll also see his answer on this
             page.
@@ -78,13 +78,13 @@ export function QaSection({ view }: { view: InvestorQaView }) {
                 rows={4}
                 required
                 placeholder="What would you like to know?"
-                className="w-full rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5 text-sm text-[#e7e9f5] placeholder:text-[#6c7290] focus:border-[#F59A23] focus:outline-none"
+                className="w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext placeholder:text-muted focus:border-orange"
               />
             </ActionForm>
           </div>
         </div>
       ) : (
-        <p className="mt-4 text-sm leading-relaxed text-[#9498b5]">
+        <p className="mt-4 text-sm leading-relaxed text-dim">
           Questions are not being accepted at this time. Your previous questions and their
           answers remain below.
         </p>
@@ -93,13 +93,13 @@ export function QaSection({ view }: { view: InvestorQaView }) {
       {view.sharedState === 'VISIBLE' ? (
         <div className="mt-8">
           <h3 className="text-sm font-semibold text-white">Common questions</h3>
-          <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+          <p className="mt-2 text-xs leading-relaxed text-dim">
             Questions other people have asked, answered by David. Names are never shown — if
             you ask something here, nobody else sees that it came from you.
           </p>
 
           {view.shared.length === 0 ? (
-            <p className="mt-4 text-sm leading-relaxed text-[#9498b5]">
+            <p className="mt-4 text-sm leading-relaxed text-dim">
               No shared questions yet. If you have one, ask above.
             </p>
           ) : (
@@ -122,7 +122,7 @@ export function QaSection({ view }: { view: InvestorQaView }) {
       {view.canReadOwn && view.own.length > 0 ? (
         <div className="mt-8">
           <h3 className="text-sm font-semibold text-white">Your own questions</h3>
-          <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+          <p className="mt-2 text-xs leading-relaxed text-dim">
             Your questions and David&rsquo;s replies to you. These are private to you unless
             David marks an answer as generally useful, in which case the question appears in
             Common questions above with your name removed.
@@ -132,23 +132,23 @@ export function QaSection({ view }: { view: InvestorQaView }) {
             {view.own.map((thread) => (
               <li
                 key={thread.entryId}
-                className="rounded-sm border hairline bg-[#14162f] p-4 sm:p-5"
+                className="rounded-sm border hairline bg-paper p-4 sm:p-5"
               >
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">
                   {thread.question}
                 </p>
 
                 {thread.answer ? (
-                  <div className="mt-4 border-l-2 border-[#35d07f] pl-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#6c7290]">
+                  <div className="mt-4 border-l-2 border-ok pl-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted">
                       David&rsquo;s reply
                     </p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-[#cbd1de]">
+                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-silver2">
                       {thread.answer}
                     </p>
                   </div>
                 ) : (
-                  <p className="mt-3 text-xs leading-relaxed text-[#9498b5]">
+                  <p className="mt-3 text-xs leading-relaxed text-dim">
                     Sent to David. He will get back to you by email, and the answer will
                     appear here too.
                   </p>
@@ -171,7 +171,7 @@ export function QaSection({ view }: { view: InvestorQaView }) {
                         rows={3}
                         required
                         placeholder="Anything else on this?"
-                        className="w-full rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5 text-sm text-[#e7e9f5] placeholder:text-[#6c7290] focus:border-[#F59A23] focus:outline-none"
+                        className="w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext placeholder:text-muted focus:border-orange"
                       />
                     </ActionForm>
                   </div>

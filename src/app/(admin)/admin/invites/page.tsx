@@ -39,7 +39,7 @@ export default async function InvitesPage() {
     <>
       <SectionHeading eyebrow="Owner only" title="Operator access">
         An invitation is a formality on top of the allowlist, not a substitute for it. An
-        address that is not in <code className="text-[#cbd1de]">OPERATOR_EMAILS</code>{' '}
+        address that is not in <code className="text-silver2">OPERATOR_EMAILS</code>{' '}
         cannot sign in whatever invitation it holds, so issuing one to such an address is
         refused rather than left to fail later.
       </SectionHeading>
@@ -52,9 +52,9 @@ export default async function InvitesPage() {
               Valid for {OPERATOR_INVITE_TTL_HOURS} hours, usable once, and only by the
               address it names. Currently on the operator allowlist:{' '}
               {allowlisted.length > 0 ? (
-                <span className="text-[#e7e9f5]">{allowlisted.join(', ')}</span>
+                <span className="text-ftext">{allowlisted.join(', ')}</span>
               ) : (
-                <span className="text-[#ff5b52]">nobody</span>
+                <span className="text-warn">nobody</span>
               )}
               .
             </>
@@ -79,7 +79,7 @@ export default async function InvitesPage() {
 
         <Card title="Invitations">
           {invites.length === 0 ? (
-            <p className="text-sm text-[#9498b5]">None issued yet.</p>
+            <p className="text-sm text-dim">None issued yet.</p>
           ) : (
             <ul className="space-y-3">
               {invites.map((invite) => {
@@ -87,15 +87,15 @@ export default async function InvitesPage() {
                 return (
                   <li
                     key={invite.id}
-                    className="rounded-sm border hairline bg-[#0d0f2e] p-3"
+                    className="rounded-sm border hairline bg-bg2 p-3"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="break-all text-sm text-[#e7e9f5]">
+                      <span className="break-all text-sm text-ftext">
                         {invite.email}
                       </span>
                       <Pill tone={STATUS_TONE[status]}>{status.replace('_', ' ')}</Pill>
                     </div>
-                    <dl className="mt-2 grid gap-1 text-xs text-[#9498b5] sm:grid-cols-[7rem_1fr]">
+                    <dl className="mt-2 grid gap-1 text-xs text-dim sm:grid-cols-[7rem_1fr]">
                       <dt>Issued</dt>
                       <dd>{utc(invite.createdAt)}</dd>
                       <dt>Expires</dt>

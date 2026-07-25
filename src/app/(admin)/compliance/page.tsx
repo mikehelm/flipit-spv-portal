@@ -55,8 +55,8 @@ export default async function CompliancePage() {
       </SectionHeading>
 
       <Card tone="warn" title="This application does not give legal advice">
-        <p className="text-sm leading-relaxed text-[#cbd1de]">{NOT_LEGAL_ADVICE}</p>
-        <p className="mt-3 text-sm leading-relaxed text-[#9498b5]">
+        <p className="text-sm leading-relaxed text-silver2">{NOT_LEGAL_ADVICE}</p>
+        <p className="mt-3 text-sm leading-relaxed text-dim">
           It does not assess whether the approval recorded below is adequate, whether the
           approver is qualified, or whether the jurisdictions listed are the right ones. It
           records what you tell it and refuses to send anything the record does not cover.
@@ -75,14 +75,14 @@ export default async function CompliancePage() {
           ) : (
             <Pill tone="warn">{overview.blocked.length} held</Pill>
           )}
-          <span className="text-sm text-[#9498b5]">
+          <span className="text-sm text-dim">
             {overview.sendableCount} of {overview.recipients.length} recipients pass the gate.
           </span>
         </div>
 
         {overview.recipients.length === 0 ? (
           <Card>
-            <p className="text-sm text-[#9498b5]">
+            <p className="text-sm text-dim">
               No recipients have been imported yet, so there is nothing for the gate to
               decide.
             </p>
@@ -99,7 +99,7 @@ export default async function CompliancePage() {
                     {offer.jurisdiction ? (
                       <JurisdictionList codes={[offer.jurisdiction]} />
                     ) : (
-                      <span className="text-[#ff5b52]">None recorded</span>
+                      <span className="text-warn">None recorded</span>
                     )}
                   </KeyValue>
                   <KeyValue label="Reason">
@@ -121,7 +121,7 @@ export default async function CompliancePage() {
 
                 {decision.reason === 'JURISDICTION_NOT_APPROVED' ? (
                   <div className="mt-5 border-t hairline pt-4">
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#F59A23]">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-orange">
                       Clear this recipient alone
                     </p>
                     <ActionForm
@@ -156,7 +156,7 @@ export default async function CompliancePage() {
         ) ? (
           <div className="mt-6">
             <Card title="Cleared individually">
-              <p className="mb-4 text-sm text-[#9498b5]">
+              <p className="mb-4 text-sm text-dim">
                 These recipients are sendable because a specific approval reference was
                 recorded for them, not because their country is on the approved list.
               </p>
@@ -171,11 +171,11 @@ export default async function CompliancePage() {
                     <div key={offer.id} className="border-t hairline pt-3">
                       <p className="text-sm font-semibold text-white">
                         {offer.recipientName}{' '}
-                        <span className="font-normal text-[#9498b5]">
+                        <span className="font-normal text-dim">
                           — {offer.jurisdiction ?? 'no jurisdiction'}
                         </span>
                       </p>
-                      <p className="mt-1 text-sm break-words text-[#cbd1de]">
+                      <p className="mt-1 text-sm break-words text-silver2">
                         Reference: {offer.jurisdictionApprovalRef}
                       </p>
                       <div className="mt-3">
@@ -211,7 +211,7 @@ export default async function CompliancePage() {
             </div>
 
             <Card tone={drift.state === 'APPROVED' ? 'ok' : 'warn'}>
-              <p className="text-sm leading-relaxed text-[#cbd1de]">{drift.message}</p>
+              <p className="text-sm leading-relaxed text-silver2">{drift.message}</p>
 
               <dl className="mt-4">
                 <KeyValue label="Live template hash">
@@ -262,7 +262,7 @@ export default async function CompliancePage() {
 
             {drift.state === 'DRIFTED' && !drift.diff ? (
               <Card title="What changed since approval" tone="warn">
-                <p className="text-sm leading-relaxed text-[#cbd1de]">
+                <p className="text-sm leading-relaxed text-silver2">
                   {drift.diffUnavailableReason}
                 </p>
               </Card>
@@ -308,17 +308,17 @@ export default async function CompliancePage() {
                         ) : (
                           <Pill tone="ok">In force</Pill>
                         )}
-                        <span className="text-[#e7e9f5]">
+                        <span className="text-ftext">
                           {entry.approverName} — {entry.approvedAt.toISOString().slice(0, 10)}
                         </span>
                       </div>
-                      <p className="mt-1 text-xs text-[#9498b5]">
+                      <p className="mt-1 text-xs text-dim">
                         {entry.approvedJurisdictions.join(', ')} · recorded by{' '}
                         {recordedByEmail ?? 'the owner'} on{' '}
                         {entry.createdAt.toISOString().slice(0, 10)}
                       </p>
                       {entry.voidedReason ? (
-                        <p className="mt-1 text-xs text-[#9498b5]">
+                        <p className="mt-1 text-xs text-dim">
                           Voided: {entry.voidedReason}
                         </p>
                       ) : null}

@@ -34,12 +34,12 @@ function Row({ item, names }: { item: PreflightItem; names: Map<string, string> 
     <li className="border-t hairline py-4 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-[#e7e9f5]">{item.label}</p>
-          <p className="mt-1 text-xs leading-relaxed text-[#9498b5]">{item.detail}</p>
+          <p className="text-sm font-medium text-ftext">{item.label}</p>
+          <p className="mt-1 text-xs leading-relaxed text-dim">{item.detail}</p>
 
           {affected.length > 0 ? (
-            <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
-              <span className="text-[#cbd1de]">Affects:</span> {affected.join(', ')}
+            <p className="mt-2 text-xs leading-relaxed text-dim">
+              <span className="text-silver2">Affects:</span> {affected.join(', ')}
             </p>
           ) : null}
         </div>
@@ -47,7 +47,7 @@ function Row({ item, names }: { item: PreflightItem; names: Map<string, string> 
         <div className="flex shrink-0 flex-col items-end gap-2">
           <Pill tone={toneFor(item)}>{stateLabel(item)}</Pill>
           {item.kind === 'ENFORCED' ? (
-            <span className="text-[10px] uppercase tracking-wider text-[#6c7290]">
+            <span className="text-[10px] uppercase tracking-wider text-muted">
               Enforced
             </span>
           ) : null}
@@ -98,7 +98,7 @@ export function PreflightPanel({
       </Notice>
 
       <div className="mt-5 border-t hairline pt-4">
-        <p className="mb-3 text-xs leading-relaxed text-[#9498b5]">
+        <p className="mb-3 text-xs leading-relaxed text-dim">
           Re-imported the recipient file, or changed the template? Clear the checklist and
           walk it again.
         </p>

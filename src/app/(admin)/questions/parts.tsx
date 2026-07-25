@@ -30,7 +30,7 @@ import {
  * the scan below is the reminder §6.7.3 asks for, not the enforcement.
  */
 
-const LABEL = 'block text-xs font-semibold uppercase tracking-wider text-[#cbd1de]'
+const LABEL = 'block text-xs font-semibold uppercase tracking-wider text-silver2'
 
 export interface AnswerFormEntry {
   id: string
@@ -45,7 +45,7 @@ function Findings({ texts }: { texts: string[] }) {
   const findings = scanForIdentifyingDetail(...texts)
   if (findings.length === 0) {
     return (
-      <p className="mt-2 text-xs leading-relaxed text-[#35d07f]">
+      <p className="mt-2 text-xs leading-relaxed text-ok">
         Nothing in this wording matched the checks for amounts, percentages, addresses,
         telephone numbers, specific dates, or references to a private conversation. That is
         not the same as it being unidentifiable — read it once as a stranger would.
@@ -54,14 +54,14 @@ function Findings({ texts }: { texts: string[] }) {
   }
 
   return (
-    <div className="mt-2 border-l-2 border-[#ff5b52] pl-3">
-      <p className="text-xs font-semibold text-[#ff5b52]">
+    <div className="mt-2 border-l-2 border-warn pl-3">
+      <p className="text-xs font-semibold text-warn">
         Check these before publishing — any of them can identify the person who asked:
       </p>
-      <ul className="mt-1 list-disc pl-4 text-xs leading-relaxed text-[#9498b5]">
+      <ul className="mt-1 list-disc pl-4 text-xs leading-relaxed text-dim">
         {findings.map((finding) => (
           <li key={`${finding.kind}-${finding.excerpt}`}>
-            {finding.label}: <span className="text-[#e7e9f5]">{finding.excerpt}</span>
+            {finding.label}: <span className="text-ftext">{finding.excerpt}</span>
           </li>
         ))}
       </ul>
@@ -105,20 +105,20 @@ export function AnswerForm({ entry }: { entry: AnswerFormEntry }) {
             placeholder="Write the answer as you would say it."
           />
         </div>
-        <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+        <p className="mt-2 text-xs leading-relaxed text-dim">
           Saving does not email anybody. The reply to the person who asked is a separate
           button below, and it only goes when you press it.
         </p>
       </div>
 
-      <div className="mb-4 rounded-sm border hairline bg-[#0d0f2e] p-4">
+      <div className="mb-4 rounded-sm border hairline bg-bg2 p-4">
         <Checkbox
           name="publish"
           label="Also publish this answer to the shared Q&A."
           checked={publish}
           onChange={(event) => setPublish(event.target.checked)}
         />
-        <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+        <p className="mt-2 text-xs leading-relaxed text-dim">
           {PUBLISH_COMPLIANCE_NOTICE}
         </p>
       </div>
@@ -127,11 +127,11 @@ export function AnswerForm({ entry }: { entry: AnswerFormEntry }) {
         <div className="mb-4">
           <p className={LABEL}>The question, side by side</p>
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-sm border hairline bg-[#0d0f2e] p-3">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[#6c7290]">
+            <div className="rounded-sm border hairline bg-bg2 p-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted">
                 As they wrote it — never published
               </p>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[#9498b5]">
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-dim">
                 {entry.questionOriginal}
               </p>
             </div>
@@ -185,18 +185,18 @@ export function ReplyPreview({
       title="The reply email"
       description="This is the message, exactly as it would arrive. Nothing has been sent."
     >
-      <dl className="text-xs text-[#9498b5]">
+      <dl className="text-xs text-dim">
         <div className="flex gap-2">
-          <dt className="font-semibold text-[#cbd1de]">To</dt>
-          <dd className="text-[#e7e9f5]">{to}</dd>
+          <dt className="font-semibold text-silver2">To</dt>
+          <dd className="text-ftext">{to}</dd>
         </div>
         <div className="mt-1 flex gap-2">
-          <dt className="font-semibold text-[#cbd1de]">Subject</dt>
-          <dd className="text-[#e7e9f5]">{subject}</dd>
+          <dt className="font-semibold text-silver2">Subject</dt>
+          <dd className="text-ftext">{subject}</dd>
         </div>
       </dl>
 
-      <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap rounded-sm border hairline bg-[#0d0f2e] p-3 text-xs leading-relaxed text-[#cbd1de]">
+      <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap rounded-sm border hairline bg-bg2 p-3 text-xs leading-relaxed text-silver2">
         {text}
       </pre>
 
@@ -247,7 +247,7 @@ export function PublicationControls({
         </div>
       </div>
       <div className="sm:col-span-2">
-        <p className="mb-2 text-xs leading-relaxed text-[#9498b5]">{UNPUBLISH_NOTICE}</p>
+        <p className="mb-2 text-xs leading-relaxed text-dim">{UNPUBLISH_NOTICE}</p>
         <ActionForm
           action={unpublishEntryAction}
           submitLabel="Remove from the shared page"
@@ -309,9 +309,9 @@ export function SeedEntryForm() {
 
       <Findings texts={[question, answer]} />
 
-      <div className="mt-4 rounded-sm border hairline bg-[#0d0f2e] p-4">
+      <div className="mt-4 rounded-sm border hairline bg-bg2 p-4">
         <Checkbox name="publish" label="Publish it to the shared Q&A now." />
-        <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+        <p className="mt-2 text-xs leading-relaxed text-dim">
           {PUBLISH_COMPLIANCE_NOTICE}
         </p>
       </div>

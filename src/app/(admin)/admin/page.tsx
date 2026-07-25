@@ -42,12 +42,12 @@ export default async function AdminHomePage() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card title="Service mode">
-          <p className="text-sm text-[#e7e9f5]">
+          <p className="text-sm text-ftext">
             <Pill tone={config.serviceMode === 'ACTIVE' ? 'ok' : 'warn'}>
               {config.serviceMode.replace('_', ' ')}
             </Pill>
           </p>
-          <p className="mt-3 text-sm leading-relaxed text-[#9498b5]">
+          <p className="mt-3 text-sm leading-relaxed text-dim">
             {config.serviceMode === 'ACTIVE'
               ? 'Investors can view and respond. Sending is permitted once the other gates pass.'
               : 'Sending is unavailable in this mode. Inviting someone into a portal that will not accept their response is a contradiction the application refuses to allow.'}
@@ -59,7 +59,7 @@ export default async function AdminHomePage() {
             label="Gmail app password"
             state={maskConfigured(config.smtpPasswordEncrypted)}
           />
-          <p className="mt-3 text-sm leading-relaxed text-[#9498b5]">
+          <p className="mt-3 text-sm leading-relaxed text-dim">
             {sendingConfigured
               ? 'Stored, encrypted. The connection still has to be tested before anything can be sent.'
               : 'Not connected. Nothing can be sent until it is.'}
@@ -68,7 +68,7 @@ export default async function AdminHomePage() {
             <p className="mt-3">
               <Link
                 href="/admin/onboarding"
-                className="text-sm font-semibold text-[#F59A23]"
+                className="text-sm font-semibold text-orange"
               >
                 Change the sending account
               </Link>
@@ -84,11 +84,11 @@ export default async function AdminHomePage() {
               label="OpenAI key"
               state={maskConfigured(config.openAiKeyEncrypted)}
             />
-            <p className="mt-3 text-sm leading-relaxed text-[#9498b5]">
+            <p className="mt-3 text-sm leading-relaxed text-dim">
               Import works either way — without a key the operator maps columns by hand.
             </p>
             <p className="mt-3">
-              <Link href="/admin/settings" className="text-sm font-semibold text-[#F59A23]">
+              <Link href="/admin/settings" className="text-sm font-semibold text-orange">
                 Settings
               </Link>
             </p>
@@ -97,12 +97,12 @@ export default async function AdminHomePage() {
 
         {admin.role === 'OWNER' ? (
           <Card title="Approved jurisdictions">
-            <p className="text-sm text-[#e7e9f5]">
+            <p className="text-sm text-ftext">
               {config.approvedJurisdictions.length === 0
                 ? 'None configured'
                 : config.approvedJurisdictions.join(', ')}
             </p>
-            <p className="mt-3 text-sm leading-relaxed text-[#9498b5]">
+            <p className="mt-3 text-sm leading-relaxed text-dim">
               Configuration only. A recorded compliance approval is what actually clears
               a recipient, and that control is owner-only and separate from this page.
             </p>
@@ -111,13 +111,13 @@ export default async function AdminHomePage() {
 
         {onboarding ? (
           <Card title="Your setup">
-            <p className="text-sm text-[#e7e9f5]">
+            <p className="text-sm text-ftext">
               {onboarding.completedCount} of {onboarding.totalCount} steps complete
             </p>
             <p className="mt-3">
               <Link
                 href="/admin/onboarding"
-                className="text-sm font-semibold text-[#F59A23]"
+                className="text-sm font-semibold text-orange"
               >
                 Review your setup
               </Link>

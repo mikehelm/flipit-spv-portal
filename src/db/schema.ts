@@ -1076,6 +1076,20 @@ export const serviceConfig = pgTable('service_config', {
     .notNull()
     .default('20'),
   aiHeadersOnly: boolean('ai_headers_only').notNull().default(false),
+  /**
+   * The "Made by Make with Mike" credit. BUILD_SPEC §13.2 asks for it to be
+   * "configurable so it can be switched off per-surface if it ever feels wrong
+   * beside the offer figures" — hence two columns rather than one.
+   *
+   * It never appears in an invitation or on a participation certificate, and
+   * that is not configurable: §13.2 is explicit that "those are formal
+   * instruments about someone's money", and `attribution.test.ts` holds it
+   * shut with no column to open it.
+   */
+  attributionOnAdmin: boolean('attribution_on_admin').notNull().default(true),
+  attributionOnPortal: boolean('attribution_on_portal').notNull().default(true),
+  /** Optional. When absent the credit is plain text rather than a link. */
+  attributionUrl: text('attribution_url'),
   lastExportAt: timestamp('last_export_at', { withTimezone: true }),
   updatedAt: updatedAt(),
 })

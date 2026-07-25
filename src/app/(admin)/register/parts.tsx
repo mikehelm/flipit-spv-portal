@@ -62,7 +62,7 @@ export function OverrideForm({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex min-h-9 items-center rounded-sm border hairline px-3 text-xs font-semibold text-[#9498b5] transition-colors hover:border-[#F59A23] hover:text-[#e7e9f5]"
+          className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
         >
           {overridden ? 'Change the override' : 'Override this position'}
         </button>
@@ -79,7 +79,7 @@ export function OverrideForm({
   }
 
   return (
-    <div className="rounded-sm border hairline bg-[#0d0f2e] p-4">
+    <div className="rounded-sm border hairline bg-bg2 p-4">
       <ActionForm
         action={setOrderOverrideAction}
         submitLabel="Record the override"
@@ -130,7 +130,7 @@ export function IssueOfferForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex min-h-9 items-center rounded-sm bg-[#F59A23]/12 px-3 text-xs font-semibold text-[#F59A23] transition-colors hover:bg-[#F59A23]/20"
+        className="inline-flex min-h-11 items-center rounded-sm bg-orange/12 px-3 text-xs font-semibold text-orange transition-colors hover:bg-orange/20"
       >
         Issue an offer to {name}
       </button>
@@ -138,8 +138,8 @@ export function IssueOfferForm({
   }
 
   return (
-    <div className="rounded-sm border hairline bg-[#0d0f2e] p-4">
-      <p className="mb-4 border-l-2 border-[#F59A23] pl-3 text-xs leading-relaxed text-[#9498b5]">
+    <div className="rounded-sm border hairline bg-bg2 p-4">
+      <p className="mb-4 border-l-2 border-orange pl-3 text-xs leading-relaxed text-dim">
         {ISSUE_COMPLIANCE_NOTICE}
       </p>
 

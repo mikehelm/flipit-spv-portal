@@ -20,7 +20,7 @@ export default async function NoAccessPage() {
       </SectionHeading>
 
       <Card title="What this covers">
-        <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-[#9498b5]">
+        <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-dim">
           <li>
             Compliance approval, service configuration, the AI key and operator access
             are owner-only.
@@ -31,7 +31,7 @@ export default async function NoAccessPage() {
           </li>
         </ul>
         <p className="mt-4">
-          <Link href="/admin" className="text-sm font-semibold text-[#F59A23]">
+          <Link href="/admin" className="text-sm font-semibold text-orange">
             Back to the overview
           </Link>
         </p>

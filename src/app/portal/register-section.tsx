@@ -27,12 +27,12 @@ export function RegisterSection({ view }: { view: InvestorRegisterView }) {
     <section className="mt-12">
       <h2 className="text-sm font-semibold text-white">{REGISTER_TITLE}</h2>
 
-      <div className="mt-4 rounded-sm border hairline bg-[#14162f] p-5">
+      <div className="mt-4 rounded-sm border hairline bg-paper p-5">
         {REGISTER_COPY.map((paragraph, index) => (
           <p
             key={paragraph.slice(0, 24)}
             className={`text-sm leading-relaxed ${
-              index === 0 ? 'text-[#e7e9f5]' : 'mt-3 text-[#9498b5]'
+              index === 0 ? 'text-ftext' : 'mt-3 text-dim'
             }`}
           >
             {paragraph}
@@ -41,10 +41,10 @@ export function RegisterSection({ view }: { view: InvestorRegisterView }) {
 
         {view.onRegister ? (
           <div className="mt-5 border-t hairline pt-5">
-            <p className="text-sm leading-relaxed text-[#35d07f]">{JOINED_CONFIRMATION}</p>
+            <p className="text-sm leading-relaxed text-ok">{JOINED_CONFIRMATION}</p>
 
             {view.indicativeAmount ? (
-              <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+              <p className="mt-2 text-xs leading-relaxed text-dim">
                 You said roughly {view.indicativeAmount} would interest you. That is indicative
                 only and nothing is held on the basis of it.
               </p>
@@ -65,7 +65,7 @@ export function RegisterSection({ view }: { view: InvestorRegisterView }) {
             <ActionForm action={joinRegisterAction} submitLabel={JOIN_BUTTON_LABEL}>
               <label
                 htmlFor="indicativeAmount"
-                className="block text-xs leading-relaxed text-[#9498b5]"
+                className="block text-xs leading-relaxed text-dim"
               >
                 {INDICATIVE_AMOUNT_LABEL}
               </label>
@@ -76,12 +76,12 @@ export function RegisterSection({ view }: { view: InvestorRegisterView }) {
                 inputMode="decimal"
                 autoComplete="off"
                 placeholder="Optional"
-                className="mt-2 w-full rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5 text-sm text-[#e7e9f5] placeholder:text-[#6c7290] focus:border-[#F59A23] focus:outline-none"
+                className="mt-2 w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext placeholder:text-muted focus:border-orange"
               />
             </ActionForm>
           </div>
         ) : (
-          <p className="mt-5 border-t hairline pt-5 text-sm leading-relaxed text-[#9498b5]">
+          <p className="mt-5 border-t hairline pt-5 text-sm leading-relaxed text-dim">
             The register cannot be changed at this time.
           </p>
         )}

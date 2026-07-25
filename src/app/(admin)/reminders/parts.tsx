@@ -47,13 +47,13 @@ export function ScheduleForm({
         />
       </Field>
 
-      <div className="mb-4 rounded-sm border hairline bg-[#0d0f2e] p-4">
+      <div className="mb-4 rounded-sm border hairline bg-bg2 p-4">
         <Checkbox
           name="enabled"
           label="Send reminders for this round."
           defaultChecked={enabled}
         />
-        <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+        <p className="mt-2 text-xs leading-relaxed text-dim">
           Switching this off stops every queued reminder without deleting the queue, so you can
           still see what would have gone out.
         </p>
@@ -93,7 +93,7 @@ export function RescheduleForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex min-h-9 items-center rounded-sm border hairline px-3 text-xs font-semibold text-[#9498b5] transition-colors hover:border-[#F59A23] hover:text-[#e7e9f5]"
+        className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
       >
         Move it
       </button>
@@ -101,7 +101,7 @@ export function RescheduleForm({
   }
 
   return (
-    <div className="w-full rounded-sm border hairline bg-[#0d0f2e] p-3">
+    <div className="w-full rounded-sm border hairline bg-bg2 p-3">
       <ActionForm
         action={rescheduleReminderAction}
         submitLabel="Move it"
@@ -140,7 +140,7 @@ export function CancelManyForm({
   return (
     <ActionForm action={cancelManyAction} submitLabel="Cancel the selected" tone="danger">
       <fieldset>
-        <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#cbd1de]">
+        <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-silver2">
           Select the ones to cancel
         </legend>
         {reminders.map((reminder) => (

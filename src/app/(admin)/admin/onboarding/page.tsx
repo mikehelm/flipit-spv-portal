@@ -63,7 +63,7 @@ export default async function OnboardingPage() {
     return (
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-white">
-          <span className="text-[#F59A23]">{step?.number}.</span> {step?.title}
+          <span className="text-orange">{step?.number}.</span> {step?.title}
         </h2>
         <Pill tone={state.tone}>{state.label}</Pill>
       </div>
@@ -82,7 +82,7 @@ export default async function OnboardingPage() {
         {/* ---------------------------------------------------------------- */}
         <Card>
           {stepHeader('DISPLAY_NAME')}
-          <p className="text-sm leading-relaxed text-[#9498b5]">
+          <p className="text-sm leading-relaxed text-dim">
             This is the name investors see on the invitation and throughout their portal.
             Use it exactly as it should appear on investment correspondence.
           </p>
@@ -103,7 +103,7 @@ export default async function OnboardingPage() {
         {/* ---------------------------------------------------------------- */}
         <Card>
           {stepHeader('CONTACT_METHOD')}
-          <p className="text-sm leading-relaxed text-[#9498b5]">
+          <p className="text-sm leading-relaxed text-dim">
             This changes the invitation itself. Phone renders a phone line, WhatsApp
             renders a WhatsApp contact with a wa.me link in the portal, and email only
             removes the phone line from the template entirely rather than leaving it
@@ -148,16 +148,16 @@ export default async function OnboardingPage() {
         {/* ---------------------------------------------------------------- */}
         <Card>
           {stepHeader('SENDING_ACCOUNT')}
-          <p className="text-sm leading-relaxed text-[#9498b5]">
+          <p className="text-sm leading-relaxed text-dim">
             Mail goes out over Gmail&rsquo;s own servers from your address, using a
-            16-letter <strong className="text-[#e7e9f5]">app password</strong> — not your
+            16-letter <strong className="text-ftext">app password</strong> — not your
             Google account password, which this application never asks for and could not
             use. Turn on 2-Step Verification first, then generate an app password at{' '}
             <a
               href="https://myaccount.google.com/apppasswords"
               target="_blank"
               rel="noreferrer noopener"
-              className="text-[#F59A23]"
+              className="text-orange"
             >
               myaccount.google.com/apppasswords
             </a>
@@ -224,7 +224,7 @@ export default async function OnboardingPage() {
         {/* ---------------------------------------------------------------- */}
         <Card>
           {stepHeader('VIDEO')}
-          <p className="text-sm leading-relaxed text-[#9498b5]">
+          <p className="text-sm leading-relaxed text-dim">
             A short personal video in the portal is optional and entirely your call.
             Nobody sees it until you publish it — you preview it in the real portal layout
             first and can replace it as many times as you like. If you never record one,
@@ -256,11 +256,11 @@ export default async function OnboardingPage() {
         <Card>
           {stepHeader('QA')}
           {QA_EXPLANATION.map((sentence) => (
-            <p key={sentence} className="mb-2 text-sm leading-relaxed text-[#9498b5]">
+            <p key={sentence} className="mb-2 text-sm leading-relaxed text-dim">
               {sentence}
             </p>
           ))}
-          <p className="mt-3 text-sm leading-relaxed text-[#9498b5]">
+          <p className="mt-3 text-sm leading-relaxed text-dim">
             You can also write entries yourself with no question behind them, which is how
             the section looks answered on day one rather than empty. Three or four
             starters are usually enough: what the SPV is, what the 30% means, when
@@ -278,7 +278,7 @@ export default async function OnboardingPage() {
         {/* ---------------------------------------------------------------- */}
         <Card>
           {stepHeader('TEST_INVITATION')}
-          <p className="text-sm leading-relaxed text-[#9498b5]">
+          <p className="text-sm leading-relaxed text-dim">
             Before anything goes to a real recipient, send yourself the complete
             invitation and read it as they will. Sending to anyone else stays blocked
             until that has actually happened — this step is you agreeing to it, not a

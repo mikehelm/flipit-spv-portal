@@ -50,26 +50,26 @@ export function MailConnectionPanel({
 
   return (
     <Card title="Mail connection">
-      <p className="text-sm text-[#e7e9f5]">
+      <p className="text-sm text-ftext">
         <Pill tone={TONE[health.state]}>{LABEL[health.state]}</Pill>
       </p>
 
-      <dl className="mt-3 grid gap-1 text-sm text-[#9498b5] sm:grid-cols-[10rem_1fr]">
+      <dl className="mt-3 grid gap-1 text-sm text-dim sm:grid-cols-[10rem_1fr]">
         <dt>Sends as</dt>
-        <dd className="break-all text-[#e7e9f5]">
+        <dd className="break-all text-ftext">
           {health.authenticatedAddress ?? 'No account connected'}
         </dd>
         <dt>Server</dt>
-        <dd className="text-[#e7e9f5]">
+        <dd className="text-ftext">
           {health.host ? `${health.host}:${health.port}` : '—'}
         </dd>
         <dt>Last verified</dt>
-        <dd className="text-[#e7e9f5]">
+        <dd className="text-ftext">
           {health.lastVerifiedAt ? health.lastVerifiedAt.toISOString() : 'Never'}
         </dd>
       </dl>
 
-      <p className="mt-3 text-sm leading-relaxed text-[#9498b5]">{health.summary}</p>
+      <p className="mt-3 text-sm leading-relaxed text-dim">{health.summary}</p>
 
       {connected ? (
         <div className="mt-4">

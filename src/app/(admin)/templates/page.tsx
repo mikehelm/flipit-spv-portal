@@ -79,43 +79,43 @@ export default async function TemplatesPage() {
             >
               <dl className="space-y-3 text-sm">
                 <div>
-                  <dt className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#9498b5]">
+                  <dt className="text-[11px] font-bold uppercase tracking-[0.16em] text-dim">
                     Subject
                   </dt>
-                  <dd className="mt-1 text-[#e7e9f5]">{template.subject}</dd>
+                  <dd className="mt-1 text-ftext">{template.subject}</dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#9498b5]">
+                  <dt className="text-[11px] font-bold uppercase tracking-[0.16em] text-dim">
                     Template hash
                   </dt>
-                  <dd className="mt-1 break-all font-mono text-xs text-[#e7e9f5]">
+                  <dd className="mt-1 break-all font-mono text-xs text-ftext">
                     {template.hash}
                   </dd>
-                  <dd className="mt-1 text-xs text-[#9498b5]">
+                  <dd className="mt-1 text-xs text-dim">
                     Computed over the subject and both parts, including the conditional
                     blocks. Changing the operator&rsquo;s contact method does not change
                     it; changing a word does.
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#9498b5]">
+                  <dt className="text-[11px] font-bold uppercase tracking-[0.16em] text-dim">
                     Source
                   </dt>
-                  <dd className="mt-1 text-[#9498b5]">
+                  <dd className="mt-1 text-dim">
                     {template.origin === 'STORED'
                       ? `Stored template, version ${template.version ?? 1}.`
                       : 'The shipped default. No edited version has been stored yet.'}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#9498b5]">
+                  <dt className="text-[11px] font-bold uppercase tracking-[0.16em] text-dim">
                     Variables used
                   </dt>
                   <dd className="mt-1 flex flex-wrap gap-1.5">
                     {referenced.map((name) => (
                       <span
                         key={name}
-                        className="rounded-sm border hairline px-1.5 py-0.5 font-mono text-[11px] text-[#9498b5]"
+                        className="rounded-sm border hairline px-1.5 py-0.5 font-mono text-[11px] text-dim"
                       >
                         {name}
                       </span>
@@ -140,18 +140,18 @@ export default async function TemplatesPage() {
         }
       >
         {recipients.length === 0 ? (
-          <p className="text-sm text-[#9498b5]">
+          <p className="text-sm text-dim">
             No recipients have been imported into the open round yet, so there is nothing
             to render. Import a list first.
           </p>
         ) : result.ok ? (
-          <p className="text-sm text-[#35d07f]">
+          <p className="text-sm text-ok">
             Both templates render cleanly for all {result.checked}{' '}
             {result.checked === 1 ? 'recipient' : 'recipients'}. No unresolved variables.
           </p>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-[#ff5b52]">
+            <p className="text-sm text-warn">
               {result.problems.length}{' '}
               {result.problems.length === 1 ? 'problem' : 'problems'} across{' '}
               {result.affectedOfferIds.length} of {result.checked}{' '}
@@ -161,10 +161,10 @@ export default async function TemplatesPage() {
 
             <ul className="space-y-3">
               {[...problemsByOffer.entries()].map(([offerId, problems]) => (
-                <li key={offerId} className="border-l-2 border-[#ff5b52] pl-3">
-                  <p className="text-sm text-[#e7e9f5]">
+                <li key={offerId} className="border-l-2 border-warn pl-3">
+                  <p className="text-sm text-ftext">
                     {problems[0].recipientName}{' '}
-                    <span className="text-[#9498b5]">
+                    <span className="text-dim">
                       &lt;{problems[0].recipientEmail}&gt;
                     </span>
                   </p>
@@ -179,9 +179,9 @@ export default async function TemplatesPage() {
                     ].map((problem) => (
                       <li
                         key={`${problem.variable}-${problem.kind}-${problem.part}`}
-                        className="text-xs leading-relaxed text-[#9498b5]"
+                        className="text-xs leading-relaxed text-dim"
                       >
-                        <span className="font-mono text-[#e7e9f5]">
+                        <span className="font-mono text-ftext">
                           {'{{'}
                           {problem.variable}
                           {'}}'}
@@ -196,13 +196,13 @@ export default async function TemplatesPage() {
             </ul>
 
             {result.templateErrors.length > 0 ? (
-              <div className="border-l-2 border-[#ff5b52] pl-3">
-                <p className="text-sm text-[#e7e9f5]">Template or record errors</p>
+              <div className="border-l-2 border-warn pl-3">
+                <p className="text-sm text-ftext">Template or record errors</p>
                 <ul className="mt-1 space-y-1">
                   {result.templateErrors.map((error, index) => (
                     <li
                       key={`${error.kind}-${index}`}
-                      className="text-xs leading-relaxed text-[#9498b5]"
+                      className="text-xs leading-relaxed text-dim"
                     >
                       {TEMPLATE_LABEL[error.kind]}: {error.message}
                     </li>
@@ -219,7 +219,7 @@ export default async function TemplatesPage() {
         description="The exact email, with their real figures and their real deadline. The portal link is deliberately not a working token — a preview issues nothing."
       >
         {recipients.length === 0 ? (
-          <p className="text-sm text-[#9498b5]">Nothing to preview yet.</p>
+          <p className="text-sm text-dim">Nothing to preview yet.</p>
         ) : (
           <ul className="divide-y divide-white/8">
             {recipients.map((recipient) => (
@@ -228,21 +228,21 @@ export default async function TemplatesPage() {
                 className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm text-[#e7e9f5]">{recipient.name}</p>
-                  <p className="truncate text-xs text-[#9498b5]">{recipient.email}</p>
+                  <p className="truncate text-sm text-ftext">{recipient.name}</p>
+                  <p className="truncate text-xs text-dim">{recipient.email}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3 text-xs">
                   {problemsByOffer.has(recipient.offerId) ? (
-                    <span className="text-[#ff5b52]">Unresolved variables</span>
+                    <span className="text-warn">Unresolved variables</span>
                   ) : null}
                   {recipient.blocked ? (
-                    <span className="text-[#ff5b52]">Blocked</span>
+                    <span className="text-warn">Blocked</span>
                   ) : null}
                   {(['INVITATION', 'REMINDER'] as EmailTemplateKind[]).map((kind) => (
                     <Link
                       key={kind}
                       href={`/templates/preview/${recipient.offerId}?kind=${kind}`}
-                      className="inline-flex min-h-9 items-center rounded-sm border hairline px-2.5 font-semibold text-[#9498b5] transition-colors hover:border-[#F59A23] hover:text-[#e7e9f5]"
+                      className="inline-flex min-h-11 items-center rounded-sm border hairline px-2.5 font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
                     >
                       {TEMPLATE_LABEL[kind]}
                     </Link>
@@ -263,20 +263,20 @@ export default async function TemplatesPage() {
             const declaration = EMAIL_VARIABLES[name]
             return (
               <div key={name}>
-                <dt className="font-mono text-xs text-[#e7e9f5]">
+                <dt className="font-mono text-xs text-ftext">
                   {'{{'}
                   {name}
                   {'}}'}
                   {declaration.optional ? (
-                    <span className="ml-2 font-sans text-[10px] font-bold uppercase tracking-[0.14em] text-[#9498b5]">
+                    <span className="ml-2 font-sans text-[10px] font-bold uppercase tracking-[0.14em] text-dim">
                       optional
                     </span>
                   ) : null}
                 </dt>
-                <dd className="mt-1 text-xs leading-relaxed text-[#9498b5]">
+                <dd className="mt-1 text-xs leading-relaxed text-dim">
                   {declaration.description}
                 </dd>
-                <dd className="mt-0.5 text-xs leading-relaxed text-[#9498b5]">
+                <dd className="mt-0.5 text-xs leading-relaxed text-dim">
                   {declaration.chain}
                 </dd>
               </div>

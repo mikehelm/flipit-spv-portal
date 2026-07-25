@@ -59,8 +59,8 @@ function AudienceChooser({
       </Field>
 
       {kind === 'STATUS' ? (
-        <fieldset className="mb-4 rounded-sm border hairline bg-[#0d0f2e] p-4">
-          <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-[#cbd1de]">
+        <fieldset className="mb-4 rounded-sm border hairline bg-bg2 p-4">
+          <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-silver2">
             Statuses
           </legend>
           {(['INVITED', 'ACTIVE', 'CLOSED'] as const).map((status) => (
@@ -131,13 +131,13 @@ export function DraftForm({
 
       <AudienceChooser accounts={accounts} initial={update?.audience ?? { kind: 'ALL' }} />
 
-      <div className="mb-4 rounded-sm border hairline bg-[#0d0f2e] p-4">
+      <div className="mb-4 rounded-sm border hairline bg-bg2 p-4">
         <Checkbox
           name="notifyByEmail"
           label="Notify recipients by email once it is published."
           defaultChecked={update?.notifyByEmail ?? true}
         />
-        <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+        <p className="mt-2 text-xs leading-relaxed text-dim">
           Ticking this does not send anything. Publishing lists the recipients and you send each
           notification yourself, one at a time — the same rule as invitations. The email says only
           that an update is available and links to the portal; it carries no amounts, no
@@ -174,7 +174,7 @@ export function WithdrawForm({ updateId }: { updateId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex min-h-9 items-center rounded-sm border border-[#ff5b52] px-3 text-xs font-semibold text-[#ff5b52] transition-colors hover:bg-[#ff5b52]/10"
+        className="inline-flex min-h-11 items-center rounded-sm border border-warn px-3 text-xs font-semibold text-warn transition-colors hover:bg-warn/10"
       >
         Withdraw this update
       </button>
@@ -182,8 +182,8 @@ export function WithdrawForm({ updateId }: { updateId: string }) {
   }
 
   return (
-    <div className="rounded-sm border border-[#ff5b52]/40 bg-[#ff5b52]/6 p-4">
-      <p className="mb-3 text-xs leading-relaxed text-[#9498b5]">{WITHDRAWAL_NOTICE}</p>
+    <div className="rounded-sm border border-warn/40 bg-warn/6 p-4">
+      <p className="mb-3 text-xs leading-relaxed text-dim">{WITHDRAWAL_NOTICE}</p>
       <ActionForm
         action={withdrawUpdateAction}
         submitLabel="Withdraw it"

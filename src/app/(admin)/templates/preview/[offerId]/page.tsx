@@ -70,13 +70,13 @@ export default async function EmailPreviewPage({
       <div className="flex flex-wrap gap-2 text-xs">
         <Link
           href="/templates"
-          className="inline-flex min-h-9 items-center rounded-sm border hairline px-3 font-semibold text-[#9498b5] transition-colors hover:border-[#F59A23] hover:text-[#e7e9f5]"
+          className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
         >
           All templates
         </Link>
         <Link
           href={`/templates/preview/${recipient.offerId}?kind=${otherKind}`}
-          className="inline-flex min-h-9 items-center rounded-sm border hairline px-3 font-semibold text-[#9498b5] transition-colors hover:border-[#F59A23] hover:text-[#e7e9f5]"
+          className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
         >
           Preview the {TEMPLATE_LABEL[otherKind].toLowerCase()} instead
         </Link>
@@ -84,13 +84,13 @@ export default async function EmailPreviewPage({
 
       {outcome.status === 'ERROR' ? (
         <Card title="This email cannot be rendered" tone="warn">
-          <p className="text-sm leading-relaxed text-[#e7e9f5]">{outcome.message}</p>
+          <p className="text-sm leading-relaxed text-ftext">{outcome.message}</p>
         </Card>
       ) : null}
 
       {outcome.status === 'UNRESOLVED' ? (
         <Card title="This email cannot be sent yet" tone="warn">
-          <p className="text-sm leading-relaxed text-[#e7e9f5]">
+          <p className="text-sm leading-relaxed text-ftext">
             {outcome.unresolved.length}{' '}
             {outcome.unresolved.length === 1 ? 'variable' : 'variables'} could not be
             resolved for this recipient. Nothing is rendered with a gap in it, so there
@@ -102,14 +102,14 @@ export default async function EmailPreviewPage({
                 outcome.unresolved.map((item) => [item.variable, item]),
               ).values(),
             ].map((item) => (
-              <li key={item.variable} className="border-l-2 border-[#ff5b52] pl-3">
-                <p className="font-mono text-xs text-[#e7e9f5]">
+              <li key={item.variable} className="border-l-2 border-warn pl-3">
+                <p className="font-mono text-xs text-ftext">
                   {'{{'}
                   {item.variable}
                   {'}}'}
                 </p>
                 {item.note ? (
-                  <p className="mt-1 text-xs leading-relaxed text-[#9498b5]">
+                  <p className="mt-1 text-xs leading-relaxed text-dim">
                     {item.note}
                   </p>
                 ) : null}
@@ -124,25 +124,25 @@ export default async function EmailPreviewPage({
           <Card title="Headers">
             <dl className="space-y-2 text-sm">
               <div className="flex flex-wrap gap-x-3">
-                <dt className="w-20 shrink-0 text-[#9498b5]">Subject</dt>
-                <dd className="min-w-0 flex-1 text-[#e7e9f5]">{outcome.email.subject}</dd>
+                <dt className="w-20 shrink-0 text-dim">Subject</dt>
+                <dd className="min-w-0 flex-1 text-ftext">{outcome.email.subject}</dd>
               </div>
               <div className="flex flex-wrap gap-x-3">
-                <dt className="w-20 shrink-0 text-[#9498b5]">From</dt>
-                <dd className="min-w-0 flex-1 break-all text-[#e7e9f5]">
+                <dt className="w-20 shrink-0 text-dim">From</dt>
+                <dd className="min-w-0 flex-1 break-all text-ftext">
                   {outcome.context.variables.sender_name} &lt;
                   {outcome.context.variables.sender_email}&gt;
                 </dd>
               </div>
               <div className="flex flex-wrap gap-x-3">
-                <dt className="w-20 shrink-0 text-[#9498b5]">To</dt>
-                <dd className="min-w-0 flex-1 break-all text-[#e7e9f5]">
+                <dt className="w-20 shrink-0 text-dim">To</dt>
+                <dd className="min-w-0 flex-1 break-all text-ftext">
                   {recipient.email}
                 </dd>
               </div>
               <div className="flex flex-wrap gap-x-3">
-                <dt className="w-20 shrink-0 text-[#9498b5]">Hash</dt>
-                <dd className="min-w-0 flex-1 break-all font-mono text-xs text-[#9498b5]">
+                <dt className="w-20 shrink-0 text-dim">Hash</dt>
+                <dd className="min-w-0 flex-1 break-all font-mono text-xs text-dim">
                   {outcome.email.templateHash}
                 </dd>
               </div>
@@ -168,7 +168,7 @@ export default async function EmailPreviewPage({
             title="Plain-text part"
             description="Mandatory, and it carries the same information. Some recipients block HTML, and a text part materially helps deliverability."
           >
-            <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-sm border hairline bg-[#0d0f2e] p-3 font-mono text-xs leading-relaxed text-[#e7e9f5]">
+            <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-sm border hairline bg-bg2 p-3 font-mono text-xs leading-relaxed text-ftext">
               {outcome.email.text}
             </pre>
           </Card>
@@ -189,11 +189,11 @@ export default async function EmailPreviewPage({
                 key={name}
                 className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2"
               >
-                <span className="font-mono text-xs text-[#9498b5]">{name}</span>
-                <span className="min-w-0 flex-1 break-all text-right text-xs text-[#e7e9f5]">
-                  {value ?? <span className="text-[#9498b5]">not set</span>}
+                <span className="font-mono text-xs text-dim">{name}</span>
+                <span className="min-w-0 flex-1 break-all text-right text-xs text-ftext">
+                  {value ?? <span className="text-dim">not set</span>}
                 </span>
-                <span className="w-full text-right text-[11px] text-[#9498b5]">
+                <span className="w-full text-right text-[11px] text-dim">
                   {SOURCE_LABEL[source] ?? source}
                 </span>
               </li>

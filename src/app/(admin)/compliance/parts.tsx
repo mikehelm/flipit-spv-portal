@@ -14,10 +14,10 @@ import { jurisdictionLabel, partLabel, type BlockExplanation, type TemplateDiff 
 export function KeyValue({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5 border-t hairline py-2 sm:flex-row sm:gap-4">
-      <dt className="text-xs font-semibold uppercase tracking-wider text-[#9498b5] sm:w-48 sm:shrink-0">
+      <dt className="text-xs font-semibold uppercase tracking-wider text-dim sm:w-48 sm:shrink-0">
         {label}
       </dt>
-      <dd className="text-sm break-words text-[#e7e9f5]">{children}</dd>
+      <dd className="text-sm break-words text-ftext">{children}</dd>
     </div>
   )
 }
@@ -25,7 +25,7 @@ export function KeyValue({ label, children }: { label: string; children: ReactNo
 export function JurisdictionList({ codes }: { codes: readonly string[] }) {
   if (codes.length === 0) {
     return (
-      <span className="text-[#ff5b52]">
+      <span className="text-warn">
         None. No recipient is cleared by this approval.
       </span>
     )
@@ -36,7 +36,7 @@ export function JurisdictionList({ codes }: { codes: readonly string[] }) {
         <span
           key={code}
           title={jurisdictionLabel(code)}
-          className="rounded-sm bg-white/6 px-2 py-0.5 font-mono text-xs text-[#e7e9f5]"
+          className="rounded-sm bg-white/6 px-2 py-0.5 font-mono text-xs text-ftext"
         >
           {code}
         </span>
@@ -46,35 +46,35 @@ export function JurisdictionList({ codes }: { codes: readonly string[] }) {
 }
 
 export function Hash({ value }: { value: string | null }) {
-  if (!value) return <span className="text-[#9498b5]">—</span>
+  if (!value) return <span className="text-dim">—</span>
   return (
-    <code className="block break-all font-mono text-xs text-[#cbd1de]">{value}</code>
+    <code className="block break-all font-mono text-xs text-silver2">{value}</code>
   )
 }
 
 export function DiffView({ diff }: { diff: TemplateDiff }) {
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[#e7e9f5]">{diff.summary}</p>
+      <p className="text-sm text-ftext">{diff.summary}</p>
 
       {diff.parts
         .filter((part) => part.changed)
         .map((part) => (
           <div key={part.part}>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#F59A23]">
+            <p className="text-xs font-semibold uppercase tracking-wider text-orange">
               {partLabel(part.part)} — {part.added} added, {part.removed} removed
             </p>
-            <div className="mt-2 overflow-x-auto rounded-sm border hairline bg-[#0d0f2e]">
+            <div className="mt-2 overflow-x-auto rounded-sm border hairline bg-bg2">
               <pre className="min-w-max p-3 font-mono text-[11px] leading-relaxed">
                 {part.lines.map((line, index) => (
                   <div
                     key={`${part.part}-${index}`}
                     className={
                       line.kind === 'ADDED'
-                        ? 'text-[#35d07f]'
+                        ? 'text-ok'
                         : line.kind === 'REMOVED'
-                          ? 'text-[#ff5b52]'
-                          : 'text-[#6c7290]'
+                          ? 'text-warn'
+                          : 'text-muted'
                     }
                   >
                     <span aria-hidden className="select-none pr-2">
@@ -86,7 +86,7 @@ export function DiffView({ diff }: { diff: TemplateDiff }) {
               </pre>
             </div>
             {part.truncated ? (
-              <p className="mt-1 text-xs text-[#9498b5]">
+              <p className="mt-1 text-xs text-dim">
                 Unchanged sections between the differences are not shown.
               </p>
             ) : null}
@@ -103,7 +103,7 @@ export function DiffView({ diff }: { diff: TemplateDiff }) {
 
 export function Explanation({ explanation }: { explanation: BlockExplanation }) {
   return (
-    <div className="space-y-3 text-sm leading-relaxed text-[#cbd1de]">
+    <div className="space-y-3 text-sm leading-relaxed text-silver2">
       <p className="font-semibold text-white">{explanation.headline}</p>
 
       {explanation.paragraphs.map((paragraph, index) => (
@@ -111,7 +111,7 @@ export function Explanation({ explanation }: { explanation: BlockExplanation }) 
       ))}
 
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#F59A23]">
+        <p className="text-xs font-semibold uppercase tracking-wider text-orange">
           What unblocking requires
         </p>
         <ol className="mt-2 list-decimal space-y-1.5 pl-5">
@@ -121,7 +121,7 @@ export function Explanation({ explanation }: { explanation: BlockExplanation }) 
         </ol>
       </div>
 
-      <p className="text-[#9498b5]">{explanation.recommendation}</p>
+      <p className="text-dim">{explanation.recommendation}</p>
 
       <Notice tone="warn">{explanation.notLegalAdvice}</Notice>
     </div>

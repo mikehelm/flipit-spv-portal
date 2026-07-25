@@ -60,8 +60,8 @@ export function AdminNav({ role }: { role: PrivilegedRole }) {
                 aria-current={active ? 'page' : undefined}
                 className={`inline-flex min-h-11 items-center rounded-sm px-3 text-sm font-medium transition-colors ${
                   active
-                    ? 'bg-[#F59A23]/12 text-[#F59A23]'
-                    : 'text-[#9498b5] hover:text-[#e7e9f5]'
+                    ? 'bg-orange/12 text-orange'
+                    : 'text-dim hover:text-ftext'
                 }`}
               >
                 {item.label}

@@ -30,18 +30,18 @@ function formatDate(value: Date | string | null): string | null {
 
 function MemberCard({ member }: { member: RegisterMember }) {
   return (
-    <article className="rounded-sm border hairline bg-[#14162f] p-4 sm:p-5">
+    <article className="rounded-sm border hairline bg-paper p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 gap-4">
           <div
-            className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#F59A23] text-xs font-bold tabular-nums text-[#F59A23]"
+            className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-orange text-xs font-bold tabular-nums text-orange"
             aria-hidden="true"
           >
             {member.position}
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-white">{member.name}</p>
-            <p className="text-xs text-[#6c7290]">
+            <p className="text-xs text-muted">
               {member.email} · account {member.status.toLowerCase()}
               {member.jurisdiction ? ` · ${member.jurisdiction}` : ' · no jurisdiction on record'}
             </p>
@@ -57,17 +57,17 @@ function MemberCard({ member }: { member: RegisterMember }) {
         </div>
       </div>
 
-      <p className="mt-3 text-xs leading-relaxed text-[#9498b5]">
+      <p className="mt-3 text-xs leading-relaxed text-dim">
         {BAND_EXPLANATION[member.band]}
       </p>
 
       {member.overridden ? (
-        <div className="mt-3 border-l-2 border-[#F59A23] pl-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-[#6c7290]">
+        <div className="mt-3 border-l-2 border-orange pl-3">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-muted">
             Why this position was overridden
           </p>
-          <p className="mt-1 text-sm leading-relaxed text-[#e7e9f5]">{member.overrideReason}</p>
-          <p className="mt-1 text-xs text-[#6c7290]">
+          <p className="mt-1 text-sm leading-relaxed text-ftext">{member.overrideReason}</p>
+          <p className="mt-1 text-xs text-muted">
             The computation alone put them at {member.computedPosition}.
           </p>
         </div>
@@ -75,26 +75,26 @@ function MemberCard({ member }: { member: RegisterMember }) {
 
       <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
         <div>
-          <dt className="text-[#6c7290]">Joined the register</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+          <dt className="text-muted">Joined the register</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
             {formatDate(member.joinedAt)}
           </dd>
         </div>
         <div>
-          <dt className="text-[#6c7290]">Funds value date</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+          <dt className="text-muted">Funds value date</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
             {member.history.fundsValueDate ?? '—'}
           </dd>
         </div>
         <div>
-          <dt className="text-[#6c7290]">Commitment agreed</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+          <dt className="text-muted">Commitment agreed</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
             {formatDate(member.history.commitmentAgreedAt) ?? '—'}
           </dd>
         </div>
         <div>
-          <dt className="text-[#6c7290]">Indicative interest</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+          <dt className="text-muted">Indicative interest</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
             {member.indicativeAmount ?? '—'}
           </dd>
         </div>
@@ -103,32 +103,32 @@ function MemberCard({ member }: { member: RegisterMember }) {
       {member.history.roundName ? (
         <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
           <div>
-            <dt className="text-[#6c7290]">Their current offer</dt>
-            <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+            <dt className="text-muted">Their current offer</dt>
+            <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
               {member.history.proposedAmount ?? '—'}
             </dd>
           </div>
           <div>
-            <dt className="text-[#6c7290]">SPV share</dt>
-            <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+            <dt className="text-muted">SPV share</dt>
+            <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
               {member.history.spvPercentage ?? '—'}
             </dd>
           </div>
           <div>
-            <dt className="text-[#6c7290]">Received</dt>
-            <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+            <dt className="text-muted">Received</dt>
+            <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
               {member.history.receivedAmount ?? '—'}
             </dd>
           </div>
           <div>
-            <dt className="text-[#6c7290]">Stage</dt>
-            <dd className="mt-0.5 font-semibold text-[#e7e9f5]">
+            <dt className="text-muted">Stage</dt>
+            <dd className="mt-0.5 font-semibold text-ftext">
               {member.history.stage?.toLowerCase().replace(/_/g, ' ') ?? '—'}
             </dd>
           </div>
         </dl>
       ) : (
-        <p className="mt-3 text-xs text-[#6c7290]">
+        <p className="mt-3 text-xs text-muted">
           No offer on record. They have never been sent an invitation in any round.
         </p>
       )}
@@ -171,7 +171,7 @@ export default async function RegisterPage() {
       {!round ? (
         <div className="mb-6">
           <Card tone="warn" title="No open round">
-            <p className="text-sm leading-relaxed text-[#9498b5]">
+            <p className="text-sm leading-relaxed text-dim">
               There is no open round, so no offer can be issued from the register. Joining,
               leaving and ordering all carry on as normal.
             </p>
@@ -187,7 +187,7 @@ export default async function RegisterPage() {
 
           {members.length === 0 ? (
             <Card>
-              <p className="text-sm leading-relaxed text-[#9498b5]">
+              <p className="text-sm leading-relaxed text-dim">
                 Nobody is on the register. Investors add themselves from their own portal, and
                 you can add somebody below — including a person who was never on the original
                 recipient list.

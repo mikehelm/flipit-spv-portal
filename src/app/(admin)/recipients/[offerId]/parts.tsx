@@ -122,7 +122,7 @@ export function FundsReceivedForm({
       submitLabel={corrected ? 'Correct the recorded receipt' : 'Record funds received'}
       hidden={{ offerId }}
     >
-      <p className="mb-4 border-l-2 border-[#ff5b52] pl-3 text-xs leading-relaxed text-[#9498b5]">
+      <p className="mb-4 border-l-2 border-warn pl-3 text-xs leading-relaxed text-dim">
         {FUNDS_CONFIRMATION_NOTICE}
       </p>
 
@@ -153,7 +153,7 @@ export function FundsReceivedForm({
       </Field>
 
       {mismatch ? (
-        <p className="mb-4 border-l-2 border-[#ff5b52] pl-3 text-xs text-[#ff5b52]">
+        <p className="mb-4 border-l-2 border-warn pl-3 text-xs text-warn">
           These do not match yet. Nothing will be recorded until they do.
         </p>
       ) : null}
@@ -174,7 +174,7 @@ export function FundsReceivedForm({
         <TextInput name="reference" required autoComplete="off" />
       </Field>
 
-      <div className="mb-4 rounded-sm border border-[#ff5b52]/40 bg-[#ff5b52]/6 p-4">
+      <div className="mb-4 rounded-sm border border-warn/40 bg-warn/6 p-4">
         <Checkbox
           name="confirmed"
           label="I confirm these funds have arrived and this is the amount received."
@@ -198,7 +198,7 @@ export function CorrectionForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex min-h-9 items-center rounded-sm border hairline px-3 text-xs font-semibold text-[#9498b5] transition-colors hover:border-[#ff5b52] hover:text-[#ff5b52]"
+        className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-warn hover:text-warn"
       >
         Correct the recorded step
       </button>
@@ -206,7 +206,7 @@ export function CorrectionForm({
   }
 
   return (
-    <div className="rounded-sm border hairline bg-[#0d0f2e] p-4">
+    <div className="rounded-sm border hairline bg-bg2 p-4">
       <ActionForm
         action={correctStageAction}
         submitLabel="Record the correction"

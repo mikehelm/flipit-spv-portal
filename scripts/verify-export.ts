@@ -299,12 +299,32 @@ async function main(): Promise<void> {
   console.log('\nNothing in the log is a secret')
 
   const everything = await loadAuditRows({ limit: 2000 })
-  const serialised = JSON.stringify(everything.map((item) => item.metadata))
+
+  /**
+   * Keys, not values. `assertNoSecrets` refuses a *key* named `password` at
+   * write time (lib/audit.ts), and a sign-in legitimately records
+   * `{ method: 'password' }` — the authentication method, which is the sort of
+   * thing an audit log exists to record. Matching the serialised JSON without
+   * anchoring to a key position flagged that as a leaked credential, which is
+   * both wrong and the kind of false alarm that gets a real check switched off.
+   *
+   * The trailing `\s*:` is the whole fix: it only matches where the string is
+   * a property name.
+   */
+  const offendingKeys: string[] = []
+  for (const item of everything) {
+    if (!item.metadata || typeof item.metadata !== 'object') continue
+    for (const key of Object.keys(item.metadata as Record<string, unknown>)) {
+      if (/(password|secret|token|apikey|api_key|credential|htmlbody|textbody|body)/i.test(key)) {
+        offendingKeys.push(`${item.action}.${key}`)
+      }
+    }
+  }
+
   check(
     'no metadata key looks like a credential or a body',
-    !/"(password|secret|token|apiKey|api_key|credential|htmlBody|textBody|body)"/i.test(
-      serialised,
-    ),
+    offendingKeys.length === 0,
+    offendingKeys.slice(0, 5).join(', '),
   )
 
   await cleanup()

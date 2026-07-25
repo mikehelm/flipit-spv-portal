@@ -37,7 +37,7 @@ export default async function RoundPage() {
       <>
         <SectionHeading eyebrow="The round" title="No round yet" />
         <Card>
-          <p className="text-sm text-[#9498b5]">
+          <p className="text-sm text-dim">
             Seed the database or import a recipient list to create the first round.
           </p>
         </Card>
@@ -92,7 +92,7 @@ export default async function RoundPage() {
               ] as const
             ).map(([label, value]) => (
               <div key={label}>
-                <dt className="text-xs text-[#6c7290]">{label}</dt>
+                <dt className="text-xs text-muted">{label}</dt>
                 <dd className="mt-0.5 font-semibold tabular-nums text-white">{value}</dd>
               </div>
             ))}
@@ -108,13 +108,13 @@ export default async function RoundPage() {
               ] as const
             ).map(([label, value]) => (
               <div key={label}>
-                <dt className="text-xs text-[#6c7290]">{label}</dt>
+                <dt className="text-xs text-muted">{label}</dt>
                 <dd className="mt-0.5 font-semibold tabular-nums text-white">{value}</dd>
               </div>
             ))}
           </dl>
 
-          <p className="mt-4 text-xs leading-relaxed text-[#9498b5]">
+          <p className="mt-4 text-xs leading-relaxed text-dim">
             Against an aggregate raise of {summary.totals.aggregate}.{' '}
             {summary.nextDeadline
               ? `The next deadline is ${summary.nextDeadline}.`
@@ -126,7 +126,7 @@ export default async function RoundPage() {
           title="The deadline summary"
           description={`Emailed to the operator and to nobody else when a deadline is reached, then every ${DIGEST_CADENCE_DAYS} days while the round stays open. No investor is ever told a deadline has passed.`}
         >
-          <p className="mb-4 text-sm text-[#9498b5]">
+          <p className="mb-4 text-sm text-dim">
             {lastDigest
               ? `Last sent ${lastDigest.toISOString().slice(0, 10)}.`
               : 'Not sent yet.'}
@@ -152,12 +152,12 @@ export default async function RoundPage() {
               {chasing.map((row) => (
                 <li
                   key={row.offerId}
-                  className="rounded-sm border hairline bg-[#14162f] p-4"
+                  className="rounded-sm border hairline bg-paper p-4"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-white">{row.name}</p>
-                      <p className="text-xs text-[#6c7290]">
+                      <p className="text-xs text-muted">
                         {row.email} · deadline {row.responseDeadline}
                         {row.originalDeadline && row.responseDeadline > row.originalDeadline
                           ? ` · extended from ${row.originalDeadline}`

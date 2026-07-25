@@ -47,14 +47,14 @@ export default async function SignInPage({
   const error = messageFor(Array.isArray(rawError) ? rawError[0] : rawError)
 
   return (
-    <main className="mx-auto w-full max-w-md px-5 py-16 sm:py-24">
-      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#F59A23]">
+    <main id="main" className="mx-auto w-full max-w-md px-5 py-16 sm:py-24">
+      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-orange">
         Flipit Global SPV
       </p>
       <h1 className="mt-4 text-3xl font-bold tracking-tight text-white">Sign in</h1>
-      <div className="mt-5 h-[3px] w-12 bg-[#F59A23]" />
+      <div className="mt-5 h-[3px] w-12 bg-orange" />
 
-      <p className="mt-5 text-sm leading-relaxed text-[#9498b5]">
+      <p className="mt-5 text-sm leading-relaxed text-dim">
         This is the administration side of the investor portal. Access is limited to two
         named accounts.
       </p>
@@ -62,7 +62,7 @@ export default async function SignInPage({
       {error ? (
         <p
           role="alert"
-          className="mt-6 border-l-2 border-[#ff5b52] pl-3 text-sm leading-relaxed text-[#ff5b52]"
+          className="mt-6 border-l-2 border-warn pl-3 text-sm leading-relaxed text-warn"
         >
           {error}
         </p>
@@ -96,7 +96,7 @@ export default async function SignInPage({
         built not to answer.
       */}
 
-      <p className="mt-8 text-xs leading-relaxed text-[#9498b5]">
+      <p className="mt-8 text-xs leading-relaxed text-dim">
         Investors do not sign in here. If you are an investor, use the link in your
         invitation or request a fresh one from your portal.
       </p>

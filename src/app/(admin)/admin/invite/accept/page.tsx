@@ -36,7 +36,7 @@ export default async function AcceptInvitePage({
 
       {token === '' ? (
         <Card tone="warn">
-          <p className="text-sm leading-relaxed text-[#e7e9f5]">
+          <p className="text-sm leading-relaxed text-ftext">
             This link is incomplete. Ask the owner to issue a new invitation.
           </p>
         </Card>
@@ -47,7 +47,7 @@ export default async function AcceptInvitePage({
             submitLabel="Accept invitation"
             hidden={{ token }}
           >
-            <p className="text-sm leading-relaxed text-[#9498b5]">
+            <p className="text-sm leading-relaxed text-dim">
               After this you are taken through a short setup: your display name as it
               should appear on investment correspondence, how investors should reach you,
               and the account mail is sent from.

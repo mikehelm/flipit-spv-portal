@@ -46,12 +46,12 @@ function firstParam(
 
 function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-sm border hairline bg-[#14162f] p-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#9498b5]">
+    <div className="rounded-sm border hairline bg-paper p-3">
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-dim">
         {label}
       </p>
       <p className="mt-1.5 text-lg font-bold tabular-nums text-white">{value}</p>
-      {hint ? <p className="mt-1 text-[10px] leading-snug text-[#6c7290]">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-[10px] leading-snug text-muted">{hint}</p> : null}
     </div>
   )
 }
@@ -75,11 +75,11 @@ function RecipientCard({
   preflightReady: boolean
 }) {
   return (
-    <li className="rounded-sm border hairline bg-[#14162f] p-4">
+    <li className="rounded-sm border hairline bg-paper p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-white">{row.name}</p>
-          <p className="truncate text-xs text-[#9498b5]">{row.email}</p>
+          <p className="truncate text-xs text-dim">{row.email}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           <Pill tone={EMAIL_STATUS_TONE[row.emailStatus]}>{row.emailStatus}</Pill>
@@ -89,26 +89,26 @@ function RecipientCard({
 
       <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
         <div>
-          <dt className="text-[#6c7290]">Investment</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+          <dt className="text-muted">Investment</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
             {money(row.proposedAmountUsd)}
           </dd>
         </div>
         <div>
-          <dt className="text-[#6c7290]">SPV %</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+          <dt className="text-muted">SPV %</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
             {formatPercentage(row.spvPercentage, { decimalPlaces })}
           </dd>
         </div>
         <div>
-          <dt className="text-[#6c7290]">Indirect Flipit %</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+          <dt className="text-muted">Indirect Flipit %</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
             {formatPercentage(row.indirectPercentage, { decimalPlaces })}
           </dd>
         </div>
         <div>
-          <dt className="text-[#6c7290]">Deadline</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums text-[#e7e9f5]">
+          <dt className="text-muted">Deadline</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
             {row.responseDeadline}
           </dd>
         </div>
@@ -116,27 +116,27 @@ function RecipientCard({
 
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
         <div>
-          <dt className="text-[#6c7290]">Account</dt>
-          <dd className="mt-0.5 text-[#cbd1de]">{row.accountStatus}</dd>
+          <dt className="text-muted">Account</dt>
+          <dd className="mt-0.5 text-silver2">{row.accountStatus}</dd>
         </div>
         <div>
-          <dt className="text-[#6c7290]">Timeline</dt>
-          <dd className="mt-0.5 text-[#cbd1de]">{row.stage.replaceAll('_', ' ')}</dd>
+          <dt className="text-muted">Timeline</dt>
+          <dd className="mt-0.5 text-silver2">{row.stage.replaceAll('_', ' ')}</dd>
         </div>
         <div>
-          <dt className="text-[#6c7290]">Response</dt>
-          <dd className="mt-0.5 text-[#cbd1de]">{row.responseChoice.replaceAll('_', ' ')}</dd>
+          <dt className="text-muted">Response</dt>
+          <dd className="mt-0.5 text-silver2">{row.responseChoice.replaceAll('_', ' ')}</dd>
         </div>
         <div>
-          <dt className="text-[#6c7290]">Last activity</dt>
-          <dd className="mt-0.5 text-[#cbd1de]">
+          <dt className="text-muted">Last activity</dt>
+          <dd className="mt-0.5 text-silver2">
             {row.lastActivityAt ? row.lastActivityAt.toISOString().slice(0, 10) : '—'}
           </dd>
         </div>
       </dl>
 
       {blockedMessage ? (
-        <p className="mt-4 border-l-2 border-[#ff5b52] pl-3 text-xs leading-relaxed text-[#ff5b52]">
+        <p className="mt-4 border-l-2 border-warn pl-3 text-xs leading-relaxed text-warn">
           {blockedMessage}
         </p>
       ) : null}
@@ -144,20 +144,20 @@ function RecipientCard({
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Link
           href={`/templates/preview/${row.offerId}`}
-          className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-sm font-semibold text-[#e7e9f5] transition-colors hover:border-[#F59A23]"
+          className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-sm font-semibold text-ftext transition-colors hover:border-orange"
         >
           Preview
         </Link>
 
         <Link
           href={`/recipients/${row.offerId}`}
-          className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-sm font-semibold text-[#e7e9f5] transition-colors hover:border-[#F59A23]"
+          className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-sm font-semibold text-ftext transition-colors hover:border-orange"
         >
           Their record
         </Link>
 
         {blockedMessage ? (
-          <p className="text-xs text-[#9498b5]">
+          <p className="text-xs text-dim">
             Sending is refused for this recipient. Everybody else is unaffected.
           </p>
         ) : preflightReady ? (
@@ -168,7 +168,7 @@ function RecipientCard({
             alreadySent={row.emailStatus === 'SENT'}
           />
         ) : (
-          <p className="text-xs text-[#9498b5]">
+          <p className="text-xs text-dim">
             Sending unlocks when pre-flight is complete.
           </p>
         )}
@@ -225,25 +225,25 @@ export default async function RecipientsPage({
 
       {/* §12: these two are always visible, because they are what silently breaks a send. */}
       <div className="mb-6 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-sm border hairline bg-[#14162f] p-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#9498b5]">
+        <div className="rounded-sm border hairline bg-paper p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-dim">
             Compliance approval
           </p>
           <p className="mt-2">
             <Pill tone={approvalState.tone}>{approvalState.text}</Pill>
           </p>
-          <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+          <p className="mt-2 text-xs leading-relaxed text-dim">
             {context.drift.message}
           </p>
         </div>
-        <div className="rounded-sm border hairline bg-[#14162f] p-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#9498b5]">
+        <div className="rounded-sm border hairline bg-paper p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-dim">
             Mail connection
           </p>
           <p className="mt-2">
             <Pill tone={mailHealthy ? 'ok' : 'warn'}>{context.mailConnection.state}</Pill>
           </p>
-          <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+          <p className="mt-2 text-xs leading-relaxed text-dim">
             {context.mailConnection.summary}
           </p>
         </div>
@@ -286,13 +286,13 @@ export default async function RecipientsPage({
             defaultValue={filters.search ?? ''}
             placeholder="Name or email"
             aria-label="Search by name or email"
-            className="w-full rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5 text-sm text-[#e7e9f5] placeholder:text-[#6c7290] focus:border-[#F59A23] focus:outline-none"
+            className="w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext placeholder:text-muted focus:border-orange"
           />
           <select
             name="emailStatus"
             defaultValue={filters.emailStatus ?? ''}
             aria-label="Filter by email status"
-            className="w-full rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5 text-sm text-[#e7e9f5] focus:border-[#F59A23] focus:outline-none"
+            className="w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext focus:border-orange"
           >
             <option value="">Any email status</option>
             {['DRAFT', 'SENT', 'FAILED', 'BLOCKED'].map((value) => (
@@ -305,7 +305,7 @@ export default async function RecipientsPage({
             name="jurisdiction"
             defaultValue={filters.jurisdiction ?? ''}
             aria-label="Filter by jurisdiction"
-            className="w-full rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5 text-sm text-[#e7e9f5] focus:border-[#F59A23] focus:outline-none"
+            className="w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext focus:border-orange"
           >
             <option value="">Any jurisdiction</option>
             {jurisdictionsIn(context.rows).map((code) => (
@@ -316,14 +316,14 @@ export default async function RecipientsPage({
           </select>
           <button
             type="submit"
-            className="inline-flex min-h-11 items-center justify-center rounded-sm border hairline px-4 text-sm font-semibold text-[#e7e9f5] transition-colors hover:border-[#F59A23] sm:w-auto"
+            className="inline-flex min-h-11 items-center justify-center rounded-sm border hairline px-4 text-sm font-semibold text-ftext transition-colors hover:border-orange sm:w-auto"
           >
             Apply filters
           </button>
         </form>
 
         {visible.length === 0 ? (
-          <p className="text-sm leading-relaxed text-[#9498b5]">
+          <p className="text-sm leading-relaxed text-dim">
             {context.rows.length === 0
               ? 'No recipients in this round yet. Import a file first.'
               : 'No recipient matches those filters.'}

@@ -28,16 +28,16 @@ export default async function PortalSignInPage() {
   if (account) redirect('/portal')
 
   return (
-    <main className="mx-auto w-full max-w-md px-5 py-16 sm:py-24">
-      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#F59A23]">
+    <main id="main" className="mx-auto w-full max-w-md px-5 py-16 sm:py-24">
+      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-orange">
         Flipit Global SPV
       </p>
       <h1 className="mt-4 text-2xl font-bold tracking-tight text-white sm:text-3xl">
         Your private portal
       </h1>
-      <div className="mt-5 h-[3px] w-12 bg-[#F59A23]" />
+      <div className="mt-5 h-[3px] w-12 bg-orange" />
 
-      <p className="mt-6 text-sm leading-relaxed text-[#9498b5]">
+      <p className="mt-6 text-sm leading-relaxed text-dim">
         This is your private portal. You can return to it at any time by entering your
         email address below — we will send you a fresh sign-in link. Only the email address
         this invitation was sent to can access this record.
@@ -57,9 +57,9 @@ export default async function PortalSignInPage() {
         </ActionForm>
       </div>
 
-      <p className="mt-8 text-xs leading-relaxed text-[#9498b5]">
+      <p className="mt-8 text-xs leading-relaxed text-dim">
         Not sure whether a message you received is really from us? Check our{' '}
-        <Link href="/verify" className="text-[#F59A23]">
+        <Link href="/verify" className="text-orange">
           verification page
         </Link>
         . We will never email you a change of bank details.

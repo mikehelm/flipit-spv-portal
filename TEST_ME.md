@@ -2,7 +2,9 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 14, 16 and 17 are complete. 15 — images and video — is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: work packages 0 to 14 and 16 to 18 are complete. 15 — images and video — is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+
+The most recent package went over every screen for how it looks and how it reads: the brand colours, how it behaves on a phone, and whether somebody using a keyboard or a screen reader can get around it. There is a section on that below, and it is worth ten minutes with your phone.
 
 ---
 
@@ -279,6 +281,38 @@ Issuing an offer does not send anything and does not take anybody off the regist
 
 ---
 
+## On a phone, and with a keyboard
+
+**This is the part to test on an actual phone**, because it is how most people will see it. Everything below has been checked automatically at 375 pixels — the width of the smaller iPhones — but a machine cannot tell you whether it *feels* right.
+
+Open your own portal link on your phone and look for:
+
+- **Nothing needing to be scrolled sideways.** No figure should ever sit off the edge of the screen. If you find one, that is a bug and worth reporting exactly where.
+- **Every button and link big enough to hit with a thumb** without aiming.
+- **Text you can read without squinting**, including the small grey labels above the four figures. Those labels were too faint until this package and have been brightened.
+- **Pinch-to-zoom working.** It is deliberately not disabled.
+
+With a keyboard, on a computer:
+
+- Press **Tab** the moment a page loads. The first thing to appear is a *Skip to content* link that jumps past the navigation. Press Enter on it.
+- Keep pressing Tab. Every button, link and box you land on should have a visible orange outline around it. If something takes focus invisibly, that is a bug.
+- You should be able to fill in and submit any form without touching the mouse.
+
+If you use "reduce motion" in your system settings, the application respects it. There is very little movement to begin with — that is on purpose, and the page-curl mark beside the FLIPIT wording does not move at all.
+
+**The credit in the footer.** A quiet "Made by Make with Mike" sits at the bottom of the admin side and the investor portal. In **Settings** you can switch it off for either one independently, and optionally make it a link. It never appears in an invitation email or on a participation certificate, and there is no setting that would put it on either — those are formal documents about somebody's money.
+
+**Coming to your portal.** The tiles near the bottom of an investor's portal now carry the line the specification asks for: *Features shown are in development, are indicative only, and form no part of the investment being offered.* It cannot be switched off.
+
+If you want the machine's version of all this:
+
+```bash
+pnpm build
+pnpm verify:viewport
+```
+
+That starts the application, opens a real browser at phone size, signs itself in as both an administrator and an investor, and walks twenty screens measuring every one — ninety-nine checks. It needs a database and takes about a minute.
+
 ## What is not built yet
 
 - **Documents, images and video.** All need somewhere to store a file, which has not been chosen yet. Nothing else depends on them.
@@ -344,3 +378,5 @@ Two things worth trying:
 - The `ENCRYPTION_KEY` and `AUTH_SECRET` in your local `.env` are throwaway development values. Generate fresh ones for anything real.
 - No email is ever sent to anyone but the operator's own address during development.
 - The application refuses to send real invitations unless its configured base URL is the production one. Every portal link embeds the domain it was issued from, and a link issued from a testing deployment dies the moment the application moves.
+- The colours are taken from the FLIPIT demo file, which is a faithful copy of the live site but not the source of truth. Somebody should check them against flipit.com before launch.
+- The invitation email and the participation certificate are light-coloured documents rather than dark ones, and that is deliberate: an email has to be readable in every mail programme, and a certificate has to print.

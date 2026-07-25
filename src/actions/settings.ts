@@ -359,3 +359,77 @@ export async function removeOpenAiKeyAction(
     'Key removed. Import still works — the operator maps columns manually instead.',
   )
 }
+
+// ---------------------------------------------------------------------------
+// The maker's credit — BUILD_SPEC §13.2
+// ---------------------------------------------------------------------------
+
+/**
+ * §13.2: *"Configurable so it can be switched off per-surface if it ever feels
+ * wrong beside the offer figures."*
+ *
+ * Two switches, one for each surface, and no third for the invitation email or
+ * the participation certificate. §13.2 rules those out in a sentence that
+ * gives no discretion — *"Those are formal instruments about someone's money,
+ * and a maker's credit does not belong on either"* — so there is no column,
+ * no field, and nothing here that could turn it on.
+ *
+ * This is a separate action rather than three more fields on the service form
+ * because the service form carries the mode change, and moving to `disabled`
+ * has an export precondition (§7). Anyone toggling a footer credit should not
+ * be one submit away from that.
+ */
+const attributionSchema = z.object({
+  attributionOnAdmin: z.boolean(),
+  attributionOnPortal: z.boolean(),
+  attributionUrl: z
+    .url('Enter a full web address, or leave it blank.')
+    .refine(
+      (value) => value.startsWith('http://') || value.startsWith('https://'),
+      'Only http and https addresses are accepted here.',
+    )
+    .nullable(),
+})
+
+export async function updateAttributionAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const owner = await requireOwner()
+
+  const parsed = attributionSchema.safeParse({
+    attributionOnAdmin: checkbox(formData.get('attributionOnAdmin')),
+    attributionOnPortal: checkbox(formData.get('attributionOnPortal')),
+    attributionUrl: optionalText(formData.get('attributionUrl')),
+  })
+
+  if (!parsed.success) {
+    return actionError('That could not be saved.', fieldErrors(parsed.error))
+  }
+
+  const next = parsed.data
+
+  await db
+    .update(serviceConfig)
+    .set({
+      attributionOnAdmin: next.attributionOnAdmin,
+      attributionOnPortal: next.attributionOnPortal,
+      attributionUrl: next.attributionUrl,
+    })
+    .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
+
+  await audit({
+    actor: { kind: 'user', id: owner.id, label: owner.email },
+    entityType: 'service_config',
+    entityId: SERVICE_CONFIG_ID,
+    action: 'service_config.attribution_updated',
+    metadata: {
+      attributionOnAdmin: next.attributionOnAdmin,
+      attributionOnPortal: next.attributionOnPortal,
+      attributionLinkSet: next.attributionUrl !== null,
+    },
+  })
+
+  revalidatePath(SETTINGS_PATH)
+  return actionOk('Saved.')
+}

@@ -49,7 +49,7 @@ export function ExtendOneForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex min-h-9 items-center rounded-sm border hairline px-3 text-xs font-semibold text-[#9498b5] transition-colors hover:border-[#F59A23] hover:text-[#e7e9f5]"
+        className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
       >
         Give them longer
       </button>
@@ -57,7 +57,7 @@ export function ExtendOneForm({
   }
 
   return (
-    <div className="w-full rounded-sm border hairline bg-[#0d0f2e] p-3">
+    <div className="w-full rounded-sm border hairline bg-bg2 p-3">
       <ActionForm
         action={extendOneDeadlineAction}
         submitLabel="Extend"
@@ -93,7 +93,7 @@ export function CloseRoundForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex min-h-11 items-center rounded-sm border border-[#ff5b52] px-4 text-sm font-semibold text-[#ff5b52] transition-colors hover:bg-[#ff5b52]/10"
+        className="inline-flex min-h-11 items-center rounded-sm border border-warn px-4 text-sm font-semibold text-warn transition-colors hover:bg-warn/10"
       >
         Close the round
       </button>
@@ -101,8 +101,8 @@ export function CloseRoundForm({
   }
 
   return (
-    <div className="rounded-sm border border-[#ff5b52]/40 bg-[#ff5b52]/6 p-4">
-      <p className="mb-4 text-xs leading-relaxed text-[#9498b5]">
+    <div className="rounded-sm border border-warn/40 bg-warn/6 p-4">
+      <p className="mb-4 text-xs leading-relaxed text-dim">
         {CLOSE_CONFIRMATION_NOTICE}
       </p>
 

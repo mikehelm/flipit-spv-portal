@@ -22,9 +22,9 @@ function SubmitButton({
   const { pending } = useFormStatus()
 
   const styles = {
-    primary: 'bg-[#F59A23] text-[#0b0c22] hover:bg-[#ffb84d]',
-    quiet: 'border hairline bg-transparent text-[#e7e9f5] hover:border-[#F59A23]',
-    danger: 'border border-[#ff5b52] bg-transparent text-[#ff5b52] hover:bg-[#ff5b52]/10',
+    primary: 'bg-orange text-ink hover:bg-orange-soft',
+    quiet: 'border hairline bg-transparent text-ftext hover:border-orange',
+    danger: 'border border-warn bg-transparent text-warn hover:bg-warn/10',
   }[tone]
 
   return (
@@ -74,11 +74,11 @@ export function ActionForm({
       {state.status === 'error' ? (
         <div
           role="alert"
-          className="mt-4 border-l-2 border-[#ff5b52] pl-3 text-sm leading-relaxed text-[#ff5b52]"
+          className="mt-4 border-l-2 border-warn pl-3 text-sm leading-relaxed text-warn"
         >
           <p>{state.message}</p>
           {fieldErrors.length > 0 ? (
-            <ul className="mt-2 list-disc pl-4 text-xs text-[#ff5b52]">
+            <ul className="mt-2 list-disc pl-4 text-xs text-warn">
               {fieldErrors.map(([field, message]) => (
                 <li key={field}>{message}</li>
               ))}
@@ -90,18 +90,18 @@ export function ActionForm({
       {state.status === 'ok' ? (
         <div
           role="status"
-          className="mt-4 border-l-2 border-[#35d07f] pl-3 text-sm leading-relaxed text-[#35d07f]"
+          className="mt-4 border-l-2 border-ok pl-3 text-sm leading-relaxed text-ok"
         >
           <p>{state.message}</p>
           {state.revealOnce ? (
             <div className="mt-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#cbd1de]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-silver2">
                 Shown once — copy it now
               </p>
-              <code className="mt-1 block break-all rounded-sm border hairline bg-[#0d0f2e] p-3 text-xs text-[#e7e9f5]">
+              <code className="mt-1 block break-all rounded-sm border hairline bg-bg2 p-3 text-xs text-ftext">
                 {state.revealOnce}
               </code>
-              <p className="mt-2 text-xs text-[#9498b5]">
+              <p className="mt-2 text-xs text-dim">
                 Only a hash of this is stored, so it cannot be shown again. If it is
                 lost, issue a new one — doing so revokes this one.
               </p>

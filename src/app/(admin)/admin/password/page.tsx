@@ -47,7 +47,7 @@ export default async function PasswordPage() {
       ) : null}
 
       <Card title={alreadySet ? 'New password' : 'Password'}>
-        <p className="mb-5 text-sm leading-relaxed text-[#9498b5]">
+        <p className="mb-5 text-sm leading-relaxed text-dim">
           At least {MIN_PASSWORD_LENGTH} characters. There are no rules about capitals or
           punctuation — a phrase you can actually remember is stronger than a mangled
           word. It is checked against a list of well-known passwords, and it may not be

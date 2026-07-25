@@ -164,7 +164,7 @@ export function ImportWizard() {
       {error && (
         <p
           role="alert"
-          className="rounded-lg border border-[#ff5b52] bg-[#2a1116] px-4 py-3 text-sm text-ftext"
+          className="rounded-lg border border-warn bg-warn-surface px-4 py-3 text-sm text-ftext"
         >
           {error}
         </p>
@@ -180,7 +180,7 @@ export function ImportWizard() {
             ref={fileRef}
             type="file"
             accept=".csv,.tsv,.xlsx,.xls,.xlsm"
-            className="block w-full text-sm text-ftext file:mr-3 file:rounded-md file:border-0 file:bg-orange file:px-3 file:py-2 file:text-sm file:font-medium file:text-[#0b0c22]"
+            className="block min-h-11 w-full text-sm text-ftext file:mr-3 file:min-h-11 file:rounded-md file:border-0 file:bg-orange file:px-4 file:text-sm file:font-medium file:text-ink"
             onChange={() => {
               setStep('upload')
               setAnalysis(null)
@@ -192,7 +192,7 @@ export function ImportWizard() {
             type="button"
             onClick={() => upload()}
             disabled={pending}
-            className="rounded-md bg-orange px-4 py-2 text-sm font-medium text-[#0b0c22] disabled:opacity-50"
+            className="inline-flex min-h-11 items-center justify-center rounded-md bg-orange px-4 text-sm font-medium text-ink disabled:opacity-50"
           >
             {pending && step === 'upload' ? 'Reading…' : 'Read the file'}
           </button>
@@ -211,7 +211,7 @@ export function ImportWizard() {
               id="sheet"
               value={analysis.sheetName ?? ''}
               onChange={(event) => upload(event.target.value)}
-              className="mt-1 block w-full rounded-md border hairline bg-[#0d0f2e] px-2 py-2 text-sm text-ftext sm:w-64"
+              className="mt-1 block w-full rounded-md border hairline bg-bg2 px-2 py-2 text-sm text-ftext sm:w-64"
             >
               {analysis.sheetNames.map((name) => (
                 <option key={name} value={name}>
@@ -292,7 +292,7 @@ export function ImportWizard() {
                         setPreview(null)
                         setStep('map')
                       }}
-                      className="w-full rounded-md border hairline bg-[#0d0f2e] px-2 py-2 text-sm text-ftext"
+                      className="w-full rounded-md border hairline bg-bg2 px-2 py-2 text-sm text-ftext"
                     >
                       <option value={IGNORE_COLUMN}>Do not import this column</option>
                       {TARGET_FIELDS.map((field) => (
@@ -355,7 +355,7 @@ export function ImportWizard() {
             type="button"
             onClick={check}
             disabled={pending || unanswered.length > 0}
-            className="mt-5 rounded-md bg-orange px-4 py-2 text-sm font-medium text-[#0b0c22] disabled:opacity-50"
+            className="mt-5 inline-flex min-h-11 items-center justify-center rounded-md bg-orange px-4 text-sm font-medium text-ink disabled:opacity-50"
           >
             {pending ? 'Checking…' : 'Check the file'}
           </button>
@@ -405,7 +405,7 @@ export function ImportWizard() {
           <button
             type="button"
             onClick={restart}
-            className="mt-4 rounded-md border hairline px-4 py-2 text-sm text-ftext"
+            className="mt-4 inline-flex min-h-11 items-center justify-center rounded-md border hairline px-4 text-sm text-ftext"
           >
             Import another file
           </button>
@@ -455,7 +455,7 @@ function QuestionCard({
   }
 
   return (
-    <fieldset className="rounded-md border border-[#F59A23] p-3">
+    <fieldset className="rounded-md border border-orange p-3">
       <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-orange">
         {question.sourceColumn} → {FIELD_LABEL[question.targetField]}
       </legend>
@@ -515,7 +515,7 @@ function ReviewPanel({
       </h2>
 
       {preview.fileErrors.length > 0 && (
-        <div className="mt-3 rounded-md border border-[#ff5b52] p-3">
+        <div className="mt-3 rounded-md border border-warn p-3">
           <p className="text-sm font-semibold text-warn">
             {preview.fileErrors.length} error(s) stop this whole file
           </p>
@@ -630,14 +630,14 @@ function ReviewPanel({
           type="button"
           onClick={onImport}
           disabled={pending || !preview.canImport}
-          className="rounded-md bg-orange px-4 py-2 text-sm font-medium text-[#0b0c22] disabled:opacity-50"
+          className="inline-flex min-h-11 items-center justify-center rounded-md bg-orange px-4 text-sm font-medium text-ink disabled:opacity-50"
         >
           {pending ? 'Importing…' : `Import ${preview.totals.rowCount} recipient(s)`}
         </button>
         <button
           type="button"
           onClick={onBack}
-          className="rounded-md border hairline px-4 py-2 text-sm text-ftext"
+          className="inline-flex min-h-11 items-center justify-center rounded-md border hairline px-4 text-sm text-ftext"
         >
           Back to the columns
         </button>
@@ -665,7 +665,7 @@ function Steps({ current }: { current: Step }) {
           <li
             key={step.id}
             className={`rounded-full border px-3 py-1 ${
-              active ? 'border-[#F59A23] text-orange' : 'hairline text-dim'
+              active ? 'border-orange text-orange' : 'hairline text-dim'
             }`}
           >
             {index + 1}. {step.label}
