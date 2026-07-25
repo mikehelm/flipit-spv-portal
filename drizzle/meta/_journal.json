@@ -43,6 +43,13 @@
       "when": 1785010545251,
       "tag": "0005_clear_hitman",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785015332697,
+      "tag": "0006_wet_husk",
+      "breakpoints": true
     }
   ]
 }

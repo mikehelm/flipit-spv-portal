@@ -22,6 +22,7 @@
     "verify:deployment": "tsx scripts/verify-deployment.ts",
     "backup": "tsx scripts/backup.ts",
     "verify:restore": "tsx scripts/verify-restore.ts",
+    "verify:2fa": "tsx scripts/verify-second-factor.ts",
     "verify:lifecycle": "tsx scripts/verify-lifecycle.ts",
     "verify:roadmap": "tsx scripts/verify-roadmap.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"

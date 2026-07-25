@@ -345,6 +345,7 @@ async function main(): Promise<void> {
         smtpPasswordEncrypted: 'v1.ddd.eee.fff',
         smtpLastVerifiedAt: new Date(),
         smtpLastVerifyResult: 'OK: Authenticated to smtp.gmail.com:587 over STARTTLS.',
+        operatorTwoFactorEnrolled: true,
       },
       isProductionDeployment: false,
     })
@@ -367,6 +368,7 @@ async function main(): Promise<void> {
         smtpPasswordEncrypted: 'v1.ddd.eee.fff',
         smtpLastVerifiedAt: new Date(),
         smtpLastVerifyResult: 'OK: Authenticated to smtp.gmail.com:587 over STARTTLS.',
+        operatorTwoFactorEnrolled: true,
       },
       isProductionDeployment: false,
       operatorEmail: 'operator@example.test',

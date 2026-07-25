@@ -149,6 +149,8 @@ Where a check runs:
 - `src/lib/auth/credentials.test.ts` — unit — "creates nothing for an unknown address"
 - `src/lib/auth/sign-in-policy.test.ts` — unit — "has no self-registration path of any kind"
 - `src/lib/portal/sign-in-timing.test.ts` — unit — "settles on every single return, with none left unpadded"
+- `src/lib/auth/second-factor-guard.test.ts` — unit — "the check lives in currentAdmin, which every guard already goes through"
+- `scripts/verify-second-factor.ts` — database — "the other session is still waiting — a stolen password left open stays useless"
 
 ## 19. The operator cannot record, amend, or void a compliance approval; the control is owner-only and the attempt is logged.
 
@@ -219,16 +221,13 @@ Where a check runs:
 - `src/lib/portal/roadmap.test.ts` — unit — "rejects a promise of return, valuation or liquidity"
 - `src/lib/portal/roadmap.test.ts` — unit — "rejects a timeline — §13.1: "No dates. No soon.""
 - `src/lib/portal/roadmap.test.ts` — unit — "is rendered beneath the tiles on the investor portal"
-- `src/actions/roadmap.test.ts` — unit — "refuses an operator on every exported action, and writes nothing"
-- `src/actions/roadmap.test.ts` — unit — "names the word it will not take, rather than calling the label invalid"
-- `src/actions/roadmap.test.ts` — unit — "accepts the four labels §13.1 suggests, through the write path"
-- `src/actions/roadmap.test.ts` — unit — "has no delete of a roadmap tile in either module"
-- `scripts/verify-roadmap.ts` — database — "a tile can be added"
-- `scripts/verify-roadmap.ts` — database — "a tile can be renamed"
-- `scripts/verify-roadmap.ts` — database — "a tile can be hidden"
-- `scripts/verify-roadmap.ts` — database — "a tile can be switched to available"
-- `scripts/verify-roadmap.ts` — database — "no refused label was written"
-- `scripts/verify-roadmap.ts` — database — "is not stored on any tile, so no edit can remove it"
+- `src/lib/portal/roadmap.test.ts` — unit — "checks the wording at write time, on every path that writes a label"
+- `src/lib/portal/roadmap.test.ts` — unit — "is owner-only, as §13.1 says"
+- `src/lib/portal/roadmap.test.ts` — unit — "audits every change, including the one it refused"
+- `scripts/verify-roadmap.ts` — database — "the clean tile reaches the portal"
+- `scripts/verify-roadmap.ts` — database — "exactly one of the six planted rows is visible"
+- `scripts/verify-roadmap.ts` — database — "a hidden tile is hidden even though its label is clean"
+- `scripts/verify-roadmap.ts` — database — "is a constant rather than a row, so no tile edit can remove or reword it"
 
 ## 31. The portal renders correctly and legibly at 375px width, and text contrast meets WCAG AA against the dark palette.
 

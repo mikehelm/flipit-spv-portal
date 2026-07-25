@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   assertCanSend,
@@ -28,6 +29,9 @@ function healthyConfig(overrides: Partial<SendGuardConfig> = {}): SendGuardConfi
     smtpPasswordEncrypted: 'v1.ddd.eee.fff',
     smtpLastVerifiedAt: RECENT,
     smtpLastVerifyResult: 'OK: Authenticated to smtp.gmail.com:587 over STARTTLS.',
+    // WP-2FA. Enrolled by default here so the existing cases keep testing what
+    // they were written to test; the gate itself has its own describe block.
+    operatorTwoFactorEnrolled: true,
     ...overrides,
   }
 }
@@ -331,5 +335,78 @@ describe('isVerificationStale', () => {
     expect(
       isVerificationStale(new Date(NOW.getTime() - VERIFICATION_MAX_AGE_MS - 1000), NOW),
     ).toBe(true)
+  })
+})
+
+describe('two-factor is a release gate, not a preference — §2.2', () => {
+  /**
+   * §2.2: TOTP is *"optional in v1 and strongly recommended, **mandatory
+   * before the production deployment sends anything real**."*
+   *
+   * So it binds exactly where that sentence says: a real send, on the
+   * production deployment. Everything else stays rehearsable, which is what
+   * lets §19's pre-flight be walked before the last gate closes.
+   */
+  const withoutTwoFactor = healthyConfig({ operatorTwoFactorEnrolled: false })
+
+  it('refuses a real invitation from production when it is not switched on', () => {
+    const decision = evaluate(withoutTwoFactor, true)
+    expect(decision.allowed).toBe(false)
+    if (decision.allowed) return
+    expect(decision.blocks.map((b) => b.reason)).toContain('SECOND_FACTOR_NOT_ENROLLED')
+  })
+
+  it('names it, and says where to switch it on', () => {
+    const decision = evaluate(withoutTwoFactor, true)
+    if (decision.allowed) throw new Error('expected a refusal')
+    const block = decision.blocks.find((b) => b.reason === 'SECOND_FACTOR_NOT_ENROLLED')!
+    expect(block.message).toMatch(/two-factor/i)
+    expect(block.message).toMatch(/mandatory/i)
+    expect(block.message).toMatch(/authenticator app/i)
+  })
+
+  it('applies to every real intent, not only invitations', () => {
+    for (const intent of ['INVITATION', 'REMINDER', 'NOTIFICATION', 'REPLY'] as const) {
+      const decision = evaluateSendGuard({
+        intent,
+        config: withoutTwoFactor,
+        now: NOW,
+        isProductionDeployment: true,
+      })
+      expect(decision.allowed, `${intent} was allowed`).toBe(false)
+    }
+  })
+
+  it('leaves the testing deployment alone, so the whole flow stays rehearsable', () => {
+    const decision = evaluate(withoutTwoFactor, false)
+    if (decision.allowed) throw new Error('expected a refusal for the deployment')
+    // Refused, but for the deployment — not for two-factor. Adding a second
+    // reason here would make the testing deployment harder to use for no gain.
+    expect(decision.blocks.map((b) => b.reason)).not.toContain('SECOND_FACTOR_NOT_ENROLLED')
+  })
+
+  it('leaves a test send to the operator alone, even on production', () => {
+    // §7, §8.2 and §18.1 all carve out the test send. A message to the
+    // operator's own address is not "anything real".
+    const decision = evaluateSendGuard({
+      intent: 'TEST',
+      config: withoutTwoFactor,
+      now: NOW,
+      isProductionDeployment: true,
+      operatorEmail: 'david@flipit.com',
+      recipient: 'david@flipit.com',
+    })
+    expect(decision.allowed).toBe(true)
+  })
+
+  it('allows the real send once it is switched on', () => {
+    expect(evaluate(healthyConfig({ operatorTwoFactorEnrolled: true }), true).allowed).toBe(true)
+  })
+
+  it('has no override anywhere — §2.2 offers none', () => {
+    // If a way to skip this ever appears it will be a parameter, and it will
+    // be visible here.
+    const source = readFileSync('src/lib/email/transport/guard.ts', 'utf8')
+    expect(source).not.toMatch(/skipTwoFactor|allowWithoutTwoFactor|TWO_FACTOR_OVERRIDE/i)
   })
 })

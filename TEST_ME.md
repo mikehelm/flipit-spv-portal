@@ -2,7 +2,7 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 14 and 16 to 20 are complete — every package except 15, images and video, which is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: work packages 0 to 14 and 16 to 20 are complete — every package except 15, images and video, which is deferred until somewhere to store a file is chosen. Two-factor sign-in, the last release gate, is now built too.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
 The last two packages are the ones that check everything else and then put it somewhere real: a table saying, for each of the forty-eight things the specification requires, which test proves it — and a runbook for the day it goes live. **ACCEPTANCE.md** and **DEPLOYMENT.md** are those two documents, and the plain-English version of each is further down, under "The forty-eight things this was meant to do" and "Putting it somewhere real".
 
@@ -356,26 +356,6 @@ Six of the forty-eight were checked only indirectly — the neighbouring behavio
 - The reminder queue recorded who changed it only when a person did. The scheduled run — the one that creates and deletes queued reminders overnight, with nobody watching — recorded nothing at all. Unattended changes are precisely the ones most in need of a trail; they are now recorded against "system".
 - The guard that keeps secrets out of the audit log read only the top level of an entry, and missed the name the settings screen actually uses for the OpenAI key. It now reads every level. It still reads *names* and never *values* — a sign-in legitimately records that the method was a password, and a check that cries wolf is a check somebody eventually switches off.
 
-## Editing what investors see is coming
-
-Sign in as the **owner** and open **Portal roadmap**. This is the small set of tiles at the bottom of an investor's portal, under "Coming to your portal" — the ones that say the portal is a real system still being built out rather than a page that goes quiet once the money is in.
-
-You can add a tile, rename one, reorder them, hide one, or mark one available when the feature actually ships. Every change shows on every investor's portal immediately. There is no delete: hiding keeps the record of what an investor was shown, and deleting would not.
-
-**The part worth testing is what it refuses.** This copy sits on a securities offer page, and the specification calls it the easiest place in the whole build to say something unintended. So try to add these:
-
-- `Returns dashboard`
-- `Exit planning`
-- `Live Q3`
-- `Reporting 2027`
-- `Direct line to David, coming soon`
-
-Each is refused, and the message names the word it will not take rather than saying the label is invalid. Names of tools are fine — the four the specification suggests all go straight in. A rename is checked exactly as an addition is, so an approved tile cannot be edited into a promise afterwards.
-
-The line beneath the tiles — *Features shown are in development, are indicative only, and form no part of the investment being offered* — is not editable from this screen or any other. There is no setting for it and no column it lives in.
-
-**The operator cannot reach any of this.** The menu item is not there for them, and typing the address is refused and written to the audit log.
-
 ## Putting it somewhere real
 
 **`DEPLOYMENT.md` in this repository is the runbook.** It is written to be followed by one person, in order, on the day: what to set, what to check, what to re-enter, and what each refusal means when you meet one.
@@ -401,11 +381,35 @@ pnpm backup              # writes a backup file
 
 **One thing found while doing this, worth knowing:** the verification page — the one an investor is meant to be able to find — was being hidden from search engines by a mistake in the configuration, and had been for several packages. It is fixed, and there is now a check that asks a running copy of the application rather than reading the configuration file, because reading the file is what missed it.
 
+## The tiles at the bottom of the portal
+
+**Admin → Portal tiles**, owner only. The short names under &ldquo;Coming to your portal&rdquo; on an investor&rsquo;s page. Add one, rename one, hide one, or mark one as shipped.
+
+**Try to add a tile called &ldquo;Guaranteed returns&rdquo;, or &ldquo;Live in 2027&rdquo;, or &ldquo;Reporting &mdash; coming soon&rdquo;.** All three are refused, and the refusal names the word it objected to. This section sits on a securities offer page, so it is kept to tooling and communication &mdash; nothing that reads as a promise of returns, a valuation, liquidity, or a date.
+
+The line beneath the tiles &mdash; *Features shown are in development, are indicative only, and form no part of the investment being offered* &mdash; is shown on the editing screen so you can see what your names will sit above. It cannot be edited or switched off.
+
+There is a second check underneath that one, and `pnpm verify:roadmap` is what exercises it: a tile that gets into the database by some other route — an old seed, somebody at a database prompt — is still dropped before it reaches an investor. The command plants four labels the form would have refused and then reads the portal an investor is actually served, to be sure none of them arrives.
+
+## Two-factor
+
+**Admin → Two-factor.** A code from an authenticator app on top of your password, for the owner and the operator. Any standard app works — Google Authenticator, 1Password, Authy, Bitwarden.
+
+The specification makes this **mandatory before real invitations go out**, so it is not a preference: the application refuses to send a real invitation from the production address until the operator's account has it switched on. Test messages to your own address are unaffected, so you can rehearse everything before turning it on.
+
+Worth trying, because these are all meant to work:
+
+- Switch it on. You get ten recovery codes, **shown once**. Each works once. Save them somewhere that is not the same phone.
+- Sign out and back in. After your password you are asked for a code, and until you give one you can reach nothing — try typing an admin address into the browser and see.
+- Use a recovery code instead of your phone. It works, and then it does not work a second time.
+- Get the code wrong repeatedly. It throttles exactly as the password does.
+- Turn it off. It asks for your password, not a code — a code proves you are holding the phone, and someone who has walked off with your open laptop is holding that too.
+
+**If you lose the phone and the codes**, there is deliberately no button. It is a change made directly in the database, on purpose.
+
 ## What is not built yet
 
 - **Documents, images and video.** All need somewhere to store a file, which has not been chosen yet. Nothing else depends on them.
-- **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet. **This is the last thing standing between the build and a real send.**
-
 
 ## The round, and closing it
 

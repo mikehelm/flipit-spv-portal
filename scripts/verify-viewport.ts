@@ -543,6 +543,8 @@ async function main(): Promise<void> {
       ['portal roadmap', '/admin/roadmap'],
       ['operator access', '/admin/invites'],
       ['audit log', '/audit'],
+      ['two-factor', '/admin/security'],
+      ['portal tiles', '/admin/roadmap'],
       ['settings', '/admin/settings'],
     ] as const) {
       await auditScreen(page, label, path)

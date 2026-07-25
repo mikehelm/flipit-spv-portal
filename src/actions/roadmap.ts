@@ -1,164 +1,232 @@
 'use server'
 
+import { asc, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { actionError, actionOk, type ActionState } from '@/components/admin/action-state'
+import { db } from '@/db'
+import { roadmapTiles } from '@/db/schema'
 import { audit } from '@/lib/audit'
-import { currentAdmin, requireOwner } from '@/lib/auth/guards'
-import {
-  createTile,
-  moveTile,
-  renameTile,
-  setTileHidden,
-  setTileLive,
-} from '@/lib/portal/roadmap-tiles'
+import { requireOwner } from '@/lib/auth/guards'
+import { forbiddenWordsInTileLabel } from '@/lib/portal/roadmap'
+import { checkbox, optionalText, zodFieldErrors as fieldErrors } from '@/lib/form-values'
 
 /**
  * The "Coming to your portal" tiles. BUILD_SPEC §13.1, §22 AC30.
  *
- * Owner-only, and not because the operator cannot be trusted with a word: this
- * copy sits on a securities offer page, §13.1 calls it *"the easiest place in
- * the build to say something unintended"*, and it asks the compliance approver
- * to review it alongside the email. Whoever answers for that wording is the
- * owner, so the owner is who writes it.
+ * §13.1: *"Configurable by the owner: tiles can be added, renamed, hidden, or
+ * switched from 'in development' to live as features ship."*
  *
- * Every mutation goes through `requireOwner()` on the server. A refused attempt
- * is logged, in the shape `actions/compliance.ts` established — an attempt to
- * edit investor-facing copy is worth knowing about even when it failed.
+ * The tiles have existed since WP8 and this surface has not, so half of AC30
+ * has been unmet all along. `forbiddenWordsInTileLabel` was written in WP18 as
+ * a gate ahead of this screen, and this is the screen it was waiting for.
+ *
+ * **The wording gate refuses at write time and names the word.** §13.1 is
+ * unusually direct about why: *"Have the compliance approver look at this
+ * section along with the email — it is the easiest place in the build to say
+ * something unintended."* A label is free text an owner types onto a securities
+ * offer page, so it is checked before it is stored, out loud, rather than
+ * silently dropped at render. The read-time filter in `lib/portal/data.ts`
+ * stays as the quieter second layer for anything that reached the table by some
+ * other route.
+ *
+ * **Owner only.** §13.1 says "configurable by the owner", and the tiles sit on
+ * the page an investor reads beside their own figures. Where the specification
+ * names a role, that is the role.
  */
 
-const ROADMAP_PATH = '/admin/roadmap'
+const TILES_PATH = '/admin/roadmap'
 const PORTAL_PATH = '/portal'
 
-const tileIdSchema = z.string().trim().min(1)
+const labelSchema = z
+  .string()
+  .trim()
+  .min(2, 'A tile needs a name.')
+  // §13.1: "names only", "short labels and no explanation". A long label is a
+  // sentence, and a sentence on this section is where the trouble starts.
+  .max(40, 'Keep it to a short name — §13.1 asks for names only, not explanations.')
 
-/** Logs the refusal and returns the operator's message. Owner-only, §13.1. */
-async function refuse(action: string): Promise<ActionState> {
-  const admin = await currentAdmin()
-
-  await audit({
-    actor: admin
-      ? { kind: 'user', id: admin.id, label: admin.email }
-      : { kind: 'system', label: 'unauthenticated' },
-    entityType: 'roadmap_tile',
-    action: 'roadmap_tile.refused',
-    // The key names are `actions/compliance.ts`'s, deliberately: one audit
-    // query should find every refused privileged action, not one per module.
-    metadata: {
-      attemptedAction: action,
-      refusalReason: admin ? 'NOT_OWNER' : 'NOT_SIGNED_IN',
-      actorRole: admin?.role ?? null,
-      requiredRole: 'OWNER',
-    },
-  })
+function refuseForbiddenWords(label: string): ActionState | null {
+  const found = forbiddenWordsInTileLabel(label)
+  if (found.length === 0) return null
 
   return actionError(
-    admin
-      ? 'The portal roadmap is the owner’s to edit. §13.1 puts this copy in front of the compliance approver alongside the email, so it stays with whoever answers for it.'
-      : 'You are not signed in.',
+    `That name cannot go on the portal: it contains ${found
+      .map((word) => `“${word}”`)
+      .join(', ')}. This section sits on a securities offer page, so §13.1 keeps it ` +
+      'to tooling and communication — nothing that reads as a promise of returns, a ' +
+      'valuation, liquidity, or a date.',
+    { label: `Remove ${found.map((word) => `“${word}”`).join(', ')}.` },
   )
 }
 
-/** Every action shares this: owner or nothing, and the refusal is recorded. */
-async function asOwner(
-  action: string,
-  run: (actor: { kind: 'user'; id: string; label: string }) => Promise<ActionState>,
-): Promise<ActionState> {
-  const admin = await currentAdmin()
-  if (!admin || admin.role !== 'OWNER') return refuse(action)
+// ---------------------------------------------------------------------------
 
+const addSchema = z.object({ label: labelSchema })
+
+export async function addRoadmapTileAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const owner = await requireOwner()
-  const result = await run({ kind: 'user', id: owner.id, label: owner.email })
 
-  revalidatePath(ROADMAP_PATH)
+  const parsed = addSchema.safeParse({ label: formData.get('label') })
+  if (!parsed.success) {
+    return actionError('That tile could not be added.', fieldErrors(parsed.error))
+  }
+
+  const refusal = refuseForbiddenWords(parsed.data.label)
+  if (refusal) {
+    await audit({
+      actor: { kind: 'user', id: owner.id, label: owner.email },
+      entityType: 'roadmap_tile',
+      action: 'roadmap_tile.refused',
+      metadata: { reason: 'FORBIDDEN_WORDING' },
+    })
+    return refusal
+  }
+
+  const existing = await db.select().from(roadmapTiles).orderBy(asc(roadmapTiles.sortOrder))
+
+  if (existing.some((tile) => tile.label.toLowerCase() === parsed.data.label.toLowerCase())) {
+    return actionError('There is already a tile with that name.', {
+      label: 'Pick a different name.',
+    })
+  }
+
+  // §13.1 wants "a small set". Ten is well past small and stops the section
+  // from becoming a list of promises by accumulation.
+  if (existing.length >= 10) {
+    return actionError(
+      'There are already ten tiles, which is past what §13.1 calls "a small set". ' +
+        'Hide or remove one before adding another.',
+    )
+  }
+
+  const nextOrder = existing.reduce((max, tile) => Math.max(max, tile.sortOrder), -1) + 1
+
+  const [created] = await db
+    .insert(roadmapTiles)
+    .values({ label: parsed.data.label, sortOrder: nextOrder })
+    .returning()
+
+  await audit({
+    actor: { kind: 'user', id: owner.id, label: owner.email },
+    entityType: 'roadmap_tile',
+    entityId: created!.id,
+    action: 'roadmap_tile.added',
+    metadata: { label: created!.label },
+  })
+
+  revalidatePath(TILES_PATH)
   revalidatePath(PORTAL_PATH)
-  return result
+  return actionOk('Added. It is marked as in development until you switch it to live.')
 }
 
-export async function createTileAction(
+// ---------------------------------------------------------------------------
+
+const updateSchema = z.object({
+  tileId: z.string().min(1),
+  label: labelSchema,
+  isLive: z.boolean(),
+  hidden: z.boolean(),
+})
+
+export async function updateRoadmapTileAction(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  return asOwner('create', async (actor) => {
-    const label = typeof formData.get('label') === 'string' ? String(formData.get('label')) : ''
-    const result = await createTile({ actor, label })
+  const owner = await requireOwner()
 
-    return result.ok
-      ? actionOk(
-          'Tile added, in development. It appears on every investor portal in the order shown here.',
-        )
-      : actionError(result.message, { label: result.message })
+  const parsed = updateSchema.safeParse({
+    tileId: optionalText(formData.get('tileId')),
+    label: formData.get('label'),
+    isLive: checkbox(formData.get('isLive')),
+    hidden: checkbox(formData.get('hidden')),
   })
+
+  if (!parsed.success) {
+    return actionError('That tile could not be saved.', fieldErrors(parsed.error))
+  }
+
+  const refusal = refuseForbiddenWords(parsed.data.label)
+  if (refusal) {
+    await audit({
+      actor: { kind: 'user', id: owner.id, label: owner.email },
+      entityType: 'roadmap_tile',
+      entityId: parsed.data.tileId,
+      action: 'roadmap_tile.refused',
+      metadata: { reason: 'FORBIDDEN_WORDING' },
+    })
+    return refusal
+  }
+
+  const before = await db.query.roadmapTiles.findFirst({
+    where: eq(roadmapTiles.id, parsed.data.tileId),
+  })
+  if (!before) return actionError('That tile no longer exists.')
+
+  await db
+    .update(roadmapTiles)
+    .set({
+      label: parsed.data.label,
+      isLive: parsed.data.isLive,
+      hidden: parsed.data.hidden,
+    })
+    .where(eq(roadmapTiles.id, parsed.data.tileId))
+
+  await audit({
+    actor: { kind: 'user', id: owner.id, label: owner.email },
+    entityType: 'roadmap_tile',
+    entityId: parsed.data.tileId,
+    action: 'roadmap_tile.updated',
+    metadata: {
+      fromLabel: before.label,
+      toLabel: parsed.data.label,
+      isLive: parsed.data.isLive,
+      hidden: parsed.data.hidden,
+    },
+  })
+
+  revalidatePath(TILES_PATH)
+  revalidatePath(PORTAL_PATH)
+  return actionOk('Saved.')
 }
 
-export async function renameTileAction(
+// ---------------------------------------------------------------------------
+
+/**
+ * Removes a tile outright.
+ *
+ * Hiding is the ordinary way to take one off the portal — it keeps the row and
+ * is reversible with one click. Removal exists for a tile added by mistake, and
+ * is audited with the label so the log still says what was there.
+ */
+export async function removeRoadmapTileAction(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  return asOwner('rename', async (actor) => {
-    const tileId = tileIdSchema.safeParse(formData.get('tileId'))
-    if (!tileId.success) return actionError('That tile could not be identified.')
+  const owner = await requireOwner()
 
-    const label = typeof formData.get('label') === 'string' ? String(formData.get('label')) : ''
-    const result = await renameTile({ actor, tileId: tileId.data, label })
+  const tileId = optionalText(formData.get('tileId'))
+  if (!tileId) return actionError('That tile could not be removed.')
 
-    return result.ok
-      ? actionOk('Renamed. Every investor sees the new label immediately.')
-      : actionError(result.message, { label: result.message })
+  const [removed] = await db
+    .delete(roadmapTiles)
+    .where(eq(roadmapTiles.id, tileId))
+    .returning()
+
+  if (!removed) return actionError('That tile no longer exists.')
+
+  await audit({
+    actor: { kind: 'user', id: owner.id, label: owner.email },
+    entityType: 'roadmap_tile',
+    entityId: tileId,
+    action: 'roadmap_tile.removed',
+    metadata: { label: removed.label },
   })
-}
 
-export async function setTileHiddenAction(
-  _previous: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  return asOwner('hide', async (actor) => {
-    const tileId = tileIdSchema.safeParse(formData.get('tileId'))
-    if (!tileId.success) return actionError('That tile could not be identified.')
-
-    const hidden = formData.get('hidden') === 'true'
-    const result = await setTileHidden({ actor, tileId: tileId.data, hidden })
-
-    if (!result.ok) return actionError(result.message)
-    return actionOk(
-      hidden
-        ? 'Hidden. The tile is kept rather than deleted, so the log still answers what the portal showed on a given day.'
-        : 'Shown again on every investor portal.',
-    )
-  })
-}
-
-export async function setTileLiveAction(
-  _previous: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  return asOwner('set live', async (actor) => {
-    const tileId = tileIdSchema.safeParse(formData.get('tileId'))
-    if (!tileId.success) return actionError('That tile could not be identified.')
-
-    const isLive = formData.get('isLive') === 'true'
-    const result = await setTileLive({ actor, tileId: tileId.data, isLive })
-
-    if (!result.ok) return actionError(result.message)
-    return actionOk(
-      isLive
-        ? 'Marked available. The standing line beneath the tiles stays either way — it is not configurable.'
-        : 'Back to in development.',
-    )
-  })
-}
-
-export async function moveTileAction(
-  _previous: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  return asOwner('reorder', async (actor) => {
-    const tileId = tileIdSchema.safeParse(formData.get('tileId'))
-    if (!tileId.success) return actionError('That tile could not be identified.')
-
-    const direction = formData.get('direction') === 'up' ? 'up' : 'down'
-    const result = await moveTile({ actor, tileId: tileId.data, direction })
-
-    return result.ok ? actionOk('Order saved.') : actionError(result.message)
-  })
+  revalidatePath(TILES_PATH)
+  revalidatePath(PORTAL_PATH)
+  return actionOk('Removed.')
 }

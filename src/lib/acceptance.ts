@@ -389,6 +389,14 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
         'src/lib/portal/sign-in-timing.test.ts',
         'settles on every single return, with none left unpadded',
       ),
+      unit(
+        'src/lib/auth/second-factor-guard.test.ts',
+        'the check lives in currentAdmin, which every guard already goes through',
+      ),
+      database(
+        'scripts/verify-second-factor.ts',
+        'the other session is still waiting — a stolen password left open stays useless',
+      ),
     ],
   },
   {
@@ -544,18 +552,24 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
       unit('src/lib/portal/roadmap.test.ts', 'rejects a timeline — §13.1: "No dates. No soon."'),
       unit('src/lib/portal/roadmap.test.ts', 'is rendered beneath the tiles on the investor portal'),
       unit(
-        'src/actions/roadmap.test.ts',
-        'refuses an operator on every exported action, and writes nothing',
+        'src/lib/portal/roadmap.test.ts',
+        'checks the wording at write time, on every path that writes a label',
       ),
-      unit('src/actions/roadmap.test.ts', 'names the word it will not take, rather than calling the label invalid'),
-      unit('src/actions/roadmap.test.ts', 'accepts the four labels §13.1 suggests, through the write path'),
-      unit('src/actions/roadmap.test.ts', 'has no delete of a roadmap tile in either module'),
-      database('scripts/verify-roadmap.ts', 'a tile can be added'),
-      database('scripts/verify-roadmap.ts', 'a tile can be renamed'),
-      database('scripts/verify-roadmap.ts', 'a tile can be hidden'),
-      database('scripts/verify-roadmap.ts', 'a tile can be switched to available'),
-      database('scripts/verify-roadmap.ts', 'no refused label was written'),
-      database('scripts/verify-roadmap.ts', 'is not stored on any tile, so no edit can remove it'),
+      unit('src/lib/portal/roadmap.test.ts', 'is owner-only, as §13.1 says'),
+      unit(
+        'src/lib/portal/roadmap.test.ts',
+        'audits every change, including the one it refused',
+      ),
+      database('scripts/verify-roadmap.ts', 'the clean tile reaches the portal'),
+      database('scripts/verify-roadmap.ts', 'exactly one of the six planted rows is visible'),
+      database(
+        'scripts/verify-roadmap.ts',
+        'a hidden tile is hidden even though its label is clean',
+      ),
+      database(
+        'scripts/verify-roadmap.ts',
+        'is a constant rather than a row, so no tile edit can remove or reword it',
+      ),
     ],
   },
   {

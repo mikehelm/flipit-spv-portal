@@ -30,14 +30,39 @@ export interface AdminIdentity {
 export const SIGN_IN_PATH = '/signin'
 export const NO_ACCESS_PATH = '/admin/no-access'
 export const PASSWORD_PATH = '/admin/password'
+export const SECOND_FACTOR_PATH = '/signin/second-factor'
+
+/**
+ * A session that has not yet passed the second factor is not an
+ * administrator. BUILD_SPEC §2.2.
+ *
+ * The check lives here, in the one function every guard on every page and
+ * every server action already goes through, rather than being added to each
+ * of them. A guard that forgets to ask about two-factor gets `null` and
+ * redirects to sign-in — the failure is closed, not open.
+ *
+ * `secondFactorAt` is null in two different situations and only one of them is
+ * pending: an account with no TOTP enrolled has nothing to satisfy. That is
+ * the whole of the resolution, and it is here so no caller has to repeat it.
+ */
+function secondFactorPending(
+  user: { totpConfirmedAt: Date | null },
+  session: { secondFactorAt: Date | null },
+): boolean {
+  return user.totpConfirmedAt !== null && session.secondFactorAt === null
+}
 
 /** The signed-in administrator, or null. Never throws, never redirects. */
 export async function currentAdmin(): Promise<AdminIdentity | null> {
-  const user = await readAdminSessionUser()
-  if (!user) return null
+  const found = await readAdminSessionUser()
+  if (!found) return null
+
+  const { user, session } = found
 
   const decision = evaluateAllowlist(user.email)
   if (!decision.allowed) return null
+
+  if (secondFactorPending(user, session)) return null
 
   return {
     id: user.id,
@@ -47,11 +72,44 @@ export async function currentAdmin(): Promise<AdminIdentity | null> {
   }
 }
 
-/** Signed in as either privileged role. Redirects to sign-in if not. */
+/**
+ * The half-authenticated identity behind the second-factor form, and nowhere
+ * else. BUILD_SPEC §2.2.
+ *
+ * This is the one function in the application that looks at a session
+ * `currentAdmin()` has deliberately refused. It returns an id and an address
+ * and no capability: the page it serves has one form on it.
+ */
+export async function pendingSecondFactorAdmin(): Promise<{
+  id: string
+  email: string
+} | null> {
+  const found = await readAdminSessionUser()
+  if (!found) return null
+
+  const { user, session } = found
+
+  const decision = evaluateAllowlist(user.email)
+  if (!decision.allowed) return null
+
+  if (!secondFactorPending(user, session)) return null
+
+  return { id: user.id, email: decision.email }
+}
+
+/**
+ * Signed in as either privileged role. Redirects if not.
+ *
+ * A session waiting on its second factor is sent to the form rather than to
+ * sign-in — it has a valid password behind it and asking for the password
+ * again would be a puzzle rather than a control.
+ */
 export async function requireAdmin(): Promise<AdminIdentity> {
   const admin = await currentAdmin()
-  if (!admin) redirect(SIGN_IN_PATH)
-  return admin
+  if (admin) return admin
+
+  if (await pendingSecondFactorAdmin()) redirect(SECOND_FACTOR_PATH)
+  redirect(SIGN_IN_PATH)
 }
 
 /**

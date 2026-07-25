@@ -36,10 +36,11 @@ const ITEMS: NavItem[] = [
   { href: '/reminders', label: 'Reminders', roles: ['OWNER', 'OPERATOR'] },
   { href: '/register', label: 'Register', roles: ['OWNER', 'OPERATOR'] },
   { href: '/compliance', label: 'Compliance', roles: ['OWNER'] },
-  { href: '/admin/roadmap', label: 'Portal roadmap', roles: ['OWNER'] },
+  { href: '/admin/security', label: 'Two-factor', roles: ['OWNER', 'OPERATOR'] },
   { href: '/admin/onboarding', label: 'Setup', roles: ['OPERATOR'] },
   { href: '/admin/invites', label: 'Operator access', roles: ['OWNER'] },
   { href: '/audit', label: 'Audit log', roles: ['OWNER'] },
+  { href: '/admin/roadmap', label: 'Portal tiles', roles: ['OWNER'] },
   { href: '/admin/settings', label: 'Settings', roles: ['OWNER'] },
 ]
 

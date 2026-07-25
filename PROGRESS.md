@@ -903,8 +903,10 @@ There is a larger point in that, and it is in the runbook: **under a path prefix
 **Uncertain:**
 
 - The negative lookahead in `next.config.ts` is a path-to-regexp construction and it is not obvious. It is commented, and the source test asserts the `(?!` is still there, but the thing that would actually catch its removal is `pnpm verify:deployment` — which is not in `pnpm check` because it builds twice and takes a couple of minutes.
-- Two-factor sign-in is still a release gate and still unbuilt. §2 makes it mandatory before the production deployment sends anything real. It blocks the first real send rather than the migration, and the runbook says so.
+- Two-factor sign-in was still a release gate and still unbuilt when this package was written. It is built now — see the entry below — and the runbook wants a paragraph on recovering an account whose device and codes are both gone.
 - The backup lands on local disk. Off-host storage is a decision about where, and the runbook says not-the-same-host and that a dump is the most sensitive single artefact this system produces — but nothing enforces it.
+
+---
 
 ## WP19, merged with the parallel session — the criteria that had no test, and two audit faults
 
@@ -961,48 +963,99 @@ No schema change. No migration.
 - *The verification scripts are cited but not gated.* `pnpm test` does not run them, and nothing enforces that they have been run recently. Whoever sets up CI should decide where they belong; the argument for a release stage rather than a commit hook is unchanged from WP18.
 - *Two sessions built WP19 in parallel and neither knew.* The merge cost an hour and threw away a working registry. Nothing in the repository says which package is being worked on, and PROGRESS.md is only written at the end — which is exactly too late to prevent this. A one-line claim file, written first, would have.
 
+## Two-factor — the release gate, closed
+
+Not a numbered work package. §2.2 makes TOTP *"mandatory before the production deployment sends anything real"*, which is a **release gate rather than an optional extra** — the phrasing this repository has used for it since WP2. Every package since has listed it under "not built yet" and it was the last thing standing between the build and a real send. It is built.
+
+**What §2.2 is actually paying for is stated in §2.2 itself.** Dropping Google sign-in means *"the password becomes the only thing between an attacker and investor names, amounts, and the ability to send mail as the operator. That is a real trade and it is paid for here, not waved away."* Argon2id-class hashing, the length rule, the rate limiting, the revocable sessions and the audit log were all built. Two-factor was the outstanding half.
+
+**A pending session is not an administrator, and that is enforced in one place.** `sessions.second_factor_at` is null until a code is entered. `currentAdmin()` — the function every guard on every page and every server action already goes through — resolves it and returns null while it is pending. So `requireAdmin`, `requirePasswordSet`, `requireOwner`, `requireOperator` and `requireOnboardedAdmin` all inherit the check without knowing about it, **and a guard that never heard of two-factor fails closed rather than open**. A test asserts that chain, and asserts that exactly two files in the application read a session `currentAdmin()` has refused: the page that renders the form, and the action that receives it.
+
+**A session starts un-elevated by default.** `createAdminSession` takes an option that defaults to false, and neither sign-in path sets it — password sign-in and the one-time setup link both produce a plain session, and only a verified code elevates one. A test asserts no caller passes `secondFactorSatisfied: true`.
+
+**Elevation is by session token, never by user id.** Elevating every session a user holds would elevate one an attacker had opened with a stolen password and left waiting; the database verification opens two sessions for one account, elevates one, and checks the other is still waiting. It is also conditional on the session not already being elevated, so a replayed submission cannot re-stamp one.
+
+**The release gate itself is `SECOND_FACTOR_NOT_ENROLLED` in the send guard**, and it binds exactly where §2.2's sentence says: a real send, on the production deployment. A test send to the operator's own address is not "anything real", and neither is anything on the testing deployment — which is what keeps the whole of §19's pre-flight rehearsable before the last gate closes. **It adds a condition and weakens nothing**: no override, no setting, no environment variable, and a test asserts no such thing appears in the module.
+
+**Verified against a real database.** Twenty-five checks in `scripts/verify-second-factor.ts` (`pnpm verify:2fa`): the secret stored encrypted and decrypting back; enrolment unconfirmed until a code is entered; a five-minute-old code refused; ten recovery codes stored as hashes with none in the clear; two sessions elevated independently; a recovery code spent once and refused the second time, against the row rather than in memory; the gate refusing a real invitation, permitting it once switched on, leaving a test send alone, and following the state back down when two-factor is turned off; and no audit entry for the account containing the secret or any recovery code.
+
+**Decisions:**
+
+- *The gate reads the **operator's** account, not the acting user's.* The scheduled sends — reminders, update notifications — have no acting user at all, so a per-request rule would either break the reminder job or carve an exception into it. §2.2 names the stake as *"the ability to send mail as the operator"*, and every message this application produces leaves from the operator's mailbox. One rule, covering both the interactive and the scheduled path.
+- *`operatorTwoFactorEnrolled` is **required** on the guard config rather than optional with a default.* An optional field with a default is a field somebody forgets, and the default would be wrong in exactly the case that matters. Making it required cost one line in the test helper and means a new call site has to state it.
+- *The gate reads its own evidence inside `sendOneEmail`.* A gate whose evidence the caller supplies is a gate the caller can get wrong.
+- *One field for both a TOTP code and a recovery code.* Two fields would tell somebody watching which one was being tried, and would make a person who has lost their phone hunt for the right box while they are already anxious.
+- *One sentence for every failure*, exactly as the password step has. A message distinguishing a wrong code from an unknown recovery code would tell somebody holding a stolen password which of the two factors they had cleared.
+- *The second step is throttled on the same counters as the first.* A six-digit code is a million possibilities; an unthrottled form walks it in an afternoon, and a separately-throttled one lets an attacker spend the password budget and the code budget independently. `clientIp` moved out of `actions/auth.ts` into its own module so both steps key identically.
+- *±1 period, and no more.* Thirty seconds either side covers reading a code and typing it. Every additional period is another minute in which a code read off somebody's screen is still worth something. The accepted steps are an exported constant with a test asserting there are three.
+- *Confirming enrolment requires a live code.* An account cannot be locked out by a QR that was never successfully scanned.
+- *Switching two-factor on ends every other session for that account.* Sessions opened under one-factor rules must not survive the change, or switching it on would have altered nothing for the sessions that already existed.
+- *Turning it off asks for the password; reissuing recovery codes asks for a code.* A session is a bearer token on a machine somebody may have walked away from. And when the question is "do you still hold the second factor", a code is the answer and a password is not.
+- *There is no screen on which the owner turns two-factor off for the operator.* A second factor somebody else can remove is not a second factor. Recovering an account whose device and codes are both gone is a database change, made deliberately, and the second-factor page says so.
+- *The QR is a server-rendered data URL.* It is the secret in visual form, so it is never fetched from a URL a proxy could log, and it exists only between starting enrolment and confirming it.
+- *The recovery-code alphabet excludes `0`, `1`, `I`, `O`, `L` and `U`.* The first five because they are misread off paper, which is the only way anybody ever reads one; `U` because it turns a random string into a word more often than the rest.
+- *Enumeration: the second step is visible only after a correct password*, so the fact that an account has two-factor is disclosed only to somebody who already has the password. That is unavoidable in any two-step design and is not a new disclosure.
+
+**Deviations:** one migration, `0006`, adding `sessions.second_factor_at`. The `users` columns §2.2 needs — `totp_secret_encrypted`, `totp_confirmed_at`, `recovery_codes_hashed` — were provided by WP1 and are used unchanged.
+
+**Checklist:** points 2, 7 and 8 are this change's.
+
+2. No send path bypasses the compliance approval or the token check — and there is now one more gate in front of the transport, added rather than substituted. The compliance gate, the mail-connection gate and the deployment gate are untouched; a test asserts the new one has no override.
+7. Suspension revokes existing sessions *and* refuses new links — unchanged, and the new column travels with the session row, so a revoked session takes its elevation with it. Switching two-factor on additionally revokes every other session for that account.
+8. No log line carries a token, a body or a key. The audit entries record a method — `totp` or `recovery_code` — and a count. Verified against the real database: no entry for the enrolled account contains the secret or any of its ten recovery codes.
+
+**Uncertain:**
+
+- Recovery from a lost device **and** lost codes is a database change, and the runbook does not spell out the SQL. It is three columns on one row, and somebody doing it at speed would rather read it than derive it. Worth a paragraph in DEPLOYMENT.md next time that file is open.
+- The gate asks whether *an* operator is enrolled. There is one operator by design (§2), so the question is well posed today; with two, one enrolled operator would satisfy it for both. If a second operator ever exists, this wants to become per-sender.
+- Nothing yet forces enrolment on first sign-in. §2.2 calls it "optional in v1", so this is faithful — but the practical consequence is that the first person to reach production discovers the gate at the moment they try to send, rather than at the moment they sign in. The security page says so plainly, which is the smaller half of the fix.
+
 ---
 
-## AC30 — the roadmap tiles the owner could not edit
+## The "Coming to your portal" tiles are now editable — AC30 closed
 
-The one criterion both WP19 sessions found half-built, and it stayed half-built through WP20. §13.1: *"Configurable by the owner: tiles can be added, renamed, hidden, or switched from 'in development' to live as features ship."* The wording rules were enforced and tested; the surface those rules were written for did not exist, and the only way to change a tile was to edit `db/seed.ts`.
+The smallest remaining gap, and the one the WP19 merge named as "the next thing worth building". §13.1: *"Configurable by the owner: tiles can be added, renamed, hidden, or switched from 'in development' to live as features ships."* The tiles have been on the investor's portal since WP8; the screen to change them had never existed, so half of AC30 had been unmet the whole time.
 
-**Built.** `src/lib/portal/roadmap-tiles.ts` (the service and the write-time gate), `src/actions/roadmap.ts` (five owner-only server actions), `src/app/(admin)/admin/roadmap/page.tsx` (the screen), a nav entry for the owner alone, and `scripts/verify-roadmap.ts`. No schema change — `roadmap_tiles` already carried `label`, `sort_order`, `is_live` and `hidden`, which is WP1 having read §13.1 properly.
+**`forbiddenWordsInTileLabel` finally has the surface it was written for.** WP18 built it as a gate ahead of a screen that did not exist yet — the same shape as the WP17 follow-up — and this is that screen. It now **refuses at write time and names the offending word**, which is the right shape given what §13.1 says about this section: *"it is the easiest place in the build to say something unintended."* A silent drop would leave the owner believing it had saved.
 
-**The gate is now on the way in, and it says the word out loud.** `forbiddenWordsInTileLabel` has existed since WP18 as a read-time filter, quietly dropping an offending tile from the portal. That stays — it protects a row written before this module or by a hand at a database prompt — but it was never the right place for the loud check. A tile silently missing from an investor's portal is a worse thing to debug than a form that refuses and names the word. `checkTileLabel` now runs on create and on rename, and the message names the offending word, quotes §13.1, and says what to write instead: *name the tool, not what it will do for them.*
+WP18's read-time filter stays as the quieter second layer, for anything that reaches the table by some other route. Two layers, one loud and one quiet, and a test asserts both are present.
 
-**Decisions.**
+**Decisions:**
 
-- *Owner-only, not owner-and-operator.* §13.1 does say "configurable by the owner", but the reason is worth stating: this copy sits on a securities offer page, §13.1 calls it "the easiest place in the build to say something unintended", and it asks the compliance approver to review it alongside the email. Whoever answers for that wording is the owner. A refused attempt is audited in the shape `actions/compliance.ts` set, so one query over `refusalReason` finds every refused privileged action rather than one per module.
-- *Hidden, never deleted.* There is no delete anywhere in the module, and a test asserts it. §16 wants the log to answer what the portal looked like on a given day; hiding leaves the row and the trail, deleting leaves neither.
-- *A new tile starts in development.* §13.1 has "in development" as the default state and "live as features ship" as the transition. A tile that could be created already live would let a mis-click tell an investor a feature exists.
-- *A label is capped at forty characters.* §13.1 asks for "short labels and no explanation". The cap is a rule rather than a hint because a label long enough to carry a sentence is long enough to carry a promise, and the four suggested labels are all well inside it.
-- *Reordering rewrites the whole sequence in one transaction.* Swapping two rows leaves gaps and duplicates behind over time, and the portal orders by that column.
-- *The standing line stays out of reach.* It is a constant in `roadmap.ts` with no column, no setting and no prop. A test asserts neither the action nor the service writes or accepts it, and that the owner screen renders it from the constant rather than retyping it.
+- *Owner only.* §13.1 says "configurable by the owner", and these words appear on the page an investor reads beside their own figures. Where the specification names a role, that is the role.
+- *Forty characters.* §13.1 asks for "short labels and no explanation" and "names only". A long label is a sentence, and a sentence in this section is where the trouble starts.
+- *Ten tiles maximum.* §13.1 says "a small set". Ten is well past small, and the cap stops the section becoming a list of promises by accumulation rather than by any single bad tile.
+- *Hiding is the ordinary way to take one off, and removal is separate.* Hiding keeps the row and is one click to undo. Removal is audited with the label, so the log still says what was there.
+- *The standing line is rendered on the editing screen, greyed and not a field.* Whoever is writing a tile can see the sentence it will sit above, and can see that it is not one of the things they can change.
+- *A refused label is audited too.* `roadmap_tile.refused`, with the reason and without the label — an audit entry recording the wording somebody tried to publish would put it in the log instead of on the page, which is not an improvement.
 
-**Deviations.** None. The package is additive, and `data.ts`'s read-time filter is deliberately unchanged.
+**Deviations:** none. No migration — `roadmap_tiles` has been in the schema since WP1.
 
-**Checklist.** Points 4, 5 and 8 are this package's.
+**Checklist:** points 5 and 8.
 
-1. No monetary value is a JavaScript number. Nothing here handles money; the only numbers are a sort index and a character count.
-2. No send path bypasses anything. Nothing under `lib/sending`, `lib/compliance` or `lib/email` is touched, and a tile change sends nothing to anybody.
-3. A jurisdiction block still stops one recipient. Untouched.
-4. The operator still cannot record, amend or void a compliance approval — and now cannot edit the copy §13.1 puts in front of the approver either. Every exported action is enumerated by a test that fails if a new one skips `requireOwner`.
-5. No investor-facing response reveals another investor. A tile is global, identical for everybody, and carries no per-investor data. The portal view maps each tile to a label and a live flag and nothing else.
-6. Tokens are untouched.
-7. Suspension is untouched.
-8. No log line carries a token, a body or a key. Six new audit actions, all recording a label, a position or a direction. The refusal entry records a role and an attempted action. All pass `assertNoSecrets`, including the recursive check added in WP19.
-9. The verification page is still the only indexable route. The new screen is under `(admin)` and inherits the default `noindex`.
-10. Q&A is untouched.
-11. The AI path is untouched.
-12. The production base-URL guard is untouched.
+5. No investor-facing response reveals another investor. The tiles are global rather than per-investor and remain so; nothing on this screen or in these actions reads an investor record.
+8. No log line carries a token, a body or a key. The audit entries record labels, flags and a reason; the refusal entry records the reason and not the refused text.
 
-**Verification.** `pnpm verify:roadmap` — 37 checks against real Postgres: a refused label is never written, a refused rename leaves the old label standing, hiding keeps the row, the sort column stays a sequence with no gaps, every mutation is on the record, and the seeded tiles are exactly as they were afterwards. `pnpm verify:viewport` now walks the new screen too — 110 checks across twenty-two screens, including 375px, AA contrast and 44px targets on this one.
+**Uncertain:**
 
-**Three faults found in this package's own code, by its own tests, and fixed before it landed:** `moveTile` reported success for a tile id that does not exist, because `reorderIds` cannot tell "not there" from "already at the end"; the refusal metadata used key names nobody else uses; and the reorder loop had no transaction, so a failure part way through would have left two tiles claiming one position.
+- Reordering is not built. `sort_order` exists and is set on creation, so tiles appear in the order they were added, and there is no way to move one. §13.1 does not ask for reordering; a pair of arrows would be twenty minutes if it ever matters.
+- The word list is still mine, derived from §13.1's prose. It is now enforced against real input rather than sitting ahead of a surface, which is the right time for somebody to read it — it is `FORBIDDEN_IN_TILE_LABEL` in `lib/portal/roadmap.ts` and the screen shows the first six of them in the hint.
+
+---
+
+## AC30 — the same package, built twice, and what was kept
+
+Both sessions read the same PROGRESS.md, found the same half-built criterion, and built it within the same hour. The parallel session's implementation landed first and stands: `actions/roadmap.ts`, the screen, and the source-level tests in `roadmap.test.ts`. This session's — a service layer under `lib/portal/roadmap-tiles.ts`, five thinner actions, twenty-one functional action tests — was deleted rather than merged. Two editing surfaces for one section of one page is not a thing to reconcile; it is a thing to undo.
+
+**What was kept is `scripts/verify-roadmap.ts`, rewritten to cover what the surviving implementation cannot.** Their actions all go through `requireOwner()`, so a script with no session cannot drive them, which is why they wrote no database check. But the *second* layer can be driven: `lib/portal/data.ts` filters the tiles again on the way out, and that filter is the only thing standing between an investor and a row that reached the table by some other route — a seed, a migration, a hand at a database prompt, the build before the gate existed. It runs only for rows that should not exist, which makes it precisely the code that rots without anybody noticing.
+
+So the script writes the rows the gate would have refused — *Returns dashboard*, *Liquidity window*, *Live Q3*, *Ready 2027* — straight past the gate, then loads the portal view an investor is actually served and checks that exactly one of the six planted rows appears. Eighteen checks. It also proves the fixture: each refused label is confirmed to be one the write-time gate would reject, so a filter that quietly stopped working could not pass by rejecting nothing.
+
+**One disagreement between the two implementations, resolved in theirs' favour and recorded here because it is a real choice.** This session's had no delete: hiding kept the row, on the §16 argument that the log should still answer what an investor was shown on a given day. Theirs has a remove, and audits the label with it — the trail survives the row. That is a defensible reading of the same section, it is documented at the function, and the ordinary route off the portal is still hiding. Left as it stands.
+
+**Checklist.** Nothing in this session's surviving contribution changes application behaviour: it is one verification script and its citation. Points 1 through 12 are unaffected by a script that writes fixtures and deletes them again — and it does delete them again, which the last two checks confirm against the seeded tiles.
 
 **Uncertain.**
 
-- *Nothing re-approves the tiles when they change.* §13.1 asks the compliance approver to look at this section along with the email, and the email has a hash and an approval that drift breaks. The tiles have neither: the owner can rename a tile after the approval is recorded and no gate notices. The word list is a floor, not an approval. Whether tile copy should join the template hash is a question for whoever records the next approval.
-- *The word list is still mine*, taken from §13.1's prose in WP18 and unchanged here. Somebody should read it now that there is a form that enforces it.
-- *`ACCEPTANCE.md` now reports 47 of 48 with an automated check*, the two uncovered being WP15's deferred media and video. AC34 keeps its note for the half a machine cannot judge.
+- *Nothing re-approves the tiles when they change.* §13.1 asks the compliance approver to look at this section along with the email. The email has a hash and an approval that drift breaks; the tiles have neither, so an owner can rename a tile after an approval is recorded and no gate notices. The word list is a floor, not an approval. Whether tile copy should join the template hash is a question for whoever records the next one.
+- *Two sessions built the same thing twice, in the same hour, for the second time today.* WP19 collided and so did this. Neither session could see the other's work until it was pushed, and PROGRESS.md — the only coordination surface — is written at the end, which is exactly too late. A claim written **before** the work starts, in its own file, would have cost a minute and saved two hours across the two collisions.
