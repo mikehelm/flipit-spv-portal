@@ -77,11 +77,11 @@ These will fail loudly if someone later weakens them, which is the point.
 
 ## WP2 — Authentication, roles, onboarding — done
 
-**Built:** email-and-password sign-in for the two administrators, and the operator onboarding flow behind it. Argon2id at OWASP's current parameters, a twelve-character minimum checked against a common-password list, no composition rules. Progressive delay by address and by IP — 0, 0, 250ms, 500ms, 1s, 2s, 4s, 8s — then a fifteen-minute lock after ten failures. Server-side sessions as rows, twelve-hour expiry, revocable individually or all at once. Single-use expiring operator invites. The five-step operator onboarding from §2.1, resumable because progress is derived from stored facts rather than from wizard state. An owner settings page holding the OpenAI key, write-only and encrypted, never redisplayed.
+**Built:** email-and-password sign-in for the two administrators, and the operator onboarding flow behind it. Argon2id at OWASP's current parameters (later replaced by scrypt — see the note at the end of this file), a twelve-character minimum checked against a common-password list, no composition rules. Progressive delay by address and by IP — 0, 0, 250ms, 500ms, 1s, 2s, 4s, 8s — then a fifteen-minute lock after ten failures. Server-side sessions as rows, twelve-hour expiry, revocable individually or all at once. Single-use expiring operator invites. The five-step operator onboarding from §2.1, resumable because progress is derived from stored facts rather than from wizard state. An owner settings page holding the OpenAI key, write-only and encrypted, never redisplayed.
 
 First run works as §2.2 describes: the seed creates the allowlisted accounts with no password and prints a one-time expiring setup link for each. Redeeming a link establishes a session that can reach exactly one page — "choose a password" — and choosing one ends every session including that one. A password never appears in an environment variable, a configuration file, an audit entry or a log line.
 
-Verified end to end against the running application, not only in unit tests: the link redeems once and refuses the second time; a session holding no password is redirected away from `/admin`, `/admin/settings` and `/admin/onboarding`; the correct password signs in; setting a password deletes every existing session row; the stored value is an argon2id verifier; and a wrong password, an unknown address and an allowlisted account that has never chosen a password all fail identically.
+Verified end to end against the running application, not only in unit tests: the link redeems once and refuses the second time; a session holding no password is redirected away from `/admin`, `/admin/settings` and `/admin/onboarding`; the correct password signs in; setting a password deletes every existing session row; the stored value is a real password verifier and not the password; and a wrong password, an unknown address and an allowlisted account that has never chosen a password all fail identically.
 
 **Decisions:**
 
@@ -282,7 +282,9 @@ The lifecycle is the part worth reading. §4.2 spells out the sign-in rules "exp
 
 ## Note on the argon2 → scrypt substitution
 
-A parallel session replaced argon2 with `node:crypto`'s scrypt while WP8 was being built. **This one needs Michael's agreement rather than mine**, because the build instructions name argon2 explicitly in the stack.
+A parallel session replaced argon2 with `node:crypto`'s scrypt while WP8 was being built. The build instructions name argon2 explicitly in the stack, so this needed Michael's agreement rather than mine.
+
+**Decided: keep scrypt.** Michael agreed on 25 July 2026. The substitution stands, and the comments that still said "Argon2id" above scrypt code have been corrected — a comment naming the wrong algorithm is worse than no comment, because it is the thing a later reader will believe.
 
 The implementation itself is sound: N = 2^17, r = 8, p = 1 — OWASP's current scrypt baseline, about 128 MiB per hash — a per-hash random salt, and `timingSafeEqual` for the comparison. It is a genuine memory-hard KDF, not a fast hash wearing a costume, and it removes the last dependency needing a native compile.
 

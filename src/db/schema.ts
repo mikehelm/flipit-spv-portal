@@ -179,7 +179,7 @@ export const users = pgTable('users', {
   // password and prints a one-time setup link. A password is never read from an
   // environment variable or a configuration file, so there is no other way for
   // one to arrive.
-  /** Argon2id verifier. Null until the account holder chooses a password. */
+  /** A scrypt verifier. Null until the account holder chooses a password. */
   passwordHash: text('password_hash'),
   passwordSetAt: timestamp('password_set_at', { withTimezone: true }),
   /**

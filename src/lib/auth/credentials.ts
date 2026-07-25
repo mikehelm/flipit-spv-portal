@@ -20,14 +20,14 @@ import { evaluateAllowlist } from './sign-in-policy'
  *   - an allowlisted address with no password set yet,
  *   - an allowlisted address with the wrong password,
  *
- * all return `INVALID_CREDENTIALS`, all pay the same Argon2id verification cost
+ * all return `INVALID_CREDENTIALS`, all pay the same scrypt verification cost
  * (against a dummy hash when there is no real one), and all leave the same
  * rate-limit trace. Inside, they are audited distinctly, because the owner
  * needs to be able to tell them apart afterwards even though an attacker must
  * not be able to tell them apart at the time.
  *
- * Storage is injected. See `credential-store.ts` for why the database-backed
- * store is not implemented yet.
+ * Storage is injected, so these rules can be tested exhaustively without a
+ * database. See `credential-store.ts`.
  */
 
 export type SignInFailure = 'INVALID_CREDENTIALS' | 'LOCKED' | 'UNAVAILABLE'

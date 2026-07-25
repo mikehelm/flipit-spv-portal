@@ -24,7 +24,7 @@ import { sessions, users } from '@/db/schema'
 export interface AdminCredential {
   userId: string
   email: string
-  /** Argon2id. Null when the account exists but no password has been chosen. */
+  /** A scrypt verifier. Null when the account exists but no password is set. */
   passwordHash: string | null
   passwordSetAt: Date | null
 }
