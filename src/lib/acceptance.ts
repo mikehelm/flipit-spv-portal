@@ -560,6 +560,16 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
         'src/lib/portal/roadmap.test.ts',
         'audits every change, including the one it refused',
       ),
+      database('scripts/verify-roadmap.ts', 'the clean tile reaches the portal'),
+      database('scripts/verify-roadmap.ts', 'exactly one of the six planted rows is visible'),
+      database(
+        'scripts/verify-roadmap.ts',
+        'a hidden tile is hidden even though its label is clean',
+      ),
+      database(
+        'scripts/verify-roadmap.ts',
+        'is a constant rather than a row, so no tile edit can remove or reword it',
+      ),
     ],
   },
   {

@@ -1043,6 +1043,25 @@ WP18's read-time filter stays as the quieter second layer, for anything that rea
 
 ---
 
+## AC30 — the same package, built twice, and what was kept
+
+Both sessions read the same PROGRESS.md, found the same half-built criterion, and built it within the same hour. The parallel session's implementation landed first and stands: `actions/roadmap.ts`, the screen, and the source-level tests in `roadmap.test.ts`. This session's — a service layer under `lib/portal/roadmap-tiles.ts`, five thinner actions, twenty-one functional action tests — was deleted rather than merged. Two editing surfaces for one section of one page is not a thing to reconcile; it is a thing to undo.
+
+**What was kept is `scripts/verify-roadmap.ts`, rewritten to cover what the surviving implementation cannot.** Their actions all go through `requireOwner()`, so a script with no session cannot drive them, which is why they wrote no database check. But the *second* layer can be driven: `lib/portal/data.ts` filters the tiles again on the way out, and that filter is the only thing standing between an investor and a row that reached the table by some other route — a seed, a migration, a hand at a database prompt, the build before the gate existed. It runs only for rows that should not exist, which makes it precisely the code that rots without anybody noticing.
+
+So the script writes the rows the gate would have refused — *Returns dashboard*, *Liquidity window*, *Live Q3*, *Ready 2027* — straight past the gate, then loads the portal view an investor is actually served and checks that exactly one of the six planted rows appears. Eighteen checks. It also proves the fixture: each refused label is confirmed to be one the write-time gate would reject, so a filter that quietly stopped working could not pass by rejecting nothing.
+
+**One disagreement between the two implementations, resolved in theirs' favour and recorded here because it is a real choice.** This session's had no delete: hiding kept the row, on the §16 argument that the log should still answer what an investor was shown on a given day. Theirs has a remove, and audits the label with it — the trail survives the row. That is a defensible reading of the same section, it is documented at the function, and the ordinary route off the portal is still hiding. Left as it stands.
+
+**Checklist.** Nothing in this session's surviving contribution changes application behaviour: it is one verification script and its citation. Points 1 through 12 are unaffected by a script that writes fixtures and deletes them again — and it does delete them again, which the last two checks confirm against the seeded tiles.
+
+**Uncertain.**
+
+- *Nothing re-approves the tiles when they change.* §13.1 asks the compliance approver to look at this section along with the email. The email has a hash and an approval that drift breaks; the tiles have neither, so an owner can rename a tile after an approval is recorded and no gate notices. The word list is a floor, not an approval. Whether tile copy should join the template hash is a question for whoever records the next one.
+- *Two sessions built the same thing twice, in the same hour, for the second time today.* WP19 collided and so did this. Neither session could see the other's work until it was pushed, and PROGRESS.md — the only coordination surface — is written at the end, which is exactly too late. A claim written **before** the work starts, in its own file, would have cost a minute and saved two hours across the two collisions.
+
+---
+
 ## WP15 — Media and video — done. The last deferred package, and the last two uncovered criteria.
 
 WP16 deferred this one with a specific reason, and it was the right reason: *"What it needs is a decision about storage — the natural fits alongside Netlify are Netlify Blobs, S3 or R2 — and then it is a straightforward package."* The decision is made and recorded below. With it, **AC32 and AC33 are the last two of the forty-eight to acquire an automated check**, and `acceptance.test.ts` now asserts that no criterion is uncovered rather than asserting which two are.

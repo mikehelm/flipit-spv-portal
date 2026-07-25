@@ -443,6 +443,8 @@ This is the thing to do before any real invitation goes out: open it on your pho
 
 The line beneath the tiles &mdash; *Features shown are in development, are indicative only, and form no part of the investment being offered* &mdash; is shown on the editing screen so you can see what your names will sit above. It cannot be edited or switched off.
 
+There is a second check underneath that one, and `pnpm verify:roadmap` is what exercises it: a tile that gets into the database by some other route — an old seed, somebody at a database prompt — is still dropped before it reaches an investor. The command plants four labels the form would have refused and then reads the portal an investor is actually served, to be sure none of them arrives.
+
 ## Two-factor
 
 **Admin → Two-factor.** A code from an authenticator app on top of your password, for the owner and the operator. Any standard app works — Google Authenticator, 1Password, Authy, Bitwarden.

@@ -224,6 +224,10 @@ Where a check runs:
 - `src/lib/portal/roadmap.test.ts` — unit — "checks the wording at write time, on every path that writes a label"
 - `src/lib/portal/roadmap.test.ts` — unit — "is owner-only, as §13.1 says"
 - `src/lib/portal/roadmap.test.ts` — unit — "audits every change, including the one it refused"
+- `scripts/verify-roadmap.ts` — database — "the clean tile reaches the portal"
+- `scripts/verify-roadmap.ts` — database — "exactly one of the six planted rows is visible"
+- `scripts/verify-roadmap.ts` — database — "a hidden tile is hidden even though its label is clean"
+- `scripts/verify-roadmap.ts` — database — "is a constant rather than a row, so no tile edit can remove or reword it"
 
 ## 31. The portal renders correctly and legibly at 375px width, and text contrast meets WCAG AA against the dark palette.
 
