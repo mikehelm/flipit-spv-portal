@@ -403,6 +403,51 @@ export class S3ObjectClient {
     return new Uint8Array(await response.arrayBuffer())
   }
 
+  /**
+   * Bytes `start` to `end` inclusive, and **only** a 206 is accepted.
+   *
+   * A store that ignores `Range` answers 200 with the whole object, and a
+   * client that quietly sliced that would look identical to one honouring the
+   * range — right up until a sixty-megabyte video was being held in memory to
+   * serve two seconds of it. So a 200 here is an error with a message naming
+   * the problem, not a silent fallback.
+   *
+   * `Range` is deliberately not part of the signature. S3 signs the headers it
+   * is told to sign, and adding an unsigned header is permitted; keeping the
+   * signed set identical to the plain GET's means one canonical request shape
+   * to reason about rather than two.
+   */
+  async getObjectRange(key: string, start: number, end: number): Promise<Uint8Array | null> {
+    const signed = signRequest(this.config, { method: 'GET', key, now: new Date() })
+
+    const response = await fetch(signed.url, {
+      method: 'GET',
+      headers: { ...signed.headers, range: `bytes=${start}-${end}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      redirect: 'error',
+    })
+
+    if (response.status === 404) {
+      const verdict = await this.isAbsence(response)
+      if (verdict.absent) return null
+      await this.refuse(response, 'GET', verdict.code)
+    }
+
+    if (response.status === 200) {
+      await response.arrayBuffer().catch(() => undefined)
+      throw new S3RequestError(
+        200,
+        null,
+        'The object store ignored a range request and offered the whole object. ' +
+          'This build will not serve a partial response it did not receive.',
+      )
+    }
+
+    if (response.status !== 206) await this.refuse(response, 'GET')
+
+    return new Uint8Array(await response.arrayBuffer())
+  }
+
   async deleteObject(key: string): Promise<void> {
     const response = await this.send('DELETE', key)
 

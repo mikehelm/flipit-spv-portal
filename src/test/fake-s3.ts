@@ -24,6 +24,12 @@ export class FakeS3 {
   readonly objects = new Map<string, { bytes: Buffer; contentType: string }>()
   /** Statuses to serve, once each, before behaving normally. */
   readonly failures: number[] = []
+  /**
+   * Answer a `Range` request with the whole object and a 200, the way a store
+   * that does not implement ranges does. Off by default; the client is
+   * supposed to refuse this, and there is a test that it does.
+   */
+  ignoreRanges = false
   requests = 0
   private server: Server | null = null
   port = 0
@@ -111,6 +117,31 @@ export class FakeS3 {
         response.writeHead(404).end('<Error><Code>NoSuchKey</Code></Error>')
         return
       }
+
+      const range = /^bytes=(\d+)-(\d+)$/.exec(String(request.headers.range ?? ''))
+
+      if (range && !this.ignoreRanges) {
+        const start = Number(range[1])
+        const end = Math.min(Number(range[2]), stored.bytes.length - 1)
+
+        if (start >= stored.bytes.length || end < start) {
+          response
+            .writeHead(416, { 'content-range': `bytes */${stored.bytes.length}` })
+            .end()
+          return
+        }
+
+        const slice = stored.bytes.subarray(start, end + 1)
+        response
+          .writeHead(206, {
+            'content-type': stored.contentType,
+            'content-range': `bytes ${start}-${end}/${stored.bytes.length}`,
+            'accept-ranges': 'bytes',
+          })
+          .end(slice)
+        return
+      }
+
       response.writeHead(200, { 'content-type': stored.contentType }).end(stored.bytes)
     } else if (method === 'DELETE') {
       this.objects.delete(key!)

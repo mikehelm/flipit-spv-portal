@@ -42,11 +42,16 @@ import {
   investorAccounts,
   investorSessions,
   offers,
+  operatorVideos,
   portalTokens,
   recipients,
   rounds,
+  users,
 } from '@/db/schema'
 import { issueToken } from '@/lib/crypto'
+import { mp4WithLocation } from '@/lib/media/fixtures'
+import { ingest } from '@/lib/media/ingest'
+import { mediaStore } from '@/lib/media/store'
 
 const PREFIX = 'wp20-deploy'
 const BASE_PATH = '/SPV'
@@ -329,6 +334,114 @@ async function main(): Promise<void> {
       portalUnprefixed.length === 0,
       portalUnprefixed.slice(0, 5).join(', '),
     )
+
+    /**
+     * §13.3 — the video, over real HTTP, with a real investor session.
+     *
+     * This is the check the whole range change exists for. Safari opens a
+     * video with `Range: bytes=0-1` and abandons a server that answers 200
+     * with the entire body, so a portal that served the whole file was a
+     * portal whose personal video did not play on an iPhone at all. Asserting
+     * the parser in isolation does not prove the route sends a 206.
+     */
+    console.log('\n§13.3 — range requests on the video, over real HTTP')
+
+    const store = mediaStore()
+
+    if (!store) {
+      check('a media store is configured for this run', false, 'set MEDIA_STORE')
+    } else {
+      const videoBytes = mp4WithLocation()
+      const ingested = await ingest('video', videoBytes, 'video/mp4')
+
+      if (!ingested.ok) {
+        check('a video can be stored for this check', false, ingested.message)
+      } else {
+        const [operator] = await db.select().from(users).limit(1)
+
+        const [videoRow] = await db
+          .insert(operatorVideos)
+          .values({
+            ownerId: operator?.id ?? null,
+            storageKey: ingested.storageKey,
+            contentType: ingested.format,
+            sizeBytes: ingested.sizeBytes,
+            caption: `${PREFIX} range check`,
+            publishedAt: new Date(),
+          })
+          .returning()
+
+        const videoUrl = `${ORIGIN}/portal/video/${videoRow!.id}`
+
+        const whole = await fetch(videoUrl, { headers: { cookie } })
+        check('the whole video is served to a signed-in investor', whole.status === 200, String(whole.status))
+        check(
+          'and it advertises that it accepts ranges, which is how a player knows it may seek',
+          whole.headers.get('accept-ranges') === 'bytes',
+          String(whole.headers.get('accept-ranges')),
+        )
+        check(
+          'the whole response is still private and unindexed',
+          whole.headers.get('cache-control')?.includes('no-store') === true &&
+            whole.headers.get('x-robots-tag')?.includes('noindex') === true,
+        )
+        const wholeBody = new Uint8Array(await whole.arrayBuffer())
+        check('and it is the stored file', wholeBody.length === ingested.sizeBytes)
+
+        // The two bytes Safari asks for.
+        const safari = await fetch(videoUrl, { headers: { cookie, range: 'bytes=0-1' } })
+        check('bytes=0-1 is answered 206, not 200', safari.status === 206, String(safari.status))
+        check(
+          'with a Content-Range naming the span and the total',
+          safari.headers.get('content-range') === `bytes 0-1/${ingested.sizeBytes}`,
+          String(safari.headers.get('content-range')),
+        )
+        const safariBody = new Uint8Array(await safari.arrayBuffer())
+        check('and exactly two bytes come back', safariBody.length === 2, String(safariBody.length))
+        check(
+          'which are the first two bytes of the file',
+          safariBody[0] === wholeBody[0] && safariBody[1] === wholeBody[1],
+        )
+        check(
+          'a partial response is as private and unindexed as a whole one',
+          safari.headers.get('cache-control')?.includes('no-store') === true &&
+            safari.headers.get('x-robots-tag')?.includes('noindex') === true,
+        )
+
+        // A seek into the middle, which is what scrubbing does.
+        const middle = await fetch(videoUrl, {
+          headers: { cookie, range: `bytes=${ingested.sizeBytes - 4}-` },
+        })
+        check('an open-ended range from near the end is 206', middle.status === 206, String(middle.status))
+        const middleBody = new Uint8Array(await middle.arrayBuffer())
+        check('and returns exactly the last four bytes', middleBody.length === 4, String(middleBody.length))
+        check(
+          'which are the last four bytes of the file',
+          middleBody.every((byte, i) => byte === wholeBody[ingested.sizeBytes - 4 + i]),
+        )
+
+        const past = await fetch(videoUrl, {
+          headers: { cookie, range: `bytes=${ingested.sizeBytes + 10}-` },
+        })
+        check('a range past the end is 416, not a broken 206', past.status === 416, String(past.status))
+        check(
+          'and names the size so a player can correct itself',
+          past.headers.get('content-range') === `bytes */${ingested.sizeBytes}`,
+          String(past.headers.get('content-range')),
+        )
+
+        // A range request still cannot get past the access checks.
+        const anonymous = await fetch(videoUrl, { headers: { range: 'bytes=0-1' } })
+        check(
+          'a range request without a session is the same 404 as anything else',
+          anonymous.status === 404,
+          String(anonymous.status),
+        )
+
+        await db.delete(operatorVideos).where(eq(operatorVideos.id, videoRow!.id))
+        await store.remove(ingested.storageKey)
+      }
+    }
 
     console.log('\nThe base-URL guard — §18.1, AC44')
     const { evaluateSendGuard } = await import('@/lib/email/transport/guard')

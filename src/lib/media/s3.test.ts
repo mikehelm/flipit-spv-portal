@@ -284,6 +284,43 @@ describe('a round trip over a real socket', () => {
     await expect(client.deleteObject('img_TODELETETODELETETODELETE')).resolves.toBeUndefined()
   })
 
+  it('a ranged get asks for and receives exactly those bytes', async () => {
+    const client = new S3ObjectClient(fake.config())
+    const bytes = new Uint8Array(64)
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = i
+
+    await client.putObject('img_RANGEDGETRANGEDGETRANG', bytes, 'application/octet-stream')
+
+    expect([...(await client.getObjectRange('img_RANGEDGETRANGEDGETRANG', 0, 1))!]).toEqual([0, 1])
+    expect([...(await client.getObjectRange('img_RANGEDGETRANGEDGETRANG', 63, 63))!]).toEqual([63])
+    expect((await client.getObjectRange('img_RANGEDGETRANGEDGETRANG', 0, 63))!.length).toBe(64)
+  })
+
+  it('a ranged get of something absent is null', async () => {
+    const client = new S3ObjectClient(fake.config())
+    expect(await client.getObjectRange('img_ABSENTABSENTABSENTABSE', 0, 9)).toBeNull()
+  })
+
+  /**
+   * The failure mode this strictness exists for: a store that ignores `Range`
+   * answers 200 with the whole object, and a client that quietly sliced that
+   * would be indistinguishable from one honouring the range — until a
+   * sixty-megabyte video was in memory to serve two seconds of it.
+   */
+  it('a store that ignores the range is an error, not a silent whole-file read', async () => {
+    const client = new S3ObjectClient(fake.config())
+    await client.putObject('img_IGNOREDIGNOREDIGNORED', new Uint8Array(32), 'application/octet-stream')
+
+    fake.ignoreRanges = true
+    try {
+      await expect(client.getObjectRange('img_IGNOREDIGNOREDIGNORED', 0, 1)).rejects.toThrow(
+        /ignored a range request/,
+      )
+    } finally {
+      fake.ignoreRanges = false
+    }
+  })
+
   it('a wrong secret is refused by the server, and the refusal names the code and not the body', async () => {
     const client = new S3ObjectClient(fake.config('the-wrong-secret'))
 

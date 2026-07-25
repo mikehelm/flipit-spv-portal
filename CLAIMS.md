@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Range requests for video (Safari will not play without them) | 25 Jul session C | 2026-07-25 23:52 | `src/lib/media/store.ts`, `src/lib/media/s3.ts`, a new `src/lib/media/ranges.ts`, the three media routes |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -57,6 +57,10 @@ What is left is not a package either. The open items are listed under Uncertain
 at the end of each PROGRESS.md section. **EBML stripping for an uploaded WebM is done too**, so every accepted format
 except PDF is now stripped, and PDF is deliberate.
 
-The largest now are range requests on a video, a reconciliation pass for objects
-whose rows are gone, and the open question — sharpened by corrections — of
-whether issuing a document should notify the investor at all.
+**Range requests on the video are done too** — the portal video answers 206,
+which is what Safari needs before it will play anything at all.
+
+The largest now are streaming a whole-file response rather than buffering it, a
+reconciliation pass for objects whose rows are gone, and the open question —
+sharpened by corrections — of whether issuing a document should notify the
+investor at all.

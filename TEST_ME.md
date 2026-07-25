@@ -472,6 +472,8 @@ Then publish it and try again from an investor's portal. It plays.
 - **Suspend an investor's account** and try their portal. The video goes with everything else.
 - **Leave the caption and transcript empty.** The screen tells you that anyone who cannot play sound gets nothing at all from the video. Fill them in and they appear on the portal as text, in full, not hidden behind a control somebody has to find.
 
+**Seeking, and why it is worth a mention.** A published video now answers a browser that asks for part of it rather than always sending the whole thing. That sounds like a nicety and is not: Safari opens every video by asking for the first two bytes, and gives up entirely on a server that replies with the whole file instead. Before this, David's video did not play on an iPhone at all. Now it plays, and the scrub bar works. If you have an iPhone to hand, that is the ten-second test worth running on the first real deployment.
+
 ---
 
 ## Sending yourself the whole thing
@@ -515,7 +517,7 @@ Worth trying, because these are all meant to work:
 - **A note saying what changed in a correction.** A corrected document is versioned and both versions stay readable, but nothing records what was different — only the description, if somebody writes one.
 - **An email when a document is issued or corrected.** Deliberate, but somebody will expect it. Send a message or an update alongside.
 - **A real storage bucket, actually connected.** The code to use one is now written and tested (see "The media library"), but only against a stand-in on the same machine. Pointing it at a real Amazon or Cloudflare bucket and uploading one image is the last step, and it is minutes rather than work.
-- **A video that plays before it has finished downloading.** A published video is sent as one whole file, so a browser waits for all of it. Fine for the two-minute personal video this was built for; wrong for anything long.
+- **Streaming a video rather than holding it in memory.** Seeking works now, but a straight download still builds the whole file in memory before sending it. Fine at sixty megabytes; not the shape you would want for anything larger.
 
 ## The round, and closing it
 

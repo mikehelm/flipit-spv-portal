@@ -124,6 +124,48 @@ describe('both stores answer the same questions the same way', () => {
         }
       })
 
+      it('reads a range, and reads exactly the bytes asked for', async () => {
+        const store = build()
+        const bytes = new Uint8Array(256)
+        for (let i = 0; i < bytes.length; i += 1) bytes[i] = i
+
+        await store.put('img_RANGERANGERANGERANGERA', bytes, 'image/png')
+
+        // Inclusive on both ends — the HTTP convention, and the off-by-one.
+        const first = await store.getRange('img_RANGERANGERANGERANGERA', 0, 0)
+        expect([...first!.bytes]).toEqual([0])
+
+        const two = await store.getRange('img_RANGERANGERANGERANGERA', 0, 1)
+        expect([...two!.bytes]).toEqual([0, 1])
+
+        const middle = await store.getRange('img_RANGERANGERANGERANGERA', 100, 109)
+        expect([...middle!.bytes]).toEqual([100, 101, 102, 103, 104, 105, 106, 107, 108, 109])
+
+        const last = await store.getRange('img_RANGERANGERANGERANGERA', 255, 255)
+        expect([...last!.bytes]).toEqual([255])
+
+        const all = await store.getRange('img_RANGERANGERANGERANGERA', 0, 255)
+        expect([...all!.bytes]).toEqual([...bytes])
+      })
+
+      it('a range of an object that is not there is null, not a throw', async () => {
+        const store = build()
+        expect(await store.getRange('img_NOTHINGHEREATALLNOTHING', 0, 9)).toBeNull()
+      })
+
+      it('a backwards range is null rather than a negative-length read', async () => {
+        const store = build()
+        await store.put('img_BACKWARDSBACKWARDSBAC', new Uint8Array([1, 2, 3]), 'image/png')
+        expect(await store.getRange('img_BACKWARDSBACKWARDSBAC', 2, 1)).toBeNull()
+      })
+
+      it('a range refuses a key that is not a storage key too', async () => {
+        const store = build()
+        await expect(store.getRange('../../etc/passwd', 0, 9)).rejects.toThrow(
+          /not a storage key/,
+        )
+      })
+
       it('says where it is writing, and never says it with a credential', () => {
         const store = build()
         const described = store.describe()

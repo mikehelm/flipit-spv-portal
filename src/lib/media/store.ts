@@ -23,7 +23,7 @@
  * library, which is exactly the state a fresh install is in.
  */
 
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, open, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { env } from '@/lib/env'
@@ -41,6 +41,16 @@ export interface MediaStore {
   describe(): string
   put(key: string, bytes: Uint8Array, contentType: string): Promise<void>
   get(key: string): Promise<StoredObject | null>
+  /**
+   * Bytes `start` to `end`, both inclusive — the HTTP convention, because the
+   * only caller is a route answering a `Range` header and translating twice is
+   * how an off-by-one gets in.
+   *
+   * Null means the object is not there, exactly as `get` does. The caller has
+   * already resolved the range against the recorded size, so a range outside
+   * the object is a caller error rather than a case to answer.
+   */
+  getRange(key: string, start: number, end: number): Promise<StoredObject | null>
   remove(key: string): Promise<void>
 }
 
@@ -110,6 +120,38 @@ class FilesystemMediaStore implements MediaStore {
     }
   }
 
+  /**
+   * Read only the bytes asked for, with a file handle and a position.
+   *
+   * Not `readFile` then `slice`. The point of a range request is that a
+   * sixty-megabyte video does not have to be in memory for a browser to play
+   * two seconds of it, and reading the whole file first would keep the correct
+   * HTTP behaviour while throwing away the reason for it.
+   */
+  async getRange(key: string, start: number, end: number): Promise<StoredObject | null> {
+    const file = this.resolve(key)
+    const length = end - start + 1
+    if (length <= 0) return null
+
+    let handle
+    try {
+      handle = await open(file, 'r')
+    } catch {
+      return null
+    }
+
+    try {
+      const buffer = Buffer.alloc(length)
+      const { bytesRead } = await handle.read(buffer, 0, length, start)
+      return {
+        bytes: new Uint8Array(buffer.subarray(0, bytesRead)),
+        contentType: 'application/octet-stream',
+      }
+    } finally {
+      await handle.close()
+    }
+  }
+
   async remove(key: string): Promise<void> {
     const file = this.resolve(key)
 
@@ -164,6 +206,24 @@ class ObjectMediaStore implements MediaStore {
     // answer identically. The type is a column on the row that names this key,
     // sniffed from the bytes at ingest; what an object store echoes back is
     // whatever was declared to it, which is the thing ingest refuses to trust.
+    return { bytes, contentType: 'application/octet-stream' }
+  }
+
+  /**
+   * A `Range` header on the GET, and a 206 back.
+   *
+   * The client refuses anything that is not a 206, rather than accepting a 200
+   * and slicing it here. A store that ignores `Range` and sends the whole
+   * object would otherwise look identical to one that honoured it, right up
+   * until a sixty-megabyte video was being held in memory to serve two
+   * seconds of it.
+   */
+  async getRange(key: string, start: number, end: number): Promise<StoredObject | null> {
+    if (end < start) return null
+
+    const bytes = await this.client.getObjectRange(this.checked(key), start, end)
+    if (bytes === null) return null
+
     return { bytes, contentType: 'application/octet-stream' }
   }
 

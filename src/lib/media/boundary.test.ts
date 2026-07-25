@@ -136,6 +136,41 @@ describe('the video is served only to authenticated investors — §13.3', () =>
     }
   })
 
+  /**
+   * Both video routes now answer range requests, and the arithmetic that makes
+   * a 206 correct lives in one module. Two copies of it is the risk the route's
+   * old "no ranges here" comment was actually worried about.
+   */
+  it('neither route builds a range response itself', () => {
+    for (const source of [portalRoute, previewRoute]) {
+      expect(source).toContain('serveMedia(')
+      expect(source).not.toContain('Content-Range')
+      expect(source).not.toContain('206')
+      expect(source).not.toContain('resolveRange')
+    }
+  })
+
+  it('a partial response is as private and as unindexed as a whole one', () => {
+    const serve = read('src/lib/media/serve.ts')
+
+    // One header table, applied to the 200, the 206 and the 416 alike, so a
+    // partial response cannot quietly lose the headers the whole one carries.
+    expect(serve.match(/'Cache-Control': 'private, no-store'/g)?.length).toBe(1)
+    expect(serve.match(/'X-Robots-Tag'/g)?.length).toBe(1)
+    expect(serve).toContain('...BASE_HEADERS')
+    expect(serve.match(/\.\.\.BASE_HEADERS/g)?.length).toBe(3)
+  })
+
+  it('the range is resolved against the recorded size, never against a read', () => {
+    const serve = read('src/lib/media/serve.ts')
+    expect(serve).toContain('resolveRange(input.request.headers.get(\'range\'), input.sizeBytes)')
+    // The whole object is never fetched in order to answer a partial request.
+    const partialBranch = serve.slice(serve.indexOf("outcome.kind === 'partial'"))
+    expect(partialBranch.slice(0, partialBranch.indexOf('return new Response'))).not.toContain(
+      'store.get(',
+    )
+  })
+
   it('never indexed', () => {
     for (const source of [portalRoute, previewRoute]) {
       expect(source).toContain('X-Robots-Tag')

@@ -1694,3 +1694,144 @@ checks still green.
 - *`CodecPrivate` is not touched.* It carries codec initialisation data, not
   authored text, and zeroing it would break playback outright. It is in principle
   a place bytes could hide, and it is deliberately left alone.
+
+---
+
+## Range requests — the video that would not play on an iPhone
+
+Not a numbered work package. Listed under Uncertain since WP15 as a performance
+note, and it was not a performance note.
+
+The portal video route answered every request with the whole file, and said why
+in a comment: a browser will download all of it and play it, which for a short
+personal video is fine, and a hand-written range parser is a place to get an
+off-by-one wrong. The second half of that is true. The first half is not, for a
+reason nobody had tested against — **Safari opens a video with
+`Range: bytes=0-1` and abandons a server that answers 200 with the entire body.**
+Not "plays slowly". Does not play. That is every iPhone and every iPad, on a
+portal whose §18 requirement is that it works on a phone before it works
+anywhere else.
+
+**Built.**
+
+- **`lib/media/ranges.ts`** — a pure `resolveRange`, and the two `Content-Range`
+  header builders. Twenty-two tests, including an exhaustive pass over every
+  range expressible against a 32-byte file.
+- **`lib/media/serve.ts`** — one place that turns a store and a row into a 200,
+  a 206 or a 416, used by both video routes.
+- **`MediaStore.getRange`** on the interface, with a real implementation on both
+  stores: a file handle and a position on the filesystem, a `Range` header and a
+  206 on the object store.
+- **Fifteen checks in `pnpm verify:deployment`** against the built application
+  over real HTTP with a real investor session.
+
+**Decisions.**
+
+- ***The parser is pure, in one module, with the tests against it.*** The old
+  comment's worry was correct and the conclusion was wrong: the answer to "this
+  arithmetic is easy to get wrong" is one copy of it with forty assertions,
+  not a portal that does not work on a phone.
+- ***`Accept-Ranges: bytes` goes on every response, including the whole-file
+  one.*** That header is how a player discovers it may seek at all; a file
+  served without it will not scrub even when every range request would have
+  worked.
+- ***Only a single range is honoured.*** A multi-range request is answered 200
+  with the whole file, which RFC 9110 explicitly permits — a server may always
+  ignore `Range`. Building a `multipart/byteranges` body is the part of this
+  that genuinely would be a place to get something wrong, and nothing needs it.
+- ***Anything unparseable is answered whole rather than guessed at.*** A
+  malformed header, a unit that is not `bytes`, a number too large to be an
+  exact integer — all 200. Ignoring a `Range` header is always legal; guessing
+  at what a broken one meant is how a wrong slice gets served.
+- ***A 416 is only reachable after every access check has passed***, so it tells
+  somebody already entitled to the whole file how big it is, and tells an
+  anonymous request nothing — an anonymous range request is the same 404 as
+  anything else, and there is a check for exactly that.
+- ***The range is resolved against the recorded `size_bytes` on the row, never
+  against a read.*** Fetching the object to find out how big it is, in order to
+  return part of it, would be the whole-file read this exists to avoid. A
+  boundary test asserts the partial branch never calls `store.get`.
+- ***The filesystem store reads with a handle and a position, not `readFile`
+  then `slice`.*** The point of a range request is that a sixty-megabyte video
+  is not in memory to serve two seconds of it; slicing after a full read would
+  keep the correct HTTP behaviour and throw away the reason for it.
+- ***The object store refuses a 200 to a ranged GET rather than slicing it.*** A
+  store that ignores `Range` answers with the whole object, and a client that
+  quietly sliced that would be indistinguishable from one honouring the range —
+  until the memory bill arrived. It is an error naming the problem.
+- ***`Range` is not part of the S3 signature.*** S3 signs the headers it is told
+  to; an unsigned extra header is permitted. Keeping the signed set identical to
+  the plain GET's means one canonical request shape to reason about.
+- *Only the two video routes changed.* Images are at most five megabytes and are
+  displayed rather than seeked; a document is served as an attachment and its
+  twenty-megabyte ceiling was chosen so it would not need a range. Both are
+  recorded here rather than done.
+
+**Deviations.** `MediaStore` gained a method, which is a breaking change to the
+seam — both implementations have it, the interface requires it, and a third
+implementation could not silently omit it.
+
+**Checklist.** Points 5 and 9 are this change's; the rest were re-checked
+because it changes what two routes send.
+
+1. **No monetary value is a JavaScript number.** A byte offset is not money. The
+   existing test asserting `parseFloat` and `.toNumber(` appear in no media
+   module covers both new files.
+2. **No send path bypasses anything.** Nothing here sends. `verify:deployment`
+   re-run — 56 checks, including that a real invitation is refused off the
+   production deployment and a test send to the operator is still allowed.
+3. **A jurisdiction block still stops one recipient.** Untouched.
+4. **The operator still cannot record, amend or void an approval.** Untouched.
+5. **No investor-facing response reveals another investor.** Every access check
+   runs before a byte is read, unchanged and in the same order — `serveMedia` is
+   reached only after `mayViewVideo` has said yes, and the existing boundary
+   test still pins that the session is read before the store is touched. A range
+   request without a session is the same 404 as an id that does not exist, and
+   `verify:deployment` checks it over real HTTP.
+6. **Claim and sign-in tokens are single-use, hashed and expiring.** Untouched.
+7. **Suspension revokes sessions and refuses new links.** Untouched — a
+   suspended investor is refused before the range is looked at.
+8. **No log line carries a token, a body or a key.** Neither new module calls
+   `console`; the existing assertion covers them.
+9. **The verification page is still the only indexable route.** A 206 and a 416
+   carry the same `X-Robots-Tag` and the same `Cache-Control: private, no-store`
+   as the 200, from one header table applied to all three — and a boundary test
+   asserts that table is spread exactly three times and defined once, so a
+   partial response cannot quietly lose them.
+10. A published Q&A entry carries nothing identifying. Untouched.
+11. The AI path cannot change a calculated figure. Untouched.
+12. The app still refuses to send when its base URL is not the production value.
+    Confirmed by `verify:deployment`.
+
+**Verified.** `pnpm verify:deployment` — 56 checks, up from 41, fifteen of them
+new and all against the built application over real HTTP with a real investor
+session: the whole file served with `Accept-Ranges`, `bytes=0-1` answered 206
+with exactly two bytes and the right `Content-Range`, an open-ended range from
+near the end returning exactly the last four bytes and the right ones, a range
+past the end answered 416 naming the size, a partial response carrying the same
+privacy and indexing headers as a whole one, and an anonymous range request
+answered with the same 404 as anything else. `pnpm test` — 1782 tests, 91 files,
+including a store-parity suite that runs the same range assertions against both
+implementations and an S3 test that stands up a range-ignoring server and
+asserts the client refuses it.
+
+**Uncertain.**
+
+- *No actual Safari has been pointed at this.* The behaviour it needs is now
+  provably there — a 206, the right bytes, the right `Content-Range`, and
+  `Accept-Ranges` on every response — and "provably correct HTTP" is not the
+  same claim as "played on an iPhone". That is the test to run on the first
+  deployment, and it takes ten seconds.
+- *The whole-file response still reads the whole file into memory.* A request
+  with no `Range` header, which is what a `<video>` element sends when it is
+  downloading rather than seeking, still holds a sixty-megabyte video in one
+  buffer. Streaming it needs the store to hand back a `ReadableStream` rather
+  than a `Uint8Array`, which is a change to the seam and to both
+  implementations, and is the obvious next thing here.
+- *Images and documents do not answer ranges.* Deliberate, and both stated
+  above, but a scanned twenty-megabyte execution copy of an agreement is right
+  at the edge of where that stops being obviously fine.
+- *The `Range` header on the object store is unsigned.* Legal, and it means a
+  proxy could alter it without invalidating the signature — which would produce
+  the wrong bytes, not a security failure, because the response is not trusted
+  for anything but its length. Worth knowing about.

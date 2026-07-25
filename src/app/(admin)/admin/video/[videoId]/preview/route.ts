@@ -1,4 +1,5 @@
 import { currentAdmin } from '@/lib/auth/guards'
+import { serveMedia } from '@/lib/media/serve'
 import { mediaStore } from '@/lib/media/store'
 import { mayViewVideo } from '@/lib/media/video'
 import { videoById } from '@/lib/media/video-store'
@@ -19,7 +20,7 @@ export const dynamic = 'force-dynamic'
  * is the same; the response is a status.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ videoId: string }> },
 ) {
   const notFound = new Response('Not found', {
@@ -43,18 +44,15 @@ export async function GET(
   const store = mediaStore()
   if (!store) return notFound
 
-  const object = await store.get(video.storageKey)
-  if (!object) return notFound
-
-  return new Response(new Uint8Array(object.bytes), {
-    status: 200,
-    headers: {
-      'Content-Type': video.contentType,
-      'Content-Length': String(object.bytes.length),
-      'Content-Disposition': 'inline',
-      'Cache-Control': 'private, no-store',
-      'X-Content-Type-Options': 'nosniff',
-      'X-Robots-Tag': 'noindex, nofollow, noarchive, nosnippet',
-    },
+  // One place builds the response, for both routes, so a range calculation
+  // cannot be right here and wrong in the other one. The content type is the
+  // sniffed one on the row — never a value that came from a browser.
+  return serveMedia({
+    request,
+    store,
+    storageKey: video.storageKey,
+    contentType: video.contentType,
+    sizeBytes: video.sizeBytes,
+    notFound,
   })
 }
