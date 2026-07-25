@@ -2,7 +2,7 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 7 are complete, the core of 8, and all of 9.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, and now ask and answer questions — privately to one person, or published to everyone with the asker removed. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: work packages 0 to 7 are complete, the core of 8, and all of 9 and 10.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — and keep a register of interest that can turn into a real offer. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
 ---
 
@@ -178,11 +178,41 @@ Publish it, then look at the shared section as a *different* investor. You will 
 
 ---
 
+## Register of interest
+
+On the investor's side it sits under the questions. The four paragraphs are the ones from the specification, word for word — a test reads them out of `BUILD_SPEC.md` and compares, so the screen cannot quietly drift into promising something. The most important sentence is the one that says joining does not create a position: *"Joining the register does not itself create a position; completing your current participation does."*
+
+Add your name, optionally with a rough figure. You will see a confirmation, the figure repeated back labelled as indicative, and a button to remove yourself. Remove it and add it again — both work, both immediately.
+
+**What an investor never sees, by design:** where they are in the order, how many people are on the register, or that anyone else is on it at all. The code that builds their view has three fields — whether they are on it, their own indicative figure, and whether it can currently be changed — and there is nowhere for a position to go.
+
+Now sign in as the operator and open **Register**. This is the only screen in the whole application that shows an order, and it is computed the way §5.2.2 says:
+
+1. People whose **funds have arrived**, earliest value date first.
+2. Then people who have **agreed a commitment** but not settled, by commitment date.
+3. Then everybody else, by the date they put their name down.
+
+Someone who joined in January and has done nothing since sits below someone who joined last week and has already paid. That is the point.
+
+**Things worth trying:**
+
+- Move somebody up. It asks for a reason and will not accept a short one. The reason then sits beside their name, along with where the computation alone would have put them.
+- Remove the override. They drop straight back into computed order.
+- **Add somebody who has never been in the system** — a name and an address is enough. An account is created for them in the "invited" state, which cannot be signed into; they get in the ordinary way, by claiming an invitation, if one is ever issued.
+- **Issue an offer to somebody on the register.** This is the test that matters. Record a compliance approval covering Great Britain only, then issue one offer to a GB address and one to a US address. The GB one becomes an ordinary draft and appears in Review and send with everybody else. The US one is *also created* — and blocked individually, with the reason naming the country — while the GB one stays perfectly sendable. Nothing about the register shortcuts any gate; a freed allocation is a new offer, not a continuation of an old one.
+- Type a country code that does not exist. Nothing is created at all.
+- Give a deadline in the past. Refused.
+- Remove somebody's name and then try to issue to them. Refused, because they are not on the register any more.
+
+Issuing an offer does not send anything and does not take anybody off the register. The offer sits in Review and send as a draft and goes out one recipient at a time behind the pre-flight checklist, like every other offer.
+
+---
+
 ## What is not built yet
 
 - **The rest of the portal.** Documents, and the operator-side status advancement with its two-step confirmation for funds received.
 - **The email carrying a sign-in link.** The link is created correctly; sending it is part of a later package.
-- **The register of interest, updates, reminders.** All later packages.
+- **Updates and reminders.** Both later packages.
 - **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet.
 
 The participation certificate, the anti-phishing verification page and the export were built early, out of order, in a parallel session. They are in the codebase and tested, but they are not yet linked from anywhere you would find by clicking.

@@ -8,7 +8,9 @@ import { loadPortalView, type PortalOffer } from '@/lib/portal/data'
 import { PAYMENT_SAFETY_NOTICE, type TimelineStep } from '@/lib/portal/timeline'
 import { readInvestorAccount } from '@/lib/portal/session'
 import { loadInvestorQa } from '@/lib/qa/data'
+import { loadInvestorRegisterView } from '@/lib/register/data'
 import { QaSection } from './qa-section'
+import { RegisterSection } from './register-section'
 
 export const metadata: Metadata = {
   title: 'Your private invitation — Flipit',
@@ -219,6 +221,9 @@ export default async function PortalPage() {
 
   const notice = view.access.notice ? NOTICES[view.access.notice] : null
   const qa = canView(view.access) ? await loadInvestorQa(account.id, view.access) : null
+  const register = canView(view.access)
+    ? await loadInvestorRegisterView(account.id, view.access)
+    : null
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
@@ -259,6 +264,8 @@ export default async function PortalPage() {
       ) : null}
 
       {qa ? <QaSection view={qa} /> : null}
+
+      {register ? <RegisterSection view={register} /> : null}
 
       {canView(view.access) && view.tiles.length > 0 ? (
         <section className="mt-12">

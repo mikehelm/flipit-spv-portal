@@ -368,3 +368,42 @@ The part worth reading is `lib/qa/anonymity.ts`, because §6.7.3 is the one sect
 - The shared Q&A implies other recipients exist. That is inherent to the feature and the spec says so plainly, and the default is visible on the reasoning that "a well-answered Q&A does more for confidence than the inference costs". That reasoning is Michael's to confirm before the first send, not mine — the switch is one click.
 - The scan's rules are mine. They cover what §6.7.3 names, and a general "does this text identify anybody" detector does not exist. Somebody should read the rule list once and say whether anything obvious is missing.
 - An operator editing a *published* answer stamps it as updated but does not re-run the acknowledgement unless the scan finds something in the new wording. That is consistent, but a second opinion on whether an edit to a live entry deserves a firmer confirmation would be welcome.
+
+---
+
+## WP10 — Register of interest — done
+
+**Built:** §5.2 in full. An investor adds their name from their portal, optionally with an indicative figure, and can remove it again — both one click, both confirmed. The operator sees the register in computed order with each person's history, can move somebody with a recorded reason, can add a stranger who was never on the recipient list, and can issue an offer to anyone on it.
+
+**The copy is a constant, not prose in a component**, and `copy.test.ts` reads the blockquote out of `BUILD_SPEC.md` and compares it paragraph by paragraph. §5.2.1 says why: *"The copy has to carry this precisely, because the whole feature lives or dies on not overstating."* If somebody edits either the spec or the screen, the test fails and they have to change both deliberately. There is a second test asserting the word "waitlist" appears nowhere, and that no investor-facing string contains "queue", "rank", "your position" or "ahead of".
+
+**Issuing an offer writes exactly what the import writes.** A `recipients` row carrying the jurisdiction, then an `offers` row pointing at it, with `blocked` set by the same `isJurisdictionApproved` the import calls, reading the same list — the one on the current compliance approval. The gate has no branch for the register and no idea it exists, which is the point. Verified with a real approval covering GB only: an offer to Great Britain lands as a draft, an offer to the United States is created and blocked individually with a reason naming the country, and the first one is still a sendable draft afterwards.
+
+**Verified against the real database.** Forty-nine checks in `scripts/verify-register.ts`, all passing: the three bands order correctly with real receipts and commitments; an early joiner does not overtake somebody who has settled; an override with a thin reason is refused and one with a real reason moves them and shows why; a stranger added by the operator gets an `INVITED` account that cannot be signed into; an invalid country code creates nothing at all; and the investor-facing view has exactly three fields with no other member's name, address or position anywhere in it.
+
+**Decisions:**
+
+- *The investor-facing view has three fields and nowhere to put a fourth.* `onRegister`, `indicativeAmount`, `canChange`. §5.2.2 forbids showing a position — "a displayed rank is a promise whatever the surrounding text says" — and the way that is kept true is the same as WP9's: the type has no field to assign one to. A test asserts the key set exactly.
+- *An override names an absolute position, so it can move somebody down as well as up.* Overridden members are placed first, in ascending order of the position they were given; everyone else fills the remaining slots in computed order. Two people both moved to first is an instruction the operator can give, and the list still has to be a list — so the second takes the next free slot rather than one of them vanishing. A test asserts no arrangement of overrides can lose or duplicate anybody.
+- *An override with no recorded reason is ignored by the ordering itself, not only refused by the form.* A row written straight into the database with a position and no reason does not move. §5.2.2 makes the reason the condition of the override, and a rule enforced only in a form is a rule a future caller routes around.
+- *Rejoining after leaving resets the join date.* The third band is ordered "by the date they joined it", and somebody who left and came back joined on the day they came back. Keeping the original date would let leaving and rejoining be free, which is the small dishonesty that turns a register into a queue.
+- *An issued offer does not remove anybody from the register.* Leaving is the investor's decision. An offer that is declined should not silently cost them their place, and §5.2 gives removal to them.
+- *The operator supplies the amount, the SPV percentage and the jurisdiction; only the indirect percentage is computed.* §9 makes `spv_percentage` a supplied column, not a derived one, so deriving it here would invent a calculation rule the spec does not have. The indirect figure goes through `computeIndirectPercentage`, which is the one function allowed to compute it — the same one the import uses.
+- *Issuing to somebody who already has a record in the open round is refused.* That is a duplicate, not a freed allocation, and `recipients` is unique on round and address anyway — better a sentence explaining it than a constraint violation.
+- *A manually added stranger gets an account in `INVITED`.* That is §4.1's state for an account that exists but whose mailbox has not been verified. It cannot sign in; it gains portal access the ordinary way, by claiming an invitation, if one is ever issued.
+- *Neither joining nor issuing sends anything.* The offer lands in Review and send as a draft and goes out one recipient at a time behind the pre-flight checklist (§14).
+- *Leaving when already off the register is not an error.* The end state is what they asked for.
+
+**Deviations:** none. No migration was needed — `interest_register_entries` from WP1 already had every column §5.2 requires.
+
+**Checklist:** points 1, 2, 3 and 5 are this package's.
+
+1. No monetary value is a JavaScript number. The indicative figure goes through `parseMoney` and is stored as an exact decimal string — verified as `'2500.00'` from the input `$2,500`. A source-level test asserts `parseFloat`, `parseInt`, `.toNumber(` and `Intl.NumberFormat` appear nowhere in `lib/register`, and that `Number(` appears nowhere except `Number.isInteger` on a list position, which is a count of places rather than a value.
+2. No send path bypasses the compliance approval. Nothing in this package sends. `issueOfferFromRegister` creates a draft and asks the same jurisdiction function the import asks; there is no parameter that skips it and no path that sets `blocked = false` directly.
+3. A jurisdiction block stops one recipient. Verified with two offers issued minutes apart from the same screen: the US one blocked, the GB one still a sendable draft.
+5. No investor-facing response reveals another investor. The register is the feature most at risk of it — a rank is a statement about other people — and it is the reason §5.2.2 keeps the order operator-only. Verified with three other members present.
+
+**Uncertain:**
+
+- The register page offers no way to issue an offer with a *different* sender name or phone than the defaults, though the columns exist. The import can set them per row. Nobody has said whether a freed allocation ever comes from a different sender; I left the fields on the form but unlabelled as prominent, and it is worth a look.
+- Where the whole register is ordered, somebody who has settled in an *earlier* round outranks somebody who committed in this one. That follows §5.2.2 read literally, and I think it is right — completing is completing — but it is a judgement about people's expectations rather than about the text.
