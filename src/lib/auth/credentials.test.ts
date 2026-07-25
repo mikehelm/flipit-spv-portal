@@ -139,8 +139,16 @@ describe('attemptPasswordSignIn — enumeration resistance', () => {
 })
 
 describe('attemptPasswordSignIn — rate limiting', () => {
+  /**
+   * Eleven real sign-in attempts, each paying the full scrypt cost — 128 MiB
+   * and roughly two hundred milliseconds by design. Slow on purpose, so the
+   * timeout is raised rather than the cost lowered. If this test starts
+   * finishing quickly, somebody has weakened the hashing parameters.
+   */
   it('locks after enough failures, and the lock applies to the right person too', async () => {
     const shared = await deps()
+
+    const startedAt = Date.now()
 
     for (let attempt = 0; attempt < LOCK_AFTER_FAILURES; attempt += 1) {
       await attemptPasswordSignIn(
@@ -155,7 +163,12 @@ describe('attemptPasswordSignIn — rate limiting', () => {
     )
 
     expect(locked).toMatchObject({ ok: false, reason: 'LOCKED' })
-  })
+
+    // A guess costing under ten milliseconds is a guess worth making a billion
+    // of. The exact figure is not the point; the order of magnitude is.
+    const perAttempt = (Date.now() - startedAt) / (LOCK_AFTER_FAILURES + 1)
+    expect(perAttempt).toBeGreaterThan(10)
+  }, 60_000)
 
   it('clears the count once someone gets in', async () => {
     const shared = await deps()

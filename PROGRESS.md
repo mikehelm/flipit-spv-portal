@@ -275,3 +275,18 @@ The lifecycle is the part worth reading. §4.2 spells out the sign-in rules "exp
 
 - Requesting a second sign-in link revokes the first. That is safer, and it is what the invite flow does, but somebody who clicks "email me a link" twice and then opens the first email will find it dead. I think that is the right trade; it is worth a second opinion.
 - Forty-five minutes for a sign-in link and thirty days for a session are both my numbers. The spec says "expiring" without naming a duration for either.
+
+---
+
+## Note on the argon2 → scrypt substitution
+
+A parallel session replaced argon2 with `node:crypto`'s scrypt while WP8 was being built. **This one needs Michael's agreement rather than mine**, because the build instructions name argon2 explicitly in the stack.
+
+The implementation itself is sound: N = 2^17, r = 8, p = 1 — OWASP's current scrypt baseline, about 128 MiB per hash — a per-hash random salt, and `timingSafeEqual` for the comparison. It is a genuine memory-hard KDF, not a fast hash wearing a costume, and it removes the last dependency needing a native compile.
+
+Two things worth knowing:
+
+- Argon2id is still the better primitive on the merits. It is the newer design, it is what the Password Hashing Competition settled on, and it resists a wider range of hardware attacks. scrypt at these parameters is nonetheless a defensible choice and is what the OWASP cheat sheet recommends where Argon2id is unavailable.
+- Nobody has set a password against the old scheme yet — the seed creates accounts with none — so switching now costs nothing. Switching after real passwords exist would mean a migration.
+
+I raised the timeout on one sign-in test rather than lowering the cost: eleven real attempts at 128 MiB each takes about forty seconds, and the test now also asserts that an attempt costs more than ten milliseconds. If that test ever starts finishing quickly, somebody has weakened the parameters.
