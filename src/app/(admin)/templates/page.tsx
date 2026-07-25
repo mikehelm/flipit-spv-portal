@@ -10,7 +10,10 @@ import {
   type EmailTemplateKind,
 } from '@/lib/email/templates'
 import { EMAIL_VARIABLES, EMAIL_VARIABLE_NAMES } from '@/lib/email/variables'
+import { listMedia } from '@/actions/media'
+import { mediaStore } from '@/lib/media/store'
 import { loadPreflight, loadTemplateOverview } from './data'
+import { TemplateMediaPanel } from './media-panel'
 
 export const metadata: Metadata = {
   title: 'Email templates — Flipit SPV',
@@ -42,6 +45,9 @@ export default async function TemplatesPage() {
     EMAIL_TEMPLATE_KINDS.map(async (kind) => loadTemplateOverview(kind)),
   )
   const preflight = await loadPreflight()
+  // §13.2's "re-usable across … the email templates". An empty library is a
+  // supported state, so this is a read that is allowed to come back empty.
+  const images = mediaStore() ? await listMedia() : []
 
   const { result, recipients } = preflight
   const problemsByOffer = new Map<string, typeof result.problems>()
@@ -253,6 +259,8 @@ export default async function TemplatesPage() {
           </ul>
         )}
       </Card>
+
+      <TemplateMediaPanel images={images} />
 
       <Card
         title="Variables"

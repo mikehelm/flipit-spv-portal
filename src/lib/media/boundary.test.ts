@@ -228,6 +228,35 @@ describe('no log line carries a body, a transcript or a credential — checklist
   })
 })
 
+describe('an image in an email is covered by the compliance approval — §8.2', () => {
+  it('the templates screen offers an address to paste, never a variable to resolve', () => {
+    const panel = code('src/app/(admin)/templates/media-panel.tsx')
+
+    // A `{{header_image}}` variable would let somebody change what every
+    // recipient sees without changing the template hash — the approval would
+    // still read as current and would no longer cover the document that went
+    // out. The address goes in the source, so the hash covers the image.
+    expect(panel).not.toMatch(/\{\{\s*\w*image\w*\s*\}\}/i)
+    expect(panel).toContain('absoluteMediaUrl(')
+
+    // And nothing added an image variable to the resolver.
+    const variables = code('src/lib/email/variables.ts')
+    expect(variables).not.toMatch(/image|media|logo/i)
+  })
+
+  it('the screen says that adding one requires a fresh approval', () => {
+    const panel = read('src/app/(admin)/templates/media-panel.tsx')
+    expect(panel).toContain('changes the hash')
+    expect(panel).toContain('approval')
+  })
+
+  it('the address offered to an email is absolute, because a mail client has no origin', () => {
+    const urls = code('src/lib/media/urls.ts')
+    expect(urls).toContain('APP_URL')
+    expect(code('src/app/(admin)/templates/media-panel.tsx')).toContain('absoluteMediaUrl')
+  })
+})
+
 describe('the gates this package must not weaken', () => {
   it('nothing in the media library touches money, a percentage or a send path', () => {
     for (const file of MEDIA_MODULES) {

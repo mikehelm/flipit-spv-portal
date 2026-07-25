@@ -1181,3 +1181,19 @@ Not a numbered work package. `document_packages` has been in the schema since WP
 - *Advancing the timeline to "Documents issued" is still a separate step from issuing a document.* You can do either without the other, which is right — several documents may be issued before the investor is told — but nothing warns an operator whose timeline and document list disagree.
 - *There is no versioning.* A corrected document is a withdrawal and a fresh upload, and the two are only connected by the audit log. The participation certificate has real version history (§5.1 asks for it); §5 does not ask for it here, and this is the conservative reading rather than an obviously right one.
 - *A document is attached to an offer rather than to an account.* §4.3 means an account outlives a round, so an investor with two offers has two document lists on the operator's screen and one merged list on their portal. That is the honest shape of the data and it is also slightly awkward to look at.
+
+---
+
+## Library images in an email — and why it is an address rather than a variable
+
+§13.2 asks for images *"re-usable across the portal, the email templates, and §13.1's roadmap tiles"*. WP15 built the library and left this half open, listed under Uncertain as "a small piece of UI". It turned out to be a small piece of UI attached to a decision that is not small, so it is recorded here.
+
+**The obvious implementation is a compliance hole.** A `{{header_image}}` variable resolved from a setting would be one line and would let somebody change what every recipient sees **without changing the template hash**. §8.2's approval is a hash over the template source; the approval would still read as current and would no longer cover the document that went out. That is precisely the failure mode the drift check exists to catch, arriving through a door the drift check does not watch.
+
+**So the address goes in the template source.** Changing the image changes the source, changes the hash, and blocks sending until a fresh approval is recorded. The panel on the templates screen says that in as many words, next to each address, because an operator who pastes a logo in and then finds sending blocked should have been told first rather than discovering it at the gate.
+
+The address shown is the absolute one. An email client has no idea where the message came from, so a relative path does not load; §18.1's guard on `APP_URL` is what stops one being issued from the wrong deployment.
+
+**Decisions:** none beyond the above. **Deviations:** none. **Checklist:** point 2 — the compliance gate is unmodified, and this change is the reason it stays sufficient: three source tests assert that no image variable was added to the resolver, that the panel offers an address rather than a placeholder, and that the screen says a fresh approval is required.
+
+**Uncertain:** §11.5 asks the invitation to be *"legible with images blocked"*, and nothing enforces that a template with an image still is. The hint asks for a real `alt` on every one; a pre-flight item that rendered the text part and checked it still carried the whole message would be the enforcement, and does not exist.

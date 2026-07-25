@@ -419,6 +419,8 @@ Before you choose a file, the screen tells you what is about to happen to it —
 
 Every image is served from this application's own address, at a long random URL — nothing is ever loaded from somewhere else, and finding one address tells you nothing about any other.
 
+**Using one in the invitation email.** The **Email templates** screen lists every library image with the exact address to paste into the template. It is a copy-and-paste rather than a button on purpose: putting an image in the template changes the template, which changes the hash the compliance approval covers, so **sending is blocked until a fresh approval is recorded**. That is the right behaviour — an approval has to cover the document that actually goes out, images included — and the screen warns you before you do it rather than after.
+
 **One thing to know before you start:** by default there is nowhere to put a file, and the screen says so plainly rather than failing. Set `MEDIA_STORE="filesystem"` and `MEDIA_DIR` in `.env` to a folder, and restart. That is deliberate — a filesystem needs a disk that survives a restart, and the hosting this eventually runs on may not have one, so the application refuses rather than storing files somewhere they will vanish from. Everything else in the portal works perfectly with an empty library.
 
 ---
@@ -483,7 +485,6 @@ Worth trying, because these are all meant to work:
 
 ## What is not built yet
 
-- **A picker for library images inside the email template editor.** The library exists, each image has an address on this deployment, and putting one in a template is currently a copy-and-paste of that address rather than a button.
 - **Versioning for a corrected document.** Replacing an issued document is a withdrawal and a fresh upload, and the two are connected only by the audit log. The participation certificate does keep real version history, because §5.1 asks for it.
 - **A durable place to put files on a real deployment.** The filesystem store works and needs a disk that survives a restart. An object store is selectable and refuses until somebody writes the client behind it — roughly one class.
 
