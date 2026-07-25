@@ -50,9 +50,8 @@ const schema = z.object({
   /** Auth.js session secret. */
   AUTH_SECRET: z.string().min(16, 'AUTH_SECRET must be at least 16 characters'),
 
-  /** Google OAuth, used only for owner and operator sign-in. */
-  GOOGLE_CLIENT_ID: z.string().optional(),
-  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  // No OAuth configuration. Owner and operator sign in with an email and
+  // password held in this application's own database (BUILD_SPEC §2.2).
 
   /** Comma-separated allowlists. Role is assigned by address (BUILD_SPEC §2). */
   OWNER_EMAILS: z.string().default(''),

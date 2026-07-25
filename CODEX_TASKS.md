@@ -18,7 +18,9 @@ Version 1.0 · 2026-07-25
 
 ## Conventions — apply throughout
 
-**Stack (fixed, do not substitute):** Next.js 15 App Router · TypeScript strict · PostgreSQL · Prisma · Auth.js · Tailwind · Zod · pnpm · Vitest.
+**Stack (fixed, do not substitute):** Next.js 16 App Router · TypeScript strict · PostgreSQL · **Drizzle ORM** · Auth.js · Tailwind · Zod · decimal.js · pnpm · Vitest.
+
+(Drizzle replaced Prisma: Prisma downloads a native engine from a host unreachable in the build environment. Recorded in PROGRESS.md.)
 
 **Money and percentages.** Prisma `Decimal` in the database, `decimal.js` in application code. Never `number`, never floating point, at any point in the path from spreadsheet to display. Rounding happens only at render time, using the configured decimal places.
 
@@ -58,9 +60,9 @@ Version 1.0 · 2026-07-25
 
 ## WP2 — Authentication, roles, onboarding
 
-**Build:** Auth.js with Google OAuth. Email allowlist mapping addresses to roles — `mike@flipthepage.com` and `mike@flipit.com` as owner, `serenedavid@gmail.com` as operator. A sign-in from any other address creates nothing and is rejected. Single-use, expiring operator invite. The operator onboarding flow in spec §2.1, all five steps, resumable if abandoned. A settings page for the owner holding the OpenAI key (write-only, encrypted, never redisplayed) and service configuration.
+**Build:** email-and-password sign-in for the owner and operator — **no Google OAuth, no Cloud project** (spec §2.2). Argon2id hashing, minimum 12 characters checked against a common-password list, progressive rate limiting by address and by IP, enumeration-resistant failures (a wrong address and a wrong password fail identically and in the same time). Server-side sessions, revocable, and a password change ends every other session. TOTP two-factor, optional in v1, with recovery codes. First run: the seed creates allowlisted accounts with no password and prints a one-time expiring setup link to the console — a password never goes in an environment variable or a config file. Email allowlist mapping addresses to roles — `mike@flipthepage.com` and `mike@flipit.com` as owner, `serenedavid@gmail.com` as operator. A sign-in attempt from any other address creates nothing and is rejected. Single-use, expiring operator invite. The operator onboarding flow in spec §2.1, all five steps, resumable if abandoned. A settings page for the owner holding the OpenAI key (write-only, encrypted, never redisplayed) and service configuration.
 
-**Done when:** an unknown Google account cannot sign in or create a record; the operator completes onboarding and their contact-method choice is stored; the OpenAI key round-trips encrypted and is never returned to the client.
+**Done when:** an unknown address cannot sign in or create a record, and fails identically to a wrong password; the operator completes onboarding and their contact-method choice is stored; the OpenAI key round-trips encrypted and is never returned to the client.
 
 ## WP3 — Import and calculations
 

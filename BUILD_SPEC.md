@@ -36,9 +36,47 @@ The portal is not a one-time mailer. It is the private record each investor retu
 | **SPV Operator** | David Serene | `serenedavid@gmail.com` | Joins via single-use invite, signs in with Google. Uploads recipients, reviews and sends emails, answers questions, advances investor status, publishes updates, exports results. |
 | **Investor** | Per recipient | Own verified email | Holds a persistent account (§4). Sees only their own offer, status, documents, and updates. |
 
-Both privileged accounts sign in with Google OAuth. Role is assigned by email address on an allowlist — a Google sign-in from any address not on the allowlist and not holding an investor account is rejected, not silently created.
+Both privileged accounts sign in with **email and password**. Google OAuth is deliberately not used — see §2.2.
+
+Role is assigned by email address on an allowlist. There is **no self-registration of any kind**: an address that is not on the allowlist and does not hold an investor account cannot sign in, and no record is created for it.
 
 If David is later issued a `@flipthepage.com` Workspace account, see §8.1 — it materially changes the Gmail integration path and should be decided before build, not after.
+
+## 2.2 Why not Google sign-in
+
+The application has exactly two privileged users. Requiring a Google Cloud project, an OAuth consent screen and client credentials to let two known people log in is machinery out of proportion to the problem, and it puts a third party in the path of the owner reaching his own application.
+
+So: **email and password for the owner and operator. No OAuth, no Google Cloud project, no consent screen.**
+
+**The two mechanisms and why they differ**
+
+| Who | How they sign in | Why |
+|---|---|---|
+| Owner, Operator | Email and password | Works before any email is configured. Solves the bootstrap problem below. |
+| Investors | Emailed single-use link, no password | They sign in rarely, must never manage a credential, and by the time they exist the mail connection is already working. |
+
+That split is deliberate, not inconsistency. A passwordless admin login cannot work on first run, because sending the link needs an SMTP credential that can only be entered by signing in.
+
+**First run**
+
+1. The seed creates the allowlisted accounts with **no password set**.
+2. It prints a one-time, expiring setup link to the console — the same pattern the FLIPIT M1 skeleton uses for its local magic link.
+3. The owner opens it and chooses a password. It is never placed in an environment variable, a configuration file, or the console output itself.
+4. The operator gets the same thing through the existing single-use invite (§2.1).
+
+**What replaces the security Google was providing**
+
+Dropping OAuth means the password becomes the only thing between an attacker and investor names, amounts, and the ability to send mail as the operator. That is a real trade and it is paid for here, not waved away:
+
+- **Argon2id** password hashing, per-user salt, sensible cost parameters. Never a fast hash.
+- **Minimum 12 characters**, checked against a common-password list. No composition rules — length beats symbols.
+- **Rate limiting** on sign-in: progressive delay by address and by IP, then a temporary lock. Enumeration-resistant — a wrong address and a wrong password fail identically, in the same time.
+- **TOTP two-factor** for both privileged accounts. Optional in v1 and strongly recommended, mandatory before the production deployment sends anything real. Standard authenticator apps; recovery codes issued once at setup.
+- **Sessions** are server-side, revocable, and expire. Changing a password ends every other session immediately.
+- **Password reset** by emailed single-use link, available only once the mail connection works. Until then the owner can reissue a setup link from the console.
+- Every sign-in, failed attempt, lockout, password change and 2FA change is audit-logged (§16).
+
+**What this removes:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, the Cloud project, the consent screen, the redirect-URI configuration at every deployment, and a dependency on Google being reachable for anyone to log in at all.
 
 ## 2.1 Operator onboarding
 
@@ -58,10 +96,10 @@ Because option 3 changes the email body, the compliance hash (§8.2) is computed
 
 ## 3. Core workflow
 
-1. Owner deploys the app and signs in with Google as `mike@flipthepage.com` or `mike@flipit.com` — both are allowlisted as owner, since mail for both reaches the same person. Whichever address is an actual Google account is the one to sign in with.
+1. Owner deploys the app, opens the one-time setup link printed by the seed (§2.2), and chooses a password. Both `mike@flipthepage.com` and `mike@flipit.com` are allowlisted as owner, since mail for both reaches the same person.
 2. Owner records the compliance approval (§8.2). Until this exists, sending is disabled.
 3. Owner creates a one-time operator invite for `serenedavid@gmail.com`.
-4. David signs in with Google OAuth and accepts operator access.
+4. David opens the invite, sets his own password, and accepts operator access.
 5. David uploads a CSV/XLSX of recipient data.
 6. The app validates rows and calculates indirect Flipit ownership as `spv_percentage × 30%` unless an override is supplied.
 7. The app shows a review table: recipient, email, jurisdiction, investment amount, SPV percentage, indirect Flipit percentage, deadline, validation status.
@@ -93,7 +131,7 @@ So `invited` is a real account state on a real row — it simply predates verifi
 
 - The emailed link carries a single-use, high-entropy claim token (§15). Opening it verifies control of that mailbox.
 - Claiming verifies the account's email address and establishes a session.
-- Return visits use passwordless sign-in: the investor enters their email and receives a fresh sign-in link. Google sign-in is also permitted if the Google account email matches the verified address exactly.
+- Return visits use passwordless sign-in: the investor enters their email and receives a fresh sign-in link.
 - **No passwords.** No account recovery path other than the verified email address, and any change of address requires verification of the new address before it replaces the old one (§13).
 
 ### 4.2 Lifecycle states
@@ -668,7 +706,7 @@ Each event: actor, timestamp, record ID, action, and relevant non-secret metadat
 
 ## 18. Suggested stack
 
-Next.js with TypeScript · PostgreSQL · Prisma · Auth.js with Google OAuth plus a passwordless email provider for investors · Gmail API · a background job queue for scheduled reminders (BullMQ/Redis or a managed queue) · Zod for validation · Tailwind or a simple component library. A different secure, maintainable stack is acceptable.
+Next.js with TypeScript · PostgreSQL · Drizzle · Auth.js with a credentials provider for the two privileged users and a passwordless email provider for investors · Gmail API · a background job queue for scheduled reminders (BullMQ/Redis or a managed queue) · Zod for validation · Tailwind or a simple component library. A different secure, maintainable stack is acceptable.
 
 **Hosting — two phases, and the order matters.**
 
@@ -740,7 +778,7 @@ Follow-up sequences by response status · document delivery and e-signature · K
 15. An investor account can hold a second offer under a second round without schema changes.
 16. David can reply and the message is logged against the correct record and thread.
 17. Mike can view and export all data, including the audit log.
-18. Unauthorized users cannot access investor or admin records; a Google sign-in from an unknown address creates nothing.
+18. Unauthorized users cannot access investor or admin records. An unknown address cannot sign in and no record is created for it. Sign-in is enumeration-resistant: an unknown address and a wrong password fail identically.
 19. **The operator cannot record, amend, or void a compliance approval; the control is owner-only and the attempt is logged.**
 20. **Sending is unavailable in `read_only`, `sunset`, and `disabled` service modes.**
 21. A recipient row missing `sender_phone` with no configured default is caught at pre-flight, before the batch starts — not as a mid-batch failure.
