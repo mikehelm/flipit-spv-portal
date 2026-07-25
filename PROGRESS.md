@@ -805,3 +805,55 @@ The pairing §13.2 actually names, `--dim` on `--bg`, was fine all along at 6.95
 - `--muted` at 4.81:1 clears AA and does not clear AAA's 7:1. §13.2 asks for AA. If the intent was ever AAA, the whole dark palette needs revisiting rather than one token.
 - The palette is still "lifted from the demo file, which is a faithful copy but not the source of truth" — §13.2's own words. Nothing here verified it against flipit.com, and the note in `brand.ts` still says to.
 - `forbiddenWordsInTileLabel` is a gate ahead of a surface that does not exist yet, the same shape as WP17's follow-up. The word list is mine, from §13.1's prose; somebody should read it before tiles become editable.
+
+---
+
+## WP19 — Tests — done
+
+The suite was already large — 1,122 tests before this package. What did not exist was the thing WP19 actually asks for: *"every one of the 48 acceptance criteria in spec §22 mapped to a test or an explicit note explaining why it is manual"*, and *"a table maps each of the 48 criteria to its test."*
+
+**A coverage table nobody verifies is a document that reassures and decays.** So the table is source — `src/lib/acceptance.ts` — and `acceptance.test.ts` checks four things about it:
+
+1. **It reads §22 out of BUILD_SPEC.md and asserts every criterion is quoted word for word.** Without this the easiest way to make a criterion pass is to reword the criterion. Forty-eight separate assertions, one per criterion, so a failure names which sentence drifted.
+2. Every cited file exists.
+3. **Every citation resolves to a real test label in that file** — not to a substring of the file. This is the assertion that makes the rest mean anything, and the first draft failed it fifty-two times.
+4. Every criterion is either covered or carries a written note of at least eighty characters, so "manual" is never an answer by itself.
+
+`ACCEPTANCE.md` is generated from the same source by `pnpm acceptance`, and a test fails if it goes stale.
+
+**The first draft of the table passed with fifty-two citations that proved nothing.** They were single words — `hash`, `audit`, `mode`, `position`, `credential` — matched as substrings against the whole file. Every one resolved. A length threshold was the obvious fix and the wrong one: it rejected `no count appears`, which is a real check with a short name, while `production` at ten characters would have squeaked past on a different day. The right fix was structural — extract every string a `describe`, `it` or `check` is labelled with, and require the citation to *equal* one of them. Template-literal labels are the single concession, matched as a substring because part of the text is a variable.
+
+**Two gaps in coverage, found by doing this rather than by reading:**
+
+- **The claim token had no test of single use or expiry**, which WP19 names in its own minimum list. `claimPortalToken` is careful — single use is a conditional `UPDATE` rather than a read-then-write, precisely so two simultaneous redemptions cannot both succeed — and none of that was exercised anywhere. It could not be: the property belongs to the database, not to the code. `verify-lifecycle.ts` now redeems a live link, redeems it again, **fires two redemptions at once and asserts exactly one succeeds**, and refuses an expired one, a revoked one and one nobody issued. Twelve checks, and one of them confirms no token is stored in the clear.
+- **AC12's note was wrong.** I wrote that the two-step confirmation on funds received had no automated check. `verify-certificate.ts` has had three all along — *"without the confirmation tick, nothing is recorded"*, *"a mismatched re-typed amount records nothing"*, and *"and truly nothing was written"*. The note came off. A map is as capable of understating coverage as overstating it, and the understatement is the one that gets work done twice.
+
+**AC43 gained a check it should always have had.** §15.1's whole point is that somebody who has thrown the email away can type the address into a browser. The viewport verification now asserts the verification page renders with an empty cookie jar — no session, nothing — which is the property, rather than inferring it from the route not having a guard.
+
+**Where the forty-eight stand: 46 have at least one automated check; 2 have none; 4 carry a note.**
+
+The two with none are AC32 and AC33 — the image library and the personal video — both waiting on WP15's storage decision. The four notes are those two, plus:
+
+- **AC30** — the wording constraint on the roadmap tiles is enforced and the standing line cannot be removed, but *"configurable by the owner"* is not built. There is no screen to add, rename or hide a tile.
+- **AC34** — the test send exists and is locked to the operator's own address, which is the half that protects a real recipient. The half that is a nudge — §13.3's prompt in the flow — is not built, and *"including his video"* waits on AC33.
+
+**Decisions:**
+
+- *The table is TypeScript, not markdown.* A markdown table cannot be type-checked, cannot be iterated over by a test, and cannot fail. The markdown is generated from it.
+- *Three kinds of check, named separately.* A `unit` test runs in `pnpm test`; a `database` check needs real Postgres and exists because some of §22 is only true once there are rows — "in no one else's" is meaningless with one investor; a `browser` check renders the real page, and AC31 is not answerable any other way. The distinction matters when somebody asks what `pnpm test` passing actually proves.
+- *A separate assertion that WP19's own minimum list is covered by a **unit** test.* Eleven criteria where a database script is not enough, because those are the rules that must hold before a row exists — decimal precision, the compliance gate, the owner-only restriction, the base-URL guard and the rest. Named in the test with why.
+- *Citations match a label, not the file.* Explained above; it is the whole difference between this table and a plausible one.
+- *A `manual` note has a minimum length.* Eighty characters. Arbitrary, and it is the only rule here that is — but a note that reads "manual" or "not built" is not a reason, and the shortest honest one in this file is four lines.
+
+**Deviations:** none. No migration, no schema change.
+
+**Checklist:** this package added tests and one verification section, and changed no behaviour. Points 5, 6 and 8 are the ones it touched.
+
+5. No investor-facing response reveals another investor. The claim verification asserts every refusal — used, expired, revoked, invented — shows the investor the same single sentence, which is §15's requirement stated as a test rather than as a comment.
+6. Claim and sign-in tokens are single-use, hashed at rest and expiring. This is the point of the new section, and it is now demonstrated against a real database rather than described in a header comment.
+8. No log line carries a token, a body or a key. The new checks assert that what is stored is the hash and never the token, and nothing in this package logs.
+
+**Uncertain:**
+
+- The label extraction is a regular expression over source. It handles `it('…')`, `describe("…")` and `check(\`…\`)` including the multi-line form, and it would miss a label built by concatenation. None exist today; if one appears, the citation will fail and read as a missing test, which is the safe direction but a confusing message.
+- AC30 and AC34 are each half-built, and the table says so in prose. There is no machine-readable notion of "partly covered", so somebody reading only the counts will see 46 of 48 and be slightly too cheerful. The notes are where the truth is.

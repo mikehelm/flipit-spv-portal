@@ -485,6 +485,17 @@ async function main(): Promise<void> {
       await auditScreen(page, label, path)
     }
 
+    // §15.1 and AC43: the anti-phishing page has to work for somebody who has
+    // thrown the email away and is typing the address into a browser. No
+    // session, no cookie, no referrer. This runs before anything signs in, so
+    // the context genuinely has nothing.
+    const cookiesBeforeSignIn = await context.cookies()
+    check(
+      'the verification page is reachable with no session at all',
+      cookiesBeforeSignIn.length === 0,
+      `${cookiesBeforeSignIn.length} cookies were set`,
+    )
+
     console.log('\nThe skip link')
     await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' })
     await page.keyboard.press('Tab')

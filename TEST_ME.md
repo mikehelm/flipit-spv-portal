@@ -2,7 +2,7 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 14 and 16 to 18 are complete. 15 — images and video — is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: work packages 0 to 14 and 16 to 19 are complete. 15 — images and video — is deferred until somewhere to store a file is chosen.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
 The most recent package went over every screen for how it looks and how it reads: the brand colours, how it behaves on a phone, and whether somebody using a keyboard or a screen reader can get around it. There is a section on that below, and it is worth ten minutes with your phone.
 
@@ -336,6 +336,18 @@ pnpm verify:viewport
 ```
 
 That starts the application, opens a real browser at phone size, signs itself in as both an administrator and an investor, and walks twenty-one screens measuring every one — a hundred and four checks. It needs a database and takes about a minute.
+
+## The forty-eight things this was meant to do
+
+The specification ends with a list of forty-eight things that have to be true before this is finished. **`ACCEPTANCE.md` in this repository is that list, with the test that proves each one beside it.**
+
+It is worth opening even if you never run a test, because it is the honest account of where the build actually is:
+
+- **46 of the 48 have an automated check.** Some are ordinary tests; some need a real database, because a rule like "and in nobody else's portal" means nothing until there are two investors; one needs a real browser at phone size.
+- **2 have none** — the image library and the personal video. Both are waiting on a decision about where to store a file.
+- **4 carry a written note** explaining what is and is not covered. Two of those are the pair above; the other two are half-built and say which half.
+
+The document is generated from the tests rather than written alongside them, so it cannot quietly go out of date. A test reads the specification itself and fails if the wording here drifts from the wording there.
 
 ## What is not built yet
 
