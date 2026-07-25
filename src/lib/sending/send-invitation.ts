@@ -43,7 +43,8 @@ import {
 import type { DriftEvaluation } from '@/lib/compliance'
 import { issueToken } from '@/lib/crypto'
 import { renderEmail, UnresolvedVariableError } from '@/lib/email/render'
-import { templateSource, type EmailTemplateKind } from '@/lib/email/templates'
+import { assertNoOfferTerms } from '@/lib/reminders/no-offer-terms'
+import { loadCurrentTemplate, type EmailTemplateKind } from '@/lib/email/templates'
 import { sendOneEmail } from '@/lib/email/transport'
 import type { SendAttemptResult } from '@/lib/email/transport'
 import {
@@ -60,6 +61,38 @@ import {
  * portal, so the cost of expiry is low and the cost of a permanent link is not.
  */
 export const CLAIM_TOKEN_TTL_DAYS = 14
+
+/**
+ * The document about to be sent is the document that was approved.
+ *
+ * §8.2 item 2: a changed word is a different offer document. The drift check
+ * establishes that when the batch is loaded; this establishes it again for the
+ * one email at the moment it is rendered, which is where it actually matters.
+ * A hash that disagrees is not a warning — nothing goes out.
+ */
+export class TemplateNotApprovedError extends Error {
+  constructor(rendered: string, approved: string) {
+    super(
+      'The email that was about to be sent is not the email that was approved. Its template ' +
+        `hashes to ${rendered.slice(0, 12)}…, and the recorded approval covers ` +
+        `${approved.slice(0, 12)}…. Nothing was sent. Record a new approval for the current ` +
+        'template, or restore the approved wording.',
+    )
+    this.name = 'TemplateNotApprovedError'
+  }
+}
+
+function assertApprovedSource(
+  renderedHash: string,
+  approval: ComplianceApprovalRecord | null,
+): void {
+  // A null approval never reaches here — the compliance gate refused it in
+  // step 1 — but the check is written so that it would refuse rather than pass.
+  if (!approval) return
+  if (renderedHash !== approval.approvedTemplateHash) {
+    throw new TemplateNotApprovedError(renderedHash, approval.approvedTemplateHash)
+  }
+}
 
 export interface SendInvitationTarget {
   offerId: string
@@ -209,10 +242,22 @@ export async function sendInvitation(
   })
 
   // --- 3. Render ----------------------------------------------------------
-  const source = templateSource(kind)
+  //
+  // `loadCurrentTemplate`, not `templateSource`. The drift check in §8.2 hashes
+  // `loadCurrentTemplate`, which prefers a stored `email_templates` row over
+  // the built-in default. Rendering from the built-in while approving the
+  // stored one would mean the gate passed on one document and a different
+  // document went out — which is the one thing the compliance approval exists
+  // to prevent. The two loaders must be the same loader.
+  //
+  // `assertApprovedSource` below is the belt to that braces: whatever was
+  // loaded, its hash has to be the hash that was approved.
+  const source = await loadCurrentTemplate(kind)
   let rendered
   try {
     rendered = renderEmail(source, variableInput(target, buildPortalLink(token)), input.defaults)
+    assertApprovedSource(rendered.templateHash, input.approval)
+    if (kind === 'REMINDER') assertNoOfferTerms({ template: source, rendered })
   } catch (error) {
     // Pre-flight is supposed to have caught this for the whole batch. Reaching
     // here means something changed in between, so the token just minted is

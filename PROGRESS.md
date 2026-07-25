@@ -645,3 +645,20 @@ The three history arrays come from the append-only event tables rather than from
 
 - The audit viewer filters on exact values from dropdowns built from the distinct values present. That is precise and cannot be mistyped, but there is no free-text search across metadata — looking for one offer id means exporting and using a spreadsheet. Fine for now; worth knowing.
 - `loadRecipientExportRows` runs several queries per recipient. At forty recipients that is fine. At four hundred it would want a rewrite, and the shape of the fix is joins rather than loops.
+
+---
+
+
+Not a work package. Two defects found while a second session was building WP12 to WP14 in parallel; that session's implementation of all three is the one on `main` and this is additive to it.
+
+**The gate could pass on one document while a different one was sent.** `checkTemplateDrift` hashes `loadCurrentTemplate(kind)`, which prefers a stored `email_templates` row over the shipped default. `sendInvitation` rendered `templateSource(kind)`, which only ever returns the shipped default. Nothing writes a stored row today, so the two agreed and every test passed — but the moment one existed the owner would have approved one wording and a different wording would have gone out, with the compliance state reporting green the whole time. That is checklist point 2, and it is the exact failure §8.2 exists to prevent.
+
+Both sides now load the template the same way, and that is no longer the only thing holding it shut: `assertApprovedSource` compares the hash of what was actually rendered against `approval.approved_template_hash` in the second before the snapshot is written, and a mismatch throws. It refuses rather than warns, and the message names both hashes and says nothing was sent. `approved-source.test.ts` asserts the loaders match, asserts the comparison sits between the render and the send rather than after it, and would fail if `templateSource` reappeared in the sending path.
+
+**§6.5's "no offer terms" was tested but not enforced.** WP4 tests that the built-in reminder carries no amount or percentage, which is a test of a constant. Once the send loads the current template rather than the built-in one, an edited reminder can carry a figure and nothing would stop it — in the one email nobody watches go out. `lib/reminders/no-offer-terms.ts` now runs against whatever is about to be sent, and only for `REMINDER`, because the invitation carries the figures on purpose.
+
+It checks two ways, because either alone is insufficient. **Structurally**, which variables the source references: a template mentioning `{{investment_amount}}` carries an amount whatever the value is for one recipient, and the forbidden list is §6.5's three figures plus `use_of_funds` and `personal_line`, both free text the operator writes and either capable of carrying a figure. **Literally**, what the finished text says: a hard-coded "USD 5,000" references no variable at all and the structural check would wave it through. The literal patterns are narrow enough not to fire on the one number a reminder is meant to contain — a deadline renders as "10 March 2026", with no symbol, separator or decimal point — and the HTML is scanned with markup removed so `width:100%` in a table attribute is not read as a percentage. The invitation template is the control: a test renders it, runs it through the gate and asserts it fails, because a check that nothing fails is a check that measures nothing.
+
+**Checklist:** points 2 and 12 are this change's. No send path can now reach the transport with a template the recorded approval does not cover, and a reminder that carries a figure is refused with a message naming the offending variable or pattern. 978 tests, typecheck, lint and a production build all clean; the reminder, updates and register database verifications all still pass.
+
+**Uncertain:** nothing writes an `email_templates` row yet, so the first fix is closing a gap ahead of the surface that would open it rather than fixing live breakage. Whoever builds template editing should read `approved-source.test.ts` first — it is the statement of what that surface must not break.
