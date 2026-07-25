@@ -31,6 +31,7 @@ const ITEMS: NavItem[] = [
   { href: '/templates', label: 'Email templates', roles: ['OWNER', 'OPERATOR'] },
   { href: '/updates', label: 'Updates', roles: ['OWNER', 'OPERATOR'] },
   { href: '/questions', label: 'Questions', roles: ['OWNER', 'OPERATOR'] },
+  { href: '/reminders', label: 'Reminders', roles: ['OWNER', 'OPERATOR'] },
   { href: '/register', label: 'Register', roles: ['OWNER', 'OPERATOR'] },
   { href: '/compliance', label: 'Compliance', roles: ['OWNER'] },
   { href: '/admin/onboarding', label: 'Setup', roles: ['OPERATOR'] },

@@ -90,6 +90,16 @@ export interface SendInvitationInput {
   actor: Actor
   actorUserId: string | null
   kind?: EmailTemplateKind
+  /**
+   * Whether a successful or failed send rewrites `offers.email_status`.
+   *
+   * True for an invitation, because that column IS the state of the
+   * invitation. False for a reminder: a reminder that fails must not mark the
+   * offer's invitation as FAILED when the invitation itself arrived perfectly
+   * a week ago. A reminder's outcome lives in `reminder_events` and
+   * `send_events`, which is where somebody looking for it would go.
+   */
+  updateOfferEmailStatus?: boolean
   now?: Date
 }
 
@@ -132,6 +142,7 @@ export async function sendInvitation(
   const kind = input.kind ?? 'INVITATION'
   const now = input.now ?? new Date()
   const target = input.target
+  const writesEmailStatus = input.updateOfferEmailStatus ?? true
 
   // --- 1. The compliance gate --------------------------------------------
   const decision = evaluateOfferCompliance({
@@ -159,15 +170,19 @@ export async function sendInvitation(
       actorUserId: input.actorUserId,
     })
 
-    await db
-      .update(offers)
-      .set({
-        emailStatus: 'BLOCKED',
-        ...(decision.blockReason
-          ? { blocked: true, blockReason: decision.blockReason }
-          : {}),
-      })
-      .where(eq(offers.id, target.offerId))
+    const blockUpdate = {
+      ...(writesEmailStatus ? { emailStatus: 'BLOCKED' as const } : {}),
+      ...(decision.blockReason
+        ? { blocked: true, blockReason: decision.blockReason }
+        : {}),
+    }
+
+    // A reminder refused for a reason that is not per-recipient — no approval
+    // recorded, or template drift — changes nothing on the offer. The send
+    // event above is the record. Issuing an empty `set` would throw.
+    if (Object.keys(blockUpdate).length > 0) {
+      await db.update(offers).set(blockUpdate).where(eq(offers.id, target.offerId))
+    }
 
     await audit({
       actor: input.actor,
@@ -221,10 +236,12 @@ export async function sendInvitation(
       errorDetail: message,
       actorUserId: input.actorUserId,
     })
-    await db
-      .update(offers)
-      .set({ emailStatus: 'FAILED' })
-      .where(eq(offers.id, target.offerId))
+    if (writesEmailStatus) {
+      await db
+        .update(offers)
+        .set({ emailStatus: 'FAILED' })
+        .where(eq(offers.id, target.offerId))
+    }
 
     return { outcome: 'FAILED', message, snapshotId: null, permanent: true }
   }
@@ -255,7 +272,10 @@ export async function sendInvitation(
   let attempt: SendAttemptResult
   try {
     attempt = await sendOneEmail({
-      intent: 'INVITATION',
+      // The intent follows the kind. Both are gated identically, but an audit
+      // entry that calls a reminder an invitation is a lie in the one record
+      // somebody reads after the fact.
+      intent: kind,
       message: {
         to: target.recipientEmail,
         fromName,
@@ -300,10 +320,12 @@ export async function sendInvitation(
       actorUserId: input.actorUserId,
     })
 
-    await db
-      .update(offers)
-      .set({ emailStatus: 'SENT' })
-      .where(eq(offers.id, target.offerId))
+    if (writesEmailStatus) {
+      await db
+        .update(offers)
+        .set({ emailStatus: 'SENT' })
+        .where(eq(offers.id, target.offerId))
+    }
 
     await audit({
       actor: input.actor,
@@ -329,10 +351,12 @@ export async function sendInvitation(
     actorUserId: input.actorUserId,
   })
 
-  await db
-    .update(offers)
-    .set({ emailStatus: 'FAILED' })
-    .where(eq(offers.id, target.offerId))
+  if (writesEmailStatus) {
+    await db
+      .update(offers)
+      .set({ emailStatus: 'FAILED' })
+      .where(eq(offers.id, target.offerId))
+  }
 
   // The token stays live for a transient failure — the same invitation will be
   // retried and should carry a link the investor can still use. A permanent

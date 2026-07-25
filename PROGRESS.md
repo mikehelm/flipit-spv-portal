@@ -445,3 +445,44 @@ The part worth reading is `lib/qa/anonymity.ts`, because §6.7.3 is the one sect
 
 - Publishing lists the recipients and expects a press each. With forty investors that is forty presses. I believe that is the right reading of §14, and the alternative — one button that emails everybody — is exactly the shape the rule exists to forbid. But if Michael wants a middle ground, the honest one is a per-recipient confirmation that stays one-at-a-time rather than a loop, and that is a decision rather than a fix.
 - An investor's read state is recorded but nothing marks it read automatically yet; the action exists and is bound to the session's own account. Wiring it to the page needs a client component on the portal and I left it out rather than adding one for a non-essential signal.
+
+---
+
+## WP12 — Reminders — done
+
+**Built:** §6.5 in full. A visible queue of upcoming reminders with dates and recipients, a configurable schedule defaulting to 7 and 2 days before each recipient's own deadline, a hard cap defaulting to 2, cancel and reschedule individually or in bulk, and a scheduled job (`pnpm reminders:run`) that works through what is due.
+
+**This is the one place in the application that sends without a human pressing send at that moment**, and the whole package is written on that basis.
+
+`lib/reminders/eligibility.ts` is §6.5's audience rule transcribed as a pure function that returns a *reason*, never a boolean. Every constraint is there — responded, account status, blocked, invitation actually sent, cap, deadline, service mode, schedule switch — and the scheduler evaluates it **twice**: once when it builds the queue and again immediately before it sends. Nothing about "it was eligible last Tuesday" survives to the moment of sending, which is what makes queueing days in advance safe. There is a test asserting the function takes two arguments and that its source contains no `force`, `override`, `bypass`, `ignoreCap` or `skipChecks`.
+
+**Verified against the real database, with five recipients in five different states.** Twenty-seven checks in `scripts/verify-reminders.ts`: a responder is never queued and answering deletes every planned reminder for that person; a blocked offer, a suspended account and somebody who was never sent an invitation are all absent from the queue; four scheduled days with a cap of two produces two reminders and drops the ones nearest the deadline; a cancelled reminder is never resurrected by a rebuild; a reminder cannot be moved into the past or past the response deadline; and in read-only mode both a single send and a whole run send nothing while the queue keeps explaining itself.
+
+**Decisions:**
+
+- *There is no "send it now" button anywhere.* The operator can see, cancel and reschedule — which is exactly what §6.5 gives him. A manual send would be a second path into the same transport with a different set of checks in front of it, and two paths eventually disagree. The one that exists is the one with the constraints.
+- *A cap of two binds the plan, not just the send.* A schedule of `[21, 14, 7, 2]` with a cap of two produces two reminders rather than four that get refused later, and it keeps the two furthest from the deadline. Dropping the earliest would mean the last thing an investor hears is a week before they run out of time; dropping the latest means the last chance to respond is the one that survives.
+- *Reminders go out at 09:00 UTC.* The spec names days, not an hour. No hour is polite everywhere; one that is polite somewhere beats an arbitrary midnight that reads as automated.
+- *A reminder more than two days overdue is skipped, not sent late.* If the scheduler has not run — a deploy, an outage, a cron nobody wired up — a "respond within seven days" nudge arriving four days late describes a deadline that has moved. Two days survives a weekend outage and keeps the message true when it lands.
+- *A service-mode hold does not consume the reminder.* Every other refusal writes `skipped_reason` and the row is finished. Read-only, sunset and disabled leave the row alone: §6.5 says reminders respect the mode, not that the mode destroys them, and the service may be active again tomorrow while the deadline is still a fortnight away.
+- *A cancelled reminder is never recreated by a rebuild.* Cancelling is an instruction from a person and outranks a recomputation. A reminder that a recomputation decides should no longer exist is *deleted* rather than marked cancelled, because nobody instructed it and a "cancelled" row would put the operator's name on the application's decision.
+- *The cap counts reminders that were actually sent.* A cancelled or skipped one is not a reminder anybody received, and counting it would let a cancellation quietly use up somebody's allowance.
+- *A failed reminder does not rewrite `offers.email_status`.* That column is the state of the *invitation*, which arrived perfectly a week ago. `sendInvitation` gained an `updateOfferEmailStatus` flag for this; the reminder's outcome lives in `reminder_events` and `send_events`, where somebody looking for it would go. Its `intent` now follows its `kind` too, so the audit log stops calling reminders invitations.
+- *A transient transport failure leaves the row due* so the next run retries it, until staleness catches it. A permanent one stops it.
+- *The job is a script, not an HTTP route.* A URL that emails investors is one misconfigured proxy away from being reachable by somebody who should not reach it. `pnpm reminders:run` has no listener and no authentication surface.
+- *A run is bounded (50 by default)* so a first run against a long-neglected queue cannot become an unbounded burst. What is left is reported and picked up next time.
+
+**Deviations:** none. No migration was needed — `reminder_schedules` and `reminder_events` from WP1 already had every column §6.5 requires. One small change outside the package: `sendInvitation` gained the `updateOfferEmailStatus` flag described above, and its blocked branch now skips an empty `UPDATE` rather than throwing.
+
+**Checklist:** points 1, 2, 3 and 8 are this package's.
+
+1. No monetary value is a JavaScript number. Reminders handle none at all — §6.5 forbids amounts and percentages in the body — and a source test asserts `formatMoney`, `formatPercentage`, `parseFloat` and `.toNumber(` appear nowhere in `lib/reminders`.
+2. No send path bypasses the compliance approval. The runner loads the gate context for `REMINDER` and passes it to `sendInvitation`, which applies the same gate an invitation gets. A source test asserts `run.ts` contains `loadGateContext('REMINDER')`, does not contain `loadGateContext('INVITATION')`, and sends with `kind: 'REMINDER'` — so a reminder can never go out under the invitation's approval. In verification the send was refused with the no-approval message, verbatim. A second source test asserts the eligibility re-check appears before the send call in `sendOne`.
+3. A refusal stops one recipient. `sendOne` takes one reminder id and evaluates its own gate; the runner's loop carries no state between iterations and one refusal cannot reach another.
+8. No log line carries a token, a body or a key. The audit metadata records offer ids, sequences, Message-IDs and reason codes. The scheduled job prints counts and reasons, never an address, a subject or a body.
+
+**Uncertain:**
+
+- 09:00 UTC and the two-day staleness window are both my numbers. Neither is in the spec and both are one-line changes.
+- The runner is a script and nothing schedules it yet. On Netlify that is a Scheduled Function calling into the same `runDueReminders`; wiring it is WP20's, and it should not be wired at all until a compliance approval for the reminder template exists, because until then every run is a queue of refusals.
+- Rescheduling reads the picker's wall-clock time as UTC. For an operator in Bangkok that is a seven-hour surprise. The queue labels every time "UTC" and the field says so, but a proper timezone-aware picker would be better.

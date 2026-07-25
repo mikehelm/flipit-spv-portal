@@ -2,7 +2,7 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: work packages 0 to 7 are complete, the core of 8, and all of 9, 10 and 11.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, and publish updates to everyone, to a subset, or to one person. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
+**Current state: work packages 0 to 7 are complete, the core of 8, and all of 9 to 12.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, and queue automatic reminders for people who have not answered. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
 ---
 
@@ -178,6 +178,37 @@ Publish it, then look at the shared section as a *different* investor. You will 
 
 ---
 
+## Reminders
+
+This is the only thing in the application that sends without somebody pressing send at that moment, so it is worth poking at properly. Open **Reminders**.
+
+The schedule defaults to seven days and two days before each recipient's own deadline, with a hard cap of two per person. Below it is the queue: every planned reminder with its date, who it is for, and — when it will not go — the reason, worked out at the moment you are looking rather than when the row was written.
+
+**Things worth trying, because the answer should be "nothing happens":**
+
+- Record a response for somebody. Their reminders vanish from the queue. Anyone who has answered is never chased, and it is checked again in the second before sending, so an investor who answers on Monday morning is not chased on Monday afternoon by a row written last week.
+- Set the schedule to `21, 14, 7, 2` and leave the cap at 2. You get two reminders, not four — and they are the two furthest from the deadline, so the last chance to respond survives.
+- Set the cap to 0. Nothing is planned at all.
+- Cancel a queued reminder, then press **Rebuild the queue**. It stays cancelled. Cancelling is an instruction from you and the application does not argue with it.
+- Try to move a reminder into the past, or to a date after the recipient's deadline. Both refused, with a sentence explaining why.
+- Set the service mode to read-only in settings. Every queued reminder shows "Will not send" with the reason, and a run sends nothing — but nothing is deleted either, so if you switch back to active before the deadline they are still there.
+- Untick "Send reminders for this round". Same: everything holds, nothing is lost.
+- Look at somebody who was never sent an invitation, or who is blocked, or who is suspended. None of them is ever queued.
+
+**What a reminder says:** the deadline and the portal link. No amount, no percentage, no offer terms at all. Those live in the portal, which is where the investor should be looking.
+
+**Its own compliance approval.** The reminder is a separate template with its own hash and its own approval, and it does not send under the invitation's. If you have approved the invitation but not the reminder, the page says so and every send is refused with that reason.
+
+**There is no send button on this page.** Reminders go out from a scheduled job:
+
+```bash
+pnpm reminders:run
+```
+
+Run it and it prints what it considered, sent, skipped, blocked and failed — counts and reasons, never an address or a message. With no Gmail app password and no reminder approval recorded, everything is refused, which is the correct behaviour and worth seeing once.
+
+---
+
 ## Updates
 
 Sign in as the operator and open **Updates**. Write one, choose who it goes to, and save it as a draft. Nothing has reached anybody: no portal shows it, no email exists, and the recipient list is empty because the audience is only worked out at the moment you publish.
@@ -230,7 +261,6 @@ Issuing an offer does not send anything and does not take anybody off the regist
 
 - **The rest of the portal.** Documents, and the operator-side status advancement with its two-step confirmation for funds received.
 - **The email carrying a sign-in link.** The link is created correctly; sending it is part of a later package.
-- **Reminders.** A later package, and the only unattended sender in the system.
 - **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet.
 
 The participation certificate, the anti-phishing verification page and the export were built early, out of order, in a parallel session. They are in the codebase and tested, but they are not yet linked from anywhere you would find by clicking.

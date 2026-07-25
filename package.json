@@ -15,7 +15,8 @@
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "setup-link": "tsx scripts/mint-setup-link.ts"
+    "setup-link": "tsx scripts/mint-setup-link.ts",
+    "reminders:run": "tsx scripts/run-reminders.ts"
   },
   "dependencies": {
     "decimal.js": "^10.6.0",
