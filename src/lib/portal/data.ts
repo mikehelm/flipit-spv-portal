@@ -22,6 +22,7 @@ import {
   sendEvents,
 } from '@/db/schema'
 import { readServiceConfig } from '@/lib/auth/service-config'
+import { listCertificates } from '@/lib/certificate/issue'
 import { formatMoney, formatPercentage } from '@/lib/money'
 
 /**
@@ -53,6 +54,20 @@ export interface PortalOffer {
   showPaymentSafetyNotice: boolean
   /** The exact email as sent, if one was. Immutable — §11.4. */
   snapshot: { subject: string; htmlBody: string; sentAt: Date | null } | null
+  /**
+   * Participation certificates, newest version first (§5.1). Superseded
+   * versions stay listed and stay downloadable — a retained record you cannot
+   * read is not retained.
+   */
+  certificates: Array<{
+    id: string
+    version: number
+    issuedOn: string
+    superseded: boolean
+    amountReceived: string
+    currency: string
+    valueDate: string
+  }>
 }
 
 export interface PortalView {
@@ -150,6 +165,15 @@ export async function loadPortalView(accountId: string): Promise<PortalView | nu
         fundsAmount: row.receivedAmountUsd ? money(row.receivedAmountUsd) : null,
       }),
       showPaymentSafetyNotice: showsPaymentSafetyNotice(row.stage as OfferStage),
+      certificates: (await listCertificates(row.offerId)).map((certificate) => ({
+        id: certificate.id,
+        version: certificate.version,
+        issuedOn: certificate.issuedAt.toISOString().slice(0, 10),
+        superseded: certificate.supersededAt !== null,
+        amountReceived: certificate.amountReceived,
+        currency: certificate.currency,
+        valueDate: certificate.valueDate,
+      })),
       snapshot: snapshotRow
         ? {
             subject: snapshotRow.subject,

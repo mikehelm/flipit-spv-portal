@@ -486,3 +486,48 @@ The part worth reading is `lib/qa/anonymity.ts`, because §6.7.3 is the one sect
 - 09:00 UTC and the two-day staleness window are both my numbers. Neither is in the spec and both are one-line changes.
 - The runner is a script and nothing schedules it yet. On Netlify that is a Scheduled Function calling into the same `runDueReminders`; wiring it is WP20's, and it should not be wired at all until a compliance approval for the reminder template exists, because until then every run is a queue of refusals.
 - Rescheduling reads the picker's wall-clock time as UTC. For an operator in Bangkok that is a seven-hour surprise. The queue labels every time "UTC" and the field says so, but a proper timezone-aware picker would be better.
+
+---
+
+## WP13 — Participation certificate, and WP8's deferred status advancement — done
+
+Two things, because one needs the other: §5.1 generates the certificate *once an investor reaches funds received*, and until this package nothing could put them there.
+
+**Built (§5, the operator side of the timeline):** an investor record page with all four amounts shown as four amounts, the eight-step timeline, one-step-at-a-time advancement, corrections that require a reason and keep the original, and the funds-received form with its two-step confirmation.
+
+**Built (§5.1):** the certificate, as a real PDF, generated on funds received, downloadable from the portal, reissued on a correction with the superseded version retained and still readable.
+
+**The PDF is written directly, in about three hundred lines, with no dependencies.** This is the significant decision in the package and it is the same reasoning that replaced argon2 with scrypt. The obvious way to get a branded PDF is a headless browser; the deployment target runs this app as bundled serverless functions, and a headless Chromium is a 300 MB native binary that has to survive both the dependency install and the bundler's tracing. The failure mode is the worst available — everything passes locally, the deploy goes green, and the first investor to have their funds recorded gets an error instead of their certificate, at the exact moment they are least willing to be relaxed about it.
+
+A PDF is a small text format: a few objects, a content stream of drawing operators, and a table of byte offsets. The fourteen standard fonts need no embedding. `lib/certificate/pdf.ts` does that and nothing else — no images, no embedded fonts, no second page. It is not a PDF library and should not become one.
+
+**The output was checked as a document, not only as bytes.** `qpdf --check` reports no syntax or stream encoding errors, `pdfinfo` reads the title, author and page count, and the page was rasterised and looked at. One defect showed up that way and only that way: a middle dot in "Version 1 · Issued …" was rendering as a question mark, because the transliteration table did not cover it. Byte-level tests would never have caught it.
+
+**Verified against the real database.** Forty-nine checks in `scripts/verify-certificate.ts`: a step cannot be skipped; funds received cannot be reached by the ordinary advance at all; a correction needs a reason; without the tick or with a mismatched re-typed amount nothing whatsoever is written; `$5,000` and `5000.00` are accepted as the same amount because they are compared as decimals; a future value date and a missing reference are refused; the certificate carries every figure §5.1 lists and the required footer; a correction produces version 2 while version 1 stays readable and still states its *own* original figures; and another investor sees none of it.
+
+**Decisions:**
+
+- *A certificate version is a frozen snapshot and the PDF is regenerated from it on every download.* Nothing is stored as a file. There is no blob store in this deployment, and a document that rebuilds byte-for-byte from eight fields is a derived value. More importantly it is what makes a retained superseded version honest: it still says what it said, rather than quietly restating the corrected figures. A test asserts the same input renders to identical bytes and a changed figure renders to different ones.
+- *`storage_key` stays on the table, nullable and normally null*, for a future deployment that does keep files.
+- *A name is transliterated, never dropped.* Curly quotes, dashes and the ellipsis have exact ASCII equivalents; accented Latin letters fold to their base letter, which is wrong but legible and far better than a blank box on somebody's certificate.
+- *Advancing is one step at a time.* Jumping from "documents issued" to "funds received" would leave a timeline claiming things happened that nobody recorded, and the timeline is what the investor reads to know where they stand.
+- *`advanceStage` refuses `FUNDS_RECEIVED` outright*, with a message naming the right form. Two paths into a financial assertion is one too many.
+- *The re-typed amounts are compared as decimals.* `$5,000` and `5000.00` are the same amount; `5000.01` is not. A string comparison would reject the first pair and teach the operator to copy and paste, which defeats the point of typing it twice.
+- *The certificate is issued in the same request as the funds record.* §5.1 says it is generated once they reach that step, and an investor who has just been told their money arrived should not wait for a second button.
+- *Reissuing an identical certificate is refused.* A correction that changed nothing is not a correction, and versions that all say the same thing make the record harder to read.
+- *A certificate is looked up by its own id **and** the offer it belongs to*, and the download route requires that offer to belong to the session's account. A guessed id finds nothing, and the response is byte-identical to the one for an id that does not exist.
+- *Superseded versions stay downloadable.* §5.1 retains them on the record, and a record you cannot read is not retained.
+- *Issuing is refused when no signatory name is configured*, rather than signing the certificate "Flipit". §5.1 says it is signed off by David in his stated role.
+
+**Deviations:** none from the task file. Migration `0004` makes `participation_certificates.storage_key` nullable and adds a `data` column for the snapshot. One change outside the package: `lib/portal/data.ts` now loads certificates onto the portal view.
+
+**Checklist:** points 1, 5 and 8 are this package's.
+
+1. No monetary value is a JavaScript number. The certificate takes decimal strings validated by a Zod schema that rejects anything but a plain decimal, prints them unchanged, and a test asserts `12345.67` appears as `12345.67` and never as `12,345.67` or `12345.7`. The re-typed amount comparison goes through `decimal.js`. The only numbers in `pdf.ts` are typographic — points, widths in 1/1000 em, byte offsets.
+5. No investor-facing response reveals another investor. The download route answers a certificate that is not yours with exactly the response it gives one that does not exist. Verified with a second investor: none of the first one's certificates or their ids appear anywhere in the second one's view.
+8. No log line carries a credential or a body. The audit entries record a version, an offer id and a count. The payment reference is deliberately *not* in the audit metadata — it is on the record and on the certificate, and it does not need a third copy in a log.
+
+**Uncertain:**
+
+- The signatory's role is hard-coded as "SPV Manager", matching the invitation template's sign-off. §5.1 says "his stated role" and onboarding does not currently capture one. A settings field would be better; the current value is at least consistent with what the investor has already been sent.
+- The PDF has no logo image, because embedding one would mean an image handler in `pdf.ts` and the whole point of that file is that it stays small. The branding is the wordmark, the palette and the accent rule. Worth a look at the rasterised page before launch — it is in this session's notes as a rendered image.

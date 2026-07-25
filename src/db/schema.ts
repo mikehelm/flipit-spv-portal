@@ -695,7 +695,23 @@ export const participationCertificates = pgTable(
       .references(() => offers.id, { onDelete: 'cascade' }),
     version: integer('version').notNull().default(1),
     supersededAt: timestamp('superseded_at', { withTimezone: true }),
-    storageKey: text('storage_key').notNull(),
+    /**
+     * Nullable, and normally null. Nothing is stored as a file.
+     *
+     * The certificate is regenerated from `data` on every download, which is
+     * byte-identical every time because the figures on it are a frozen
+     * snapshot rather than a live read. That removes the need for a blob store
+     * this deployment does not have, and it means a superseded version still
+     * renders exactly what it said rather than what is true now. The column
+     * stays for a future deployment that does keep files.
+     */
+    storageKey: text('storage_key'),
+    /**
+     * The frozen facts this version asserts, validated by
+     * `participationCertificateDataSchema`. Money and percentages are decimal
+     * strings in here, never numbers.
+     */
+    data: jsonb('data').$type<Record<string, unknown>>(),
     issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('participation_certificates_offer_idx').on(t.offerId)],

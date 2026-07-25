@@ -199,6 +199,42 @@ function OfferSection({ offer, allowResponse }: { offer: PortalOffer; allowRespo
         </ol>
       </div>
 
+      {offer.certificates.length > 0 ? (
+        <section className="mt-8 rounded-sm border hairline bg-[#14162f] p-5">
+          <h2 className="text-sm font-semibold text-white">Your participation certificate</h2>
+          <p className="mt-2 text-xs leading-relaxed text-[#9498b5]">
+            It confirms receipt of your funds and the position recorded for you. It is not a
+            share certificate and not a title document — the subscription and SPV documents
+            remain the governing instruments.
+          </p>
+          <ul className="mt-4 grid gap-2">
+            {offer.certificates.map((certificate) => (
+              <li
+                key={certificate.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-sm border hairline bg-[#0d0f2e] px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm text-[#e7e9f5]">
+                    {certificate.currency} {certificate.amountReceived} · value date{' '}
+                    {certificate.valueDate}
+                  </p>
+                  <p className="text-xs text-[#6c7290]">
+                    Version {certificate.version} · issued {certificate.issuedOn}
+                    {certificate.superseded ? ' · superseded by a later version' : ''}
+                  </p>
+                </div>
+                <a
+                  href={`/portal/certificate/${certificate.id}`}
+                  className="inline-flex min-h-9 items-center rounded-sm bg-[#F59A23]/12 px-3 text-xs font-semibold text-[#F59A23]"
+                >
+                  Download PDF
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {offer.snapshot ? (
         <details className="mt-4 rounded-sm border hairline bg-[#14162f] p-5">
           <summary className="cursor-pointer text-sm font-semibold text-white">

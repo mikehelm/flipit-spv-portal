@@ -149,6 +149,13 @@ function RecipientCard({
           Preview
         </Link>
 
+        <Link
+          href={`/recipients/${row.offerId}`}
+          className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-sm font-semibold text-[#e7e9f5] transition-colors hover:border-[#F59A23]"
+        >
+          Their record
+        </Link>
+
         {blockedMessage ? (
           <p className="text-xs text-[#9498b5]">
             Sending is refused for this recipient. Everybody else is unaffected.
