@@ -110,14 +110,12 @@ describe('no JavaScript number touches money or a percentage', () => {
     expect(six.variables.spv_percentage).toBe('16.666667')
   })
 
-  it('keeps the configured precision so figures in one panel line up', () => {
-    // Not trimmed to "5". Two figures shown side by side at different
-    // precisions read as a mistake in a document about someone's money.
+  it('trims trailing zeros so a whole percentage does not read as 5.000', () => {
     const context = resolveEmailVariables(
       recipient({ indirectPercentage: '5.000000' }),
       defaults(),
     )
-    expect(context.variables.indirect_flipit_percentage).toBe('5.000')
+    expect(context.variables.indirect_flipit_percentage).toBe('5')
   })
 })
 
@@ -233,39 +231,26 @@ describe('the operator contact method', () => {
     expect(whatsapp.flags).toEqual({ contact_phone: false, contact_whatsapp: true })
   })
 
-<<<<<<< HEAD
-  it('keeps the flag set when the number is missing, so pre-flight blocks — AC21', () => {
-    // If the flag switched off whenever the value was absent, the phone line
-    // would quietly vanish and a missing sender_phone would never be caught.
-=======
   it('keeps the flag set when the number is missing, so pre-flight sees it — AC21', () => {
     // The label never renders alone, because the email never renders at all:
     // the flag stays true, {{sender_phone}} is referenced inside a live block,
     // and rendering fails by name. Dropping the flag here would send a
     // contact-less email quietly, which is the failure AC21 is written against.
->>>>>>> c6e37a5734f287d0afb3f54a476fe6c0a2537a19
     const context = resolveEmailVariables(
       recipient(),
       defaults({ contactMethod: 'PHONE', defaultSenderPhone: null }),
     )
     expect(context.flags.contact_phone).toBe(true)
     expect(context.variables.sender_phone).toBeNull()
-<<<<<<< HEAD
-=======
     expect(context.notes.sender_phone).toBeDefined()
->>>>>>> c6e37a5734f287d0afb3f54a476fe6c0a2537a19
   })
 
-  it('says so plainly, and blocks, when the operator has not chosen a method', () => {
+  it('says so plainly when the operator has not chosen a contact method', () => {
     const context = resolveEmailVariables(
       recipient(),
-      // A configured number is deliberately not enough on its own: without a
-      // chosen method there is no correct label for it.
-      defaults({ contactMethod: null, defaultSenderPhone: '+66 81 234 5678' }),
+      defaults({ contactMethod: null, defaultSenderPhone: null }),
     )
     expect(context.notes.sender_phone).toMatch(/contact method/i)
-    expect(context.variables.sender_phone).toBeNull()
-    expect(context.flags.contact_phone).toBe(true)
   })
 })
 

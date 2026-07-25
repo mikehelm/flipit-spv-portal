@@ -405,6 +405,7 @@ export function resolveEmailVariables(
     formatPercentage(input.spvPercentage, {
       decimalPlaces: defaults.decimalPlaces,
       suffix: false,
+      trimTrailingZeros: true,
     }),
     'RECORD',
   )
@@ -414,6 +415,7 @@ export function resolveEmailVariables(
     formatPercentage(input.indirectPercentage, {
       decimalPlaces: defaults.decimalPlaces,
       suffix: false,
+      trimTrailingZeros: true,
     }),
     'RECORD',
   )
@@ -450,32 +452,10 @@ export function resolveEmailVariables(
       'Connect the sending account, or set "Default sender email" in settings.'
   }
 
-  // The contact method decides whether the line EXISTS. The value decides
-  // whether it can be rendered. Keeping those two apart is what makes both
-  // rules hold at once:
-  //
-  //   - `EMAIL_ONLY` removes the line entirely, so no value is needed and
-  //     nothing blocks (§2.1 step 2);
-  //   - `PHONE` and `WHATSAPP` keep the line, so a missing number is an
-  //     unresolved variable and the send is blocked (§11.2, AC21).
-  //
-  // If the flag were switched off whenever the number was missing, the line
-  // would quietly vanish and AC21 would never fire. It is deliberately not.
-  const flags: Record<EmailFlagName, boolean> = {
-    // A method that has not been chosen yet is treated as "a line is required"
-    // rather than "no line". Nothing here invents an answer to §2.1 step 2.
-    contact_phone: defaults.contactMethod === 'PHONE' || defaults.contactMethod === null,
-    contact_whatsapp: defaults.contactMethod === 'WHATSAPP',
-  }
-
+  // Email-only removes the line entirely. A blank value would render a blank
+  // phone line, which BUILD_SPEC §2.1 step 2 explicitly rules out.
   if (defaults.contactMethod === 'EMAIL_ONLY') {
     set('sender_phone', null, 'ABSENT')
-  } else if (defaults.contactMethod === null) {
-    // Forced absent so rendering cannot succeed with a label the operator
-    // never chose — "Telephone" against a WhatsApp number would be wrong.
-    set('sender_phone', null, 'ABSENT')
-    notes.sender_phone =
-      'The operator has not chosen a contact method yet (BUILD_SPEC §2.1 step 2). Finish operator setup before sending.'
   } else {
     const phone = firstOf([
       ['ROW', input.rowSenderPhone],
@@ -489,8 +469,6 @@ export function resolveEmailVariables(
     }
   }
 
-<<<<<<< HEAD
-=======
   // --- flags ---------------------------------------------------------------
 
   // The flag follows the operator's *chosen* contact method and nothing else.
@@ -519,7 +497,6 @@ export function resolveEmailVariables(
       'The operator has not chosen a contact method yet (BUILD_SPEC §2.1 step 2). Finish operator setup before sending.'
   }
 
->>>>>>> c6e37a5734f287d0afb3f54a476fe6c0a2537a19
   return { variables, sources, flags, notes }
 }
 
