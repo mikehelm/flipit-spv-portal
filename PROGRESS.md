@@ -806,15 +806,113 @@ The pairing §13.2 actually names, `--dim` on `--bg`, was fine all along at 6.95
 - The palette is still "lifted from the demo file, which is a faithful copy but not the source of truth" — §13.2's own words. Nothing here verified it against flipit.com, and the note in `brand.ts` still says to.
 - `forbiddenWordsInTileLabel` is a gate ahead of a surface that does not exist yet, the same shape as WP17's follow-up. The word list is mine, from §13.1's prose; somebody should read it before tiles become editable.
 
+---
+
 ## WP19 — Tests — done
 
-**Built.** The mapping the package is actually for, and the tests that had to exist before it could be honest.
+The suite was already large — 1,122 tests before this package. What did not exist was the thing WP19 actually asks for: *"every one of the 48 acceptance criteria in spec §22 mapped to a test or an explicit note explaining why it is manual"*, and *"a table maps each of the 48 criteria to its test."*
 
-`src/acceptance/criteria.ts` records, for each of BUILD_SPEC §22's forty-eight acceptance criteria, where it is proved: Vitest tests by exact name, `scripts/verify-*.ts` checks by exact `check()` label, a manual note, or an `outstanding` note saying what it waits on. `src/acceptance/criteria.test.ts` makes every one of those references falsifiable — a renamed test or a deleted check label fails the suite rather than quietly becoming a claim about nothing. `ACCEPTANCE.md` is generated from the registry by `pnpm acceptance:table`, and a test fails when the checked-in copy is stale.
+**A coverage table nobody verifies is a document that reassures and decays.** So the table is source — `src/lib/acceptance.ts` — and `acceptance.test.ts` checks four things about it:
 
-The suite is **1,457 tests across 79 files**, up from 1,122 across 72. The eight database-backed verification scripts pass 311 checks between them, re-run in full after this package's two source changes.
+1. **It reads §22 out of BUILD_SPEC.md and asserts every criterion is quoted word for word.** Without this the easiest way to make a criterion pass is to reword the criterion. Forty-eight separate assertions, one per criterion, so a failure names which sentence drifted.
+2. Every cited file exists.
+3. **Every citation resolves to a real test label in that file** — not to a substring of the file. This is the assertion that makes the rest mean anything, and the first draft failed it fifty-two times.
+4. Every criterion is either covered or carries a written note of at least eighty characters, so "manual" is never an answer by itself.
 
-**Where the forty-eight now stand:** 46 have a Vitest test; 23 of those additionally have a database-backed script; 1 (AC34) carries a manual note because "was the test invitation *reviewed*" is a judgement, which is why §19 lists it as an attestation; 3 are outstanding — AC32 and AC33 are WP15's deferred media and video, and AC30 is new, below.
+`ACCEPTANCE.md` is generated from the same source by `pnpm acceptance`, and a test fails if it goes stale.
+
+**The first draft of the table passed with fifty-two citations that proved nothing.** They were single words — `hash`, `audit`, `mode`, `position`, `credential` — matched as substrings against the whole file. Every one resolved. A length threshold was the obvious fix and the wrong one: it rejected `no count appears`, which is a real check with a short name, while `production` at ten characters would have squeaked past on a different day. The right fix was structural — extract every string a `describe`, `it` or `check` is labelled with, and require the citation to *equal* one of them. Template-literal labels are the single concession, matched as a substring because part of the text is a variable.
+
+**Two gaps in coverage, found by doing this rather than by reading:**
+
+- **The claim token had no test of single use or expiry**, which WP19 names in its own minimum list. `claimPortalToken` is careful — single use is a conditional `UPDATE` rather than a read-then-write, precisely so two simultaneous redemptions cannot both succeed — and none of that was exercised anywhere. It could not be: the property belongs to the database, not to the code. `verify-lifecycle.ts` now redeems a live link, redeems it again, **fires two redemptions at once and asserts exactly one succeeds**, and refuses an expired one, a revoked one and one nobody issued. Twelve checks, and one of them confirms no token is stored in the clear.
+- **AC12's note was wrong.** I wrote that the two-step confirmation on funds received had no automated check. `verify-certificate.ts` has had three all along — *"without the confirmation tick, nothing is recorded"*, *"a mismatched re-typed amount records nothing"*, and *"and truly nothing was written"*. The note came off. A map is as capable of understating coverage as overstating it, and the understatement is the one that gets work done twice.
+
+**AC43 gained a check it should always have had.** §15.1's whole point is that somebody who has thrown the email away can type the address into a browser. The viewport verification now asserts the verification page renders with an empty cookie jar — no session, nothing — which is the property, rather than inferring it from the route not having a guard.
+
+**Where the forty-eight stand: 46 have at least one automated check; 2 have none; 4 carry a note.**
+
+The two with none are AC32 and AC33 — the image library and the personal video — both waiting on WP15's storage decision. The four notes are those two, plus:
+
+- **AC30** — the wording constraint on the roadmap tiles is enforced and the standing line cannot be removed, but *"configurable by the owner"* is not built. There is no screen to add, rename or hide a tile.
+- **AC34** — the test send exists and is locked to the operator's own address, which is the half that protects a real recipient. The half that is a nudge — §13.3's prompt in the flow — is not built, and *"including his video"* waits on AC33.
+
+**Decisions:**
+
+- *The table is TypeScript, not markdown.* A markdown table cannot be type-checked, cannot be iterated over by a test, and cannot fail. The markdown is generated from it.
+- *Three kinds of check, named separately.* A `unit` test runs in `pnpm test`; a `database` check needs real Postgres and exists because some of §22 is only true once there are rows — "in no one else's" is meaningless with one investor; a `browser` check renders the real page, and AC31 is not answerable any other way. The distinction matters when somebody asks what `pnpm test` passing actually proves.
+- *A separate assertion that WP19's own minimum list is covered by a **unit** test.* Eleven criteria where a database script is not enough, because those are the rules that must hold before a row exists — decimal precision, the compliance gate, the owner-only restriction, the base-URL guard and the rest. Named in the test with why.
+- *Citations match a label, not the file.* Explained above; it is the whole difference between this table and a plausible one.
+- *A `manual` note has a minimum length.* Eighty characters. Arbitrary, and it is the only rule here that is — but a note that reads "manual" or "not built" is not a reason, and the shortest honest one in this file is four lines.
+
+**Deviations:** none. No migration, no schema change.
+
+**Checklist:** this package added tests and one verification section, and changed no behaviour. Points 5, 6 and 8 are the ones it touched.
+
+5. No investor-facing response reveals another investor. The claim verification asserts every refusal — used, expired, revoked, invented — shows the investor the same single sentence, which is §15's requirement stated as a test rather than as a comment.
+6. Claim and sign-in tokens are single-use, hashed at rest and expiring. This is the point of the new section, and it is now demonstrated against a real database rather than described in a header comment.
+8. No log line carries a token, a body or a key. The new checks assert that what is stored is the hash and never the token, and nothing in this package logs.
+
+**Uncertain:**
+
+- The label extraction is a regular expression over source. It handles `it('…')`, `describe("…")` and `check(\`…\`)` including the multi-line form, and it would miss a label built by concatenation. None exist today; if one appears, the citation will fail and read as a missing test, which is the safe direction but a confusing message.
+- AC30 and AC34 are each half-built, and the table says so in prose. There is no machine-readable notion of "partly covered", so somebody reading only the counts will see 46 of 48 and be slightly too cheerful. The notes are where the truth is.
+
+---
+
+## WP20 — Deployment — done, with one part that cannot be done from here
+
+**Two live defects, both found by serving the application and asking it, and both invisible to every test in the suite.**
+
+**The anti-phishing page was `noindex`.** WP14 exempted `/verify` from the blanket `X-Robots-Tag: noindex` in `next.config.ts`, and its test asserted the exemption was in the returned array. It was. The served response carried `noindex` anyway, because **Next.js applies every matching `headers()` entry in order and a later one overwrites an earlier one for the same key** — so the `/:path*` catch-all won. §15.1's whole purpose is a page somebody can find when they are wondering whether an email is real, and AC43 says in as many words that it "is the only indexed route". It was the only route that was *not* indexed, at the domain root and under the prefix alike, and had been since WP14. The catch-all now excludes the public routes by negative lookahead. The landing page needed its own entry alongside, because a path-to-regexp group will not match an empty segment and `/` fell straight through into no policy at all — which the first run of the new verification caught within a minute of the first fix.
+
+**`robots.txt` named the wrong paths under the prefix.** A path in robots.txt is relative to the *domain root*, never to the application. Served from `mikehelm.com/SPV`, `Disallow: /` asks a crawler to stay away from the whole of mikehelm.com — somebody else's site — and `Allow: /verify` names a path that does not exist. Next.js applies `basePath` to the sitemap URL because it is absolute and does not apply it to the rule strings. Now it does.
+
+There is a larger point in that, and it is in the runbook: **under a path prefix, `robots.txt` is not served from the domain root at all, so no crawler will ever read it.** On the testing deployment the `X-Robots-Tag` header is the only layer keeping the application out of an index — which is exactly the layer that was broken.
+
+**`pnpm verify:deployment` is the new thing.** It builds with `BASE_PATH=/SPV`, serves it, and asks a running server forty-one questions: that every route answers under the prefix and 404s without it; that every `href` and `src` in the delivered HTML carries the prefix; that the session cookie is scoped to the prefix rather than offered to the whole domain; that `X-Robots-Tag` is right on both sides of the public/private line; that the crawler files name prefixed paths; that **a real claim link redeems end to end and the portal renders the investor's own figures**; and that a real invitation is refused off the production deployment while a test send to the operator is not. It rebuilds without the prefix afterwards, so it leaves the tree as it found it.
+
+**Backup and restore, with the restore actually performed.** `pnpm backup` writes a custom-format dump; `pnpm backup restore` reads `RESTORE_DATABASE_URL` and refuses if it is `DATABASE_URL` or unset. `pnpm verify:restore` does the whole round trip against a scratch database and then **reads the figures back out** — `4750.50` still `4750.50` with its trailing zero, six decimal places still six, a non-ASCII name intact, the audit log the same length, and the tables, indexes and unique constraints all present. A restore that dropped the unique index on an investor's address passes every row count and fails on the first duplicate.
+
+**A privacy policy at `/privacy`.** §18: *"A real domain is needed before Gmail verification can start, because the privacy policy has to be hosted on it."* Public, indexable, reads no database, and a test asserts it imports nothing that could hand it an investor record. It is the second of exactly two indexable routes and the test that used to say "exactly one" now says "exactly two" and names both.
+
+**`DEPLOYMENT.md`** is the runbook: environment table for both phases, DNS, the data move, what to re-enter and why, the post-migration checks, taking the old deployment down, backup cadence, and a table of the refusals somebody will meet at speed with what each one means.
+
+**Decisions:**
+
+- *There is no Google OAuth callback to update, and the runbook says so rather than leaving a checklist item nobody can complete.* §18 and §20 both mention one; §2.2 and this build do not have one. Sign-in is email and password in this application's own database. Gmail is still involved — for sending, via an SMTP app password — but that is a credential, not an OAuth grant, and it carries no callback URL. What does survive from §18's Gmail paragraph is the hosted privacy policy, which is built.
+- *The privacy policy is public and indexable, and deliberately not a second anti-phishing page.* §15.1 makes `/verify` the one address an investor is told to type, and a second public page describing the process would dilute that. So this one describes data handling and, where somebody might be trying to work out whether a message is genuine, sends them to `/verify` rather than answering.
+- *The two lists of public routes — `next.config.ts` and `robots.ts` — are asserted to agree.* A route indexable in one and not the other is precisely the defect that shipped in WP14.
+- *The dump is custom-format, not plain SQL.* `pg_restore` can be redirected to another database name and refuses a truncated file outright; `psql < file.sql` replays half of it and leaves a database that looks restored.
+- *Restore reads a second environment variable and refuses to write to `DATABASE_URL`.* Restoring last week over this week is the one mistake here that cannot be undone, and the runbook for that day is read by somebody already having a bad morning.
+- *The verification rebuilds without the prefix when it finishes*, in a `finally`. A build with `/SPV` baked in would silently break `pnpm start` for whoever ran it next.
+- *`ENCRYPTION_KEY` is not carried between deployments by default.* It encrypts the SMTP password and the OpenAI key; moving the data without it leaves rows that decrypt to nothing, and the symptom is "no sending credential is stored" rather than a key error. Re-entering two secrets is two minutes and cannot fail quietly.
+- *The old deployment comes down rather than being left running.* A stale copy of a securities portal that still works is worse than one that does not — it shows an investor a record nobody is updating.
+
+**Deviations:** the Google OAuth callback work in the task list does not apply to this build, for the reason above. Everything else in WP20 is built.
+
+**What cannot be done from here.** §20's *"the runbook has been followed once end to end"* needs DNS for `flipit.com`, a hosting account and a managed Postgres. None exists in this environment. What this package could do instead of claiming it: make every step of the runbook that is checkable by machine into a check that runs — the prefix, the links, the cookie path, the headers, the crawler files, the guard, the backup and the restore — so the parts left for a person are DNS, a certificate, and pressing the buttons.
+
+**Checklist:** points 5, 8, 9 and 12 are this package's.
+
+5. No investor-facing response reveals another investor. The privacy policy reads no database, and a test asserts it imports neither `@/db` nor any portal loader. The deployment verification signs in as one investor and asserts the portal shows that investor's figures.
+8. No log line carries a token, a body or a key. The backup script prints where it read from and where it wrote to, and `redactUrl` removes the password first — with a test for a password containing `@` and `:`, and one asserting that a connection string it cannot parse is printed as nothing at all rather than partially.
+9. **This is the package's finding.** The verification page is now genuinely the indexable route rather than nominally, and the privacy policy joins it deliberately, named in a test. Both are checked against a running server, at the domain root and under the prefix.
+12. The app refuses to send when its base URL is not the production value — now demonstrated on a real deployment under a real prefix, with the test-send carve-out shown still working beside it.
+
+**Uncertain:**
+
+- The negative lookahead in `next.config.ts` is a path-to-regexp construction and it is not obvious. It is commented, and the source test asserts the `(?!` is still there, but the thing that would actually catch its removal is `pnpm verify:deployment` — which is not in `pnpm check` because it builds twice and takes a couple of minutes.
+- Two-factor sign-in is still a release gate and still unbuilt. §2 makes it mandatory before the production deployment sends anything real. It blocks the first real send rather than the migration, and the runbook says so.
+- The backup lands on local disk. Off-host storage is a decision about where, and the runbook says not-the-same-host and that a dump is the most sensitive single artefact this system produces — but nothing enforces it.
+
+## WP19, merged with the parallel session — the criteria that had no test, and two audit faults
+
+This session built WP19 independently and reached the same conclusion about what the package is: a mapping is worth nothing unless something checks it. The parallel session's registry — `src/lib/acceptance.ts`, quoting §22 word for word and resolving every citation to a real label — landed first and WP20 is built on it, so it is the one that stands. This session's registry was discarded rather than merged; two coverage tables would be one more than can be kept true.
+
+What survives from this side is the part the two sessions did not duplicate: **six test files, each written for a criterion that had no direct test at all**, and the two defects that writing them exposed. The citations below have been folded into `src/lib/acceptance.ts` where they close a gap.
+
+The suite is now **1,457 tests across 79 files**. The eight database-backed verification scripts pass 311 checks between them, re-run in full after this session's two source changes.
 
 **Six new test files, each filling a criterion that had no direct coverage:**
 
@@ -827,10 +925,8 @@ The suite is **1,457 tests across 79 files**, up from 1,122 across 72. The eight
 
 **Decisions.**
 
-- *The registry holds evidence, never criterion text.* The wording is parsed out of BUILD_SPEC §22 every time the table is written. A copy would be a second source of truth, and the second one is always the one that goes stale — so a test asserts the registry contains no criterion's opening words, and another asserts the spec still numbers exactly forty-eight.
-- *A verification script is evidence, but not the same evidence as a test.* The scripts are automated, but they need a database, a build or a browser, so they run before a release rather than on every commit. The table names the kind, so "proved" never quietly means "proved by something nobody has run since March".
-- *An outstanding criterion must name its blocker.* A test enforces it: an `outstanding` note has to exceed twelve words and match on waiting, deferral or absence. A one-word note is not an explanation, and WP19 asks for a reason.
-- *AC34 is manual for the part that is a judgement, and only that part.* The prompt, the test send and the pre-flight tick are all enforced and tested; whether the operator actually read the email is not assertable. Its video half waits on WP15.
+- *One registry, not two.* The parallel session's `src/lib/acceptance.ts` is the table; this session's `src/acceptance/` was deleted in the merge. They had converged on the same guarantees independently — quote §22 verbatim, resolve every citation to a real label in a real file — and a second table would decay quietly while looking authoritative. The new citations were folded into the surviving one.
+- *Where a criterion had no test, the answer was a test, not a note.* Six of them looked covered because a neighbouring concern was tested. AC3 had a template-loading test and no comparison of preview against snapshot; AC5 had token entropy and nothing about the URL; AC12, AC29 and AC41 each said "and it is logged" with nothing checking that clause. A citation pointing at an adjacent test is how a table gets to 48 without getting to done.
 - *`refreshQueue`'s audit actor defaults to `systemActor` rather than staying silent.* The alternative — requiring an actor — would have made the scheduled run's signature lie about who is calling it.
 - *`assertNoSecrets` reads keys at every depth, and still never reads values.* Depth matters because metadata is serialised verbatim into the audit export cell. Values stay unread because `scripts/verify-export.ts` scanned them once and refused `{ method: 'password' }`, which is an audit log doing its job; the false alarm is how a real check ends up switched off.
 - *A booleaned key is admitted.* `{ openAiKeyReplaced: true }` records that the owner changed the key, which is the point of auditing the settings screen. A boolean, a number, null or an empty string cannot carry a credential; anything with text under a forbidden name is refused.
@@ -862,5 +958,5 @@ No schema change. No migration.
 - *AC30 is a real gap, not a test gap.* The tiles render and their wording is gated, but nothing writes `roadmap_tiles` except the seed, so "configurable by the owner" is not met. `forbiddenWordsInTileLabel` is the gate the missing surface must call at write time — it has been waiting since WP18 for a surface to guard. It is small, and it is the next thing worth building.
 - *`recordExport` stamps `lastExportAt` only for a recipients export*, so an audit-log export never satisfies §7's precondition for entering `disabled`. That is the stricter reading and is left standing, but it is undocumented and the operator gets no message explaining which export counts.
 - *`cancelMany` writes no entry of its own.* The trail is the per-reminder `reminder.cancelled` entries, which satisfies AC29, but a bulk cancellation is not recoverable from the log as a single act.
-- *`it.each` inflates the count.* The mapping file contributes 219 of the 1,457 tests, one per cited reference. That is the point — each is a real assertion about a real string — but the headline number is no longer comparable with WP18's.
 - *The verification scripts are cited but not gated.* `pnpm test` does not run them, and nothing enforces that they have been run recently. Whoever sets up CI should decide where they belong; the argument for a release stage rather than a commit hook is unchanged from WP18.
+- *Two sessions built WP19 in parallel and neither knew.* The merge cost an hour and threw away a working registry. Nothing in the repository says which package is being worked on, and PROGRESS.md is only written at the end — which is exactly too late to prevent this. A one-line claim file, written first, would have.

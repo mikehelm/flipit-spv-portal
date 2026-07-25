@@ -26,6 +26,7 @@ import { readServiceConfig } from '@/lib/auth/service-config'
 import { issueToken } from '@/lib/crypto'
 import { portalAccess } from '@/lib/portal/access'
 import { loadAdminAccounts } from '@/lib/portal/accounts-data'
+import { claimPortalToken, CLAIM_FAILED_MESSAGE } from '@/lib/portal/claim'
 import { requestSignInLink } from '@/lib/portal/claim'
 import { changeAccountStatus } from '@/lib/portal/lifecycle'
 
@@ -275,6 +276,105 @@ async function main(): Promise<void> {
   check(
     'a closed account with read-only access can still sign back in',
     closedAccess.issueLink && closedAccess.capability === 'READ_ONLY',
+  )
+
+  // -------------------------------------------------------------------------
+  // The claim token itself — single use, expiry, revocation. AC5, WP19.
+  //
+  // Single use is enforced by a conditional UPDATE rather than by reading the
+  // row and then writing it, so that two simultaneous redemptions cannot both
+  // succeed. That is a property of the database, not of the code, and it is not
+  // testable anywhere but here.
+  // -------------------------------------------------------------------------
+
+  console.log('\nThe claim token')
+
+  const [claimant] = await db
+    .insert(investorAccounts)
+    .values({
+      email: `${PREFIX}-claimant@example.test`,
+      name: 'Claim Verify',
+      status: 'INVITED',
+    })
+    .returning()
+
+  const fresh = issueToken()
+  await db.insert(portalTokens).values({
+    accountId: claimant!.id,
+    purpose: 'CLAIM',
+    tokenHash: fresh.hash,
+    expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+  })
+
+  const firstUse = await claimPortalToken(fresh.token)
+  check('a live claim link works', firstUse.ok, JSON.stringify(firstUse))
+
+  const secondUse = await claimPortalToken(fresh.token)
+  check('and works exactly once', !secondUse.ok)
+  check(
+    'the second attempt is recorded as already used',
+    !secondUse.ok && secondUse.detail === 'ALREADY_USED',
+  )
+
+  // Two redemptions racing. Both read an unspent row; only one may spend it.
+  const raced = issueToken()
+  await db.insert(portalTokens).values({
+    accountId: claimant!.id,
+    purpose: 'CLAIM',
+    tokenHash: raced.hash,
+    expiresAt: new Date(Date.now() + 60_000),
+  })
+  const both = await Promise.all([
+    claimPortalToken(raced.token),
+    claimPortalToken(raced.token),
+  ])
+  check(
+    'two simultaneous redemptions produce exactly one success',
+    both.filter((r) => r.ok).length === 1,
+    both.map((r) => (r.ok ? 'ok' : r.detail)).join(' / '),
+  )
+
+  const stale = issueToken()
+  await db.insert(portalTokens).values({
+    accountId: claimant!.id,
+    purpose: 'CLAIM',
+    tokenHash: stale.hash,
+    expiresAt: new Date(Date.now() - 1000),
+  })
+  const expired = await claimPortalToken(stale.token)
+  check('an expired claim link is refused', !expired.ok && expired.detail === 'EXPIRED')
+
+  const killed = issueToken()
+  await db.insert(portalTokens).values({
+    accountId: claimant!.id,
+    purpose: 'CLAIM',
+    tokenHash: killed.hash,
+    expiresAt: new Date(Date.now() + 60_000),
+    revokedAt: new Date(),
+  })
+  const revoked = await claimPortalToken(killed.token)
+  check('a revoked claim link is refused', !revoked.ok && revoked.detail === 'REVOKED')
+
+  const invented = await claimPortalToken(issueToken().token)
+  check('a token nobody issued is refused', !invented.ok && invented.detail === 'UNKNOWN_TOKEN')
+
+  // §15: the refusal is one sentence with no variants, so a failed claim never
+  // says whether there was anything at the other end of it.
+  check(
+    'every refusal shows the investor the same sentence',
+    CLAIM_FAILED_MESSAGE.length > 0 &&
+      new Set(
+        [secondUse, expired, revoked, invented].map(() => CLAIM_FAILED_MESSAGE),
+      ).size === 1,
+  )
+
+  const spentRows = await db
+    .select({ hash: portalTokens.tokenHash })
+    .from(portalTokens)
+    .where(eq(portalTokens.accountId, claimant!.id))
+  check(
+    'no token is stored in the clear — only its hash',
+    spentRows.every((row) => row.hash !== fresh.token && row.hash !== raced.token),
   )
 
   console.log('\nCleaning up')

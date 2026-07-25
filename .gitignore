@@ -8,3 +8,4 @@ coverage
 
 # build artefacts — must never be committed, they conflict on every merge
 *.tsbuildinfo
+backups/
