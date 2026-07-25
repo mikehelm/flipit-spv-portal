@@ -49,6 +49,14 @@ export interface ProposerOutcome {
   promptSummary: string
   /** The model's raw response, stored so a mis-import can be traced (§9.1). */
   raw: string
+  /**
+   * What the call consumed, for the §9.1 spend cap. Counts, not money — they
+   * become a cost in `spend.ts` and nowhere else.
+   *
+   * Undefined when the provider reported no usage. That is recorded as a call
+   * of unknown size, rather than as a call that cost nothing.
+   */
+  usage?: { promptTokens: number; completionTokens: number }
 }
 
 export interface MappingProposer {
@@ -238,10 +246,20 @@ export class OpenAiMappingProposer implements MappingProposer {
     })
 
     const raw = completion.choices[0]?.message?.content ?? ''
+
+    // §9.1 spend cap. The provider reports this; nothing here estimates it.
+    const usage = completion.usage
+      ? {
+          promptTokens: completion.usage.prompt_tokens ?? 0,
+          completionTokens: completion.usage.completion_tokens ?? 0,
+        }
+      : undefined
+
     return {
       proposal: normaliseProposal(input.headers, raw, this.model),
       promptSummary: describePrompt(input, this.model),
       raw,
+      ...(usage ? { usage } : {}),
     }
   }
 }

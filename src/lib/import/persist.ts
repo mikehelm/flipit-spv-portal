@@ -16,10 +16,11 @@
  * §8 gates.
  */
 
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import {
   aiProposals,
+  aiUsageEvents,
   columnMappings,
   importJobs,
   investorAccounts,
@@ -29,11 +30,18 @@ import {
   serviceConfig,
 } from '@/db/schema'
 import { audit, type Actor } from '@/lib/audit'
+import { readServiceConfig } from '@/lib/auth/service-config'
 import { decrypt } from '@/lib/crypto'
 import { isoToday } from '@/lib/money'
 import type { PrivilegedActor } from './authz'
 import type { ConfirmedMapping } from './mapping'
 import type { ImportContext, PreparedRow } from './validate'
+import {
+  estimateCallCostUsd,
+  startOfMonthUtc,
+  summariseSpend,
+  type SpendSummary,
+} from './spend'
 import { getCurrentApproval } from '@/lib/compliance/approvals'
 
 const SINGLETON = 'singleton'
@@ -195,6 +203,63 @@ export async function createImportJob(input: {
   })
 
   return job.id
+}
+
+/**
+ * Record what one call to the model consumed. BUILD_SPEC §9.1.
+ *
+ * Called for a failed call as well as a successful one — a call that timed out
+ * or returned unusable JSON still cost money, and leaving those out would
+ * under-report by exactly the calls most worth knowing about.
+ *
+ * This never throws. Failing to write a usage row must not fail an import: the
+ * cap warns rather than blocks, so losing the accounting for one call is a much
+ * smaller problem than losing the import.
+ */
+export async function recordAiUsage(input: {
+  importJobId: string | null
+  model: string
+  usage?: { promptTokens: number; completionTokens: number }
+  succeeded: boolean
+}): Promise<void> {
+  try {
+    const usage = input.usage ?? { promptTokens: 0, completionTokens: 0 }
+    await db.insert(aiUsageEvents).values({
+      importJobId: input.importJobId,
+      model: input.model,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      estimatedCostUsd: estimateCallCostUsd(input.model, usage),
+      succeeded: input.succeeded,
+    })
+  } catch {
+    // Deliberately swallowed. See above.
+  }
+}
+
+/**
+ * Month-to-date AI spend against the configured cap. §9.1.
+ *
+ * A summary, and only a summary. Nothing reads this to decide whether a call
+ * may proceed — the cap warns and does not block, and `spend.ts` deliberately
+ * exposes nothing that could be read as a refusal.
+ */
+export async function readSpendSummary(now: Date = new Date()): Promise<SpendSummary> {
+  const config = await readServiceConfig()
+
+  const rows = await db
+    .select({
+      estimatedCostUsd: aiUsageEvents.estimatedCostUsd,
+      model: aiUsageEvents.model,
+    })
+    .from(aiUsageEvents)
+    .where(gte(aiUsageEvents.createdAt, startOfMonthUtc(now)))
+
+  return summariseSpend({
+    costs: rows.map((row) => row.estimatedCostUsd),
+    capUsd: config.aiMonthlyCapUsd,
+    models: rows.map((row) => row.model),
+  })
 }
 
 export async function recordAiProposal(input: {

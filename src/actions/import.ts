@@ -56,6 +56,7 @@ import {
   loadServiceMode,
   persistImport,
   recordAiProposal,
+  recordAiUsage,
   toAuditActor,
   type RoundSummary,
 } from '@/lib/import/persist'
@@ -271,6 +272,12 @@ export async function analyseImportFile(formData: FormData): Promise<AnalysisRes
           const outcome = await proposer.propose(sample)
           proposal = outcome.proposal
           aiUsed = true
+          await recordAiUsage({
+            importJobId,
+            model: proposer.model,
+            usage: outcome.usage,
+            succeeded: true,
+          })
           aiProposalId = await recordAiProposal({
             importJobId,
             model: proposer.model,
@@ -282,6 +289,11 @@ export async function analyseImportFile(formData: FormData): Promise<AnalysisRes
             ? 'Headers only were sent to the model. No data values left the system.'
             : `The column names and the first ${sample.sampleRows.length} row(s) were sent to the model. Nothing else left the system.`
         } catch {
+          // A call that failed still cost money, so it is still counted (§9.1).
+          // The token count is unknown — the error carries none — so it is
+          // recorded as a call of unknown size rather than one that cost nothing.
+          await recordAiUsage({ importJobId, model: proposer.model, succeeded: false })
+
           // Never surface a provider error verbatim: it can echo the request,
           // and the request contains recipient data.
           aiMessage =

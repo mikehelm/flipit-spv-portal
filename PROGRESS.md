@@ -294,3 +294,33 @@ Two things worth knowing:
 - Nobody has set a password against the old scheme yet — the seed creates accounts with none — so switching now costs nothing. Switching after real passwords exist would mean a migration.
 
 I raised the timeout on one sign-in test rather than lowering the cost: eleven real attempts at 128 MiB each takes about forty seconds, and the test now also asserts that an attempt costs more than ten milliseconds. If that test ever starts finishing quickly, somebody has weakened the parameters.
+
+---
+
+## The AI spend cap — closed
+
+Carried forward as a gap since WP3: the monthly ceiling was stored and displayed but nothing counted against it, and §9.1 asks for both a cap and for usage to be shown.
+
+**Decided by the owner on 25 July 2026: the cap warns and does not block.** The amounts are genuinely small, and an import that refused because a twenty-dollar ceiling was reached would stop the operator working over a rounding error.
+
+**Built:** an `ai_usage_events` table, one row per call to the model. Token counts come from the provider's own `usage` field — nothing here estimates them. `lib/import/spend.ts` turns those counts into a cost against a published price list, sums the current UTC month, and returns a summary. The figure appears on the settings page beside the cap, with the state colouring the panel: quiet under 80%, amber above it, red over.
+
+**Verified against the database.** An untouched month reads zero. Twenty realistic mapping calls — 1,200 prompt tokens and 300 completion tokens each — cost **one cent** in total, which is the number that makes the "warn, don't block" decision obviously right. A deliberate overrun is detected, the message says imports carry on, and an unpriced model is named rather than silently counted as free.
+
+**Decisions:**
+
+- *A failed call is counted.* A call that timed out or returned unusable JSON still cost money. Recording spend only against successful proposals would under-report by exactly the calls most worth knowing about — which is why the usage table is separate from `ai_proposals` rather than a column on it.
+- *`recordAiUsage` never throws.* Failing to write a usage row must not fail an import. Losing the accounting for one call is a far smaller problem than losing the import, and the cap warns rather than blocks, so nothing downstream depends on the row existing.
+- *Cost is stored at six decimal places, not two.* One mapping call costs a fraction of a cent. Rounded to two at the point of accumulation, every call would round to zero and a month of them would sum to nothing.
+- *An unknown model is priced at zero and named in the summary.* A guessed price produces a confident wrong number, which is worse than an obvious gap — so the gap is reported: "the real figure is higher than this."
+- *A cap of zero means no cap, not a cap of nothing.* Refusing every call because a field was left at its default would be a surprising way to break an import.
+- *The month boundary is UTC.* A billing period is not in the viewer's timezone, and the figure should not change depending on who is looking at it.
+- *The figure is labelled an estimate, on the screen, in those words.* It comes from a price list checked on 25 July 2026, and price lists go out of date. A number that looks like an invoice and is not one is worse than an obvious estimate.
+
+**Checklist:** point 1. No monetary value here is a JavaScript number — token counts are integers because they are counts of things, and they become a `Decimal` the moment they become a cost. There is a source-level test asserting `Number(`, `parseFloat(` and `.toNumber(` appear nowhere in the module, with the comments stripped first so the module's own prose about avoiding `Number()` does not trip the check that it avoids `Number()`.
+
+There is also a test asserting the module exposes **nothing that could be read as a refusal** — no `blocked`, no `allowed`, no `canProceed`, no thrown error naming the cap. If someone later makes an overrun fatal, that should be a decision taken deliberately, and this is what makes them notice they are taking it.
+
+**Uncertain:**
+
+- The price list is four entries of published pricing hard-coded with the date checked. It will drift. The unpriced-model path means drift shows up as an under-report with a visible warning rather than as a silent wrong number, but somebody should glance at it before launch.

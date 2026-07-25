@@ -111,6 +111,16 @@ Sending a real email needs a Gmail app password, connected from settings. Until 
 
 ---
 
+## What the AI costs you
+
+The settings page shows what the column-mapping AI has cost this month, beside the monthly cap. Twenty real mapping calls come to about a penny, so you are unlikely ever to see the number move much.
+
+Going over the cap **warns and does not stop anything** — an import that refused because a twenty-dollar ceiling was reached would block you over a rounding error. The panel turns amber at 80% of the cap and red above it, and the figure is labelled an estimate, because it is calculated from published per-token prices rather than from an invoice.
+
+Set the cap to zero and there is no cap at all.
+
+---
+
 ## The two things that are always on screen
 
 Compliance approval state and mail connection health sit at the top of the review screen and do not move. They are the two things that silently break a send, so they are not buried in settings.
@@ -139,8 +149,7 @@ The link in an invitation goes to `/portal/claim/…`. Opening it is what verifi
 - **The rest of the portal.** The conversation thread, documents, and the operator-side status advancement with its two-step confirmation for funds received.
 - **The email carrying a sign-in link.** The link is created correctly; sending it is part of a later package.
 - **Questions and answers, the register of interest, updates, reminders.** All later packages.
-- **Two-factor sign-in.** Optional in version one. The database is ready for it; there is no code behind it.
-- **The AI spend cap.** You can set a monthly ceiling in settings, but nothing yet counts spending against it.
+- **Two-factor sign-in.** The specification makes this mandatory before the production deployment sends anything real, so it is a release gate rather than an optional extra. The database is ready for it; there is no code behind it yet.
 
 The participation certificate, the anti-phishing verification page and the export were built early, out of order, in a parallel session. They are in the codebase and tested, but they are not yet linked from anywhere you would find by clicking.
 

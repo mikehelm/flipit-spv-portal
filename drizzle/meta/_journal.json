@@ -15,6 +15,13 @@
       "when": 1784999739842,
       "tag": "0001_dizzy_luke_cage",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785003016323,
+      "tag": "0002_faithful_northstar",
+      "breakpoints": true
     }
   ]
 }
