@@ -44,7 +44,7 @@ describe('choosing a password for the first time', () => {
 
     const after = await store.findByEmail(OWNER_EMAIL)
     expect(after?.passwordHash).not.toContain(GOOD)
-    expect(after?.passwordHash?.startsWith('$argon2id$')).toBe(true)
+    expect(after?.passwordHash?.startsWith('scrypt$')).toBe(true)
   })
 
   it('refuses a password shorter than the minimum, and says why without quoting it', async () => {

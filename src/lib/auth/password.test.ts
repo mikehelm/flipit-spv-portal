@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ARGON2_OPTIONS,
+  SCRYPT_PARAMS,
   MIN_PASSWORD_LENGTH,
   checkPassword,
   dummyPasswordHash,
@@ -49,10 +49,16 @@ describe('checkPassword', () => {
 })
 
 describe('hashing', () => {
-  it('is Argon2id, not a fast hash', async () => {
+  it('is scrypt, not a fast hash', async () => {
     const hash = await hashPassword('rusty gate marmalade')
-    expect(hash.startsWith('$argon2id$')).toBe(true)
-    expect(ARGON2_OPTIONS.memoryCost).toBeGreaterThanOrEqual(19456)
+    expect(hash.startsWith('scrypt$')).toBe(true)
+    // Memory cost in bytes is roughly 128 * N * r. OWASP's scrypt baseline is
+    // N = 2^17, r = 8 — about 128 MiB per hash. A "fast hash" would be orders
+    // of magnitude below this, so the assertion is on the real cost, not on the
+    // name of the algorithm.
+    const memoryBytes = 128 * SCRYPT_PARAMS.N * SCRYPT_PARAMS.r
+    expect(memoryBytes).toBeGreaterThanOrEqual(128 * 1024 * 1024)
+    expect(SCRYPT_PARAMS.maxmem).toBeGreaterThanOrEqual(memoryBytes)
   })
 
   it('salts per hash — the same password hashes differently every time', async () => {
@@ -78,7 +84,7 @@ describe('hashing', () => {
 describe('dummyPasswordHash', () => {
   it('is a real Argon2id hash that nothing verifies against', async () => {
     const hash = await dummyPasswordHash()
-    expect(hash.startsWith('$argon2id$')).toBe(true)
+    expect(hash.startsWith('scrypt$')).toBe(true)
     expect(await verifyPassword(hash, 'password')).toBe(false)
     expect(await verifyPassword(hash, '')).toBe(false)
   })

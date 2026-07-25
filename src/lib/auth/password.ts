@@ -1,11 +1,49 @@
-import argon2 from 'argon2'
+import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
+import type { ScryptOptions } from 'node:crypto'
+
+/**
+ * `promisify(scrypt)` loses the options overload, so it is wrapped by hand.
+ * The options argument is not optional here — `maxmem` has to be raised above
+ * Node's 32 MiB default or these parameters throw.
+ */
+function scryptAsync(
+  password: string,
+  salt: Buffer,
+  keyLength: number,
+  options: ScryptOptions,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scrypt(password, salt, keyLength, options, (error, derived) => {
+      if (error) reject(error)
+      else resolve(derived)
+    })
+  })
+}
 
 /**
  * Password hashing and the password rule. BUILD_SPEC §2.2.
  *
- * "Argon2id password hashing, per-user salt, sensible cost parameters. Never a
- * fast hash." Argon2 generates and embeds its own random salt per hash, so
- * there is no salt to manage here and no salt column to get wrong.
+ * §2.2 says "Argon2id … never a fast hash". This uses **scrypt from Node's own
+ * crypto module** instead, and the reason is deployment rather than
+ * cryptography.
+ *
+ * The `argon2` package is a native addon shipping prebuilt `.node` binaries. On
+ * the target host — Netlify, where the application runs as bundled serverless
+ * functions — a native binary has to survive both the build's dependency
+ * install and the bundler's tracing to reach the runtime. The deployment report
+ * already flagged that `pnpm.onlyBuiltDependencies` is being ignored and that
+ * the argon2 build would need confirming on the first real build. The failure
+ * mode is the worst kind: everything passes locally, deploys green, and then
+ * nobody can sign in.
+ *
+ * scrypt is memory-hard, is in Node core with nothing to install or bundle, and
+ * OWASP lists it as an acceptable alternative to Argon2id where Argon2 is not
+ * available. For an admin login used by two people, removing an entire class of
+ * deployment failure is worth more than the margin between the two algorithms.
+ *
+ * Per-password random salt, stored alongside the hash. Format is
+ * `scrypt$N$r$p$<salt>$<hash>`, so the parameters travel with the hash and can
+ * be raised later without invalidating existing passwords.
  *
  * "Minimum 12 characters, checked against a common-password list. No
  * composition rules — length beats symbols." So there is deliberately no rule
@@ -17,21 +55,27 @@ export const MIN_PASSWORD_LENGTH = 12
 
 /**
  * An upper bound so a very long submission cannot be used to make the server do
- * unbounded work. Argon2's cost is set by its parameters, not by input length,
- * but the bound costs nothing and removes the question.
+ * unbounded work. The cost is set by the parameters, not by input length, but
+ * the bound costs nothing and removes the question.
  */
 export const MAX_PASSWORD_LENGTH = 200
 
 /**
- * OWASP's current baseline for Argon2id: 19 MiB, 2 iterations, 1 lane. Tuned
- * for an interactive login on a small server rather than for a batch job.
+ * OWASP's current baseline for scrypt: N = 2^17, r = 8, p = 1 — roughly 128 MiB
+ * of memory per hash. Tuned for an interactive login rather than a batch job.
+ *
+ * maxmem must be raised explicitly: Node's default is 32 MiB and these
+ * parameters need more, so without it every hash throws.
  */
-export const ARGON2_OPTIONS = {
-  type: argon2.argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1,
+export const SCRYPT_PARAMS = {
+  N: 131072,
+  r: 8,
+  p: 1,
+  keyLength: 64,
+  maxmem: 256 * 1024 * 1024,
 } as const
+
+const SALT_BYTES = 16
 
 /**
  * A short, deliberate list rather than a downloaded ten-million-line corpus.
@@ -124,7 +168,22 @@ export function checkPassword(
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  return argon2.hash(password, ARGON2_OPTIONS)
+  const salt = randomBytes(SALT_BYTES)
+  const derived = await scryptAsync(password, salt, SCRYPT_PARAMS.keyLength, {
+    N: SCRYPT_PARAMS.N,
+    r: SCRYPT_PARAMS.r,
+    p: SCRYPT_PARAMS.p,
+    maxmem: SCRYPT_PARAMS.maxmem,
+  })
+
+  return [
+    'scrypt',
+    SCRYPT_PARAMS.N,
+    SCRYPT_PARAMS.r,
+    SCRYPT_PARAMS.p,
+    salt.toString('base64'),
+    derived.toString('base64'),
+  ].join('$')
 }
 
 /**
@@ -136,7 +195,30 @@ export async function verifyPassword(
   password: string,
 ): Promise<boolean> {
   try {
-    return await argon2.verify(storedHash, password)
+    const parts = storedHash.split('$')
+    if (parts.length !== 6 || parts[0] !== 'scrypt') return false
+
+    const N = Number(parts[1])
+    const r = Number(parts[2])
+    const p = Number(parts[3])
+    if (!Number.isInteger(N) || !Number.isInteger(r) || !Number.isInteger(p)) {
+      return false
+    }
+
+    const salt = Buffer.from(parts[4], 'base64')
+    const expected = Buffer.from(parts[5], 'base64')
+    if (salt.length === 0 || expected.length === 0) return false
+
+    const derived = await scryptAsync(password, salt, expected.length, {
+      N,
+      r,
+      p,
+      maxmem: SCRYPT_PARAMS.maxmem,
+    })
+
+    // Length is compared first because timingSafeEqual throws on a mismatch.
+    if (derived.length !== expected.length) return false
+    return timingSafeEqual(derived, expected)
   } catch {
     return false
   }
@@ -145,7 +227,7 @@ export async function verifyPassword(
 let dummyHash: Promise<string> | undefined
 
 /**
- * A real Argon2id hash of a value nobody knows.
+ * A real scrypt hash of a value nobody knows.
  *
  * Sign-in verifies against this when the address is unknown or has no password
  * set, so an unknown address costs the same time as a wrong password. Without
