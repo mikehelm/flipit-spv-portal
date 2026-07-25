@@ -1,0 +1,62 @@
+'use client'
+
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import type { PrivilegedRole } from '@/lib/roles'
+
+/**
+ * Admin navigation.
+ *
+ * Owner-only destinations are hidden from the operator here, and refused again
+ * on the server by `requireOwner()`. The hiding is manners; the refusal is the
+ * access control.
+ *
+ * Compliance approval (BUILD_SPEC §8.2) is deliberately absent from this nav
+ * and from the settings page. It is owner-only and WP6 builds it.
+ */
+
+interface NavItem {
+  href: string
+  label: string
+  roles: PrivilegedRole[]
+}
+
+const ITEMS: NavItem[] = [
+  { href: '/admin', label: 'Overview', roles: ['OWNER', 'OPERATOR'] },
+  { href: '/admin/onboarding', label: 'Setup', roles: ['OPERATOR'] },
+  { href: '/admin/invites', label: 'Operator access', roles: ['OWNER'] },
+  { href: '/admin/settings', label: 'Settings', roles: ['OWNER'] },
+]
+
+export function AdminNav({ role }: { role: PrivilegedRole }) {
+  const pathname = usePathname()
+  const items = ITEMS.filter((item) => item.roles.includes(role))
+
+  return (
+    <nav aria-label="Admin sections" className="-mx-1 overflow-x-auto">
+      <ul className="flex min-w-max gap-1 px-1">
+        {items.map((item) => {
+          const active =
+            pathname === item.href ||
+            (item.href !== '/admin' && pathname.startsWith(`${item.href}/`))
+
+          return (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                aria-current={active ? 'page' : undefined}
+                className={`inline-flex min-h-11 items-center rounded-sm px-3 text-sm font-medium transition-colors ${
+                  active
+                    ? 'bg-[#F59A23]/12 text-[#F59A23]'
+                    : 'text-[#9498b5] hover:text-[#e7e9f5]'
+                }`}
+              >
+                {item.label}
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
+  )
+}
