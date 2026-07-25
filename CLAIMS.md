@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| Versioning for a corrected document | 25 Jul session C | 2026-07-25 23:30 | `src/db/schema.ts` + a migration, `src/actions/documents.ts`, `src/app/(admin)/investors/documents-panel.tsx`, `src/app/portal/**`, `scripts/verify-documents.ts` |
 
 ## Done, so nobody starts it again
 
