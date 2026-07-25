@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| Object store behind the media seam | 25 Jul session C | 2026-07-25 23:10 | `src/lib/media/store.ts`, a new `src/lib/media/s3.ts`, `src/lib/env.ts`, `.env.example`, `scripts/verify-object-store.ts` |
 
 ## Done, so nobody starts it again
 
