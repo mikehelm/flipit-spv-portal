@@ -2,7 +2,7 @@
 
 Rewritten after every work package, so it always describes the current state.
 
-**Current state: WP0 complete.** The application shell runs. There is no database, no sign-in and no data yet — those are the next two packages.
+**Current state: WP1 complete.** The database exists and the application shell runs. There is no sign-in and no investor data yet — sign-in is the next package.
 
 ---
 
@@ -12,8 +12,12 @@ Rewritten after every work package, so it always describes the current state.
 cd app
 pnpm install
 cp .env.example .env      # then fill in the two secrets below
+pnpm db:migrate           # creates the 41 tables
+pnpm db:seed              # creates the users, the round, the defaults
 pnpm dev
 ```
+
+You need a PostgreSQL database running, and `DATABASE_URL` in `.env` pointing at it.
 
 Then open **http://localhost:3000**.
 
@@ -52,19 +56,41 @@ Now **http://localhost:3000/** should return a 404 and **http://localhost:3000/S
 **5. Prove it refuses to start when misconfigured.**
 Delete the `ENCRYPTION_KEY` line from `.env` and run `pnpm dev` again. It should refuse to start and tell you exactly which variable is wrong. Put it back afterwards.
 
-**6. Run the checks.**
+**6. Check the database was created.**
+
+```bash
+psql "$DATABASE_URL" -c "\\dt"
+```
+
+You should see 41 tables. Then:
+
+```bash
+psql "$DATABASE_URL" -c "select email, role from users;"
+```
+
+Three rows — you twice as owner, David once as operator. These come from the allowlist in `.env`; nobody else can sign in later.
+
+**7. Prove the seed is safe to re-run.**
+
+```bash
+pnpm db:seed
+```
+
+Run it as many times as you like. After the first time it should report nothing, and change nothing.
+
+**8. Run the checks.**
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm test
 ```
 
-All three should pass. Ten tests currently, covering environment validation and the production-deployment guard.
+All three should pass. 55 tests currently — environment validation, the production-deployment guard, and a set that enforces the data model's structural rules: no floating-point money anywhere, tokens stored only as hashes, investor accounts genuinely durable across rounds, and the register holding no stored ranking.
 
 ---
 
 ## Not built yet — nothing is broken, it simply is not there
 
-Sign-in · the database and any data · uploading a spreadsheet · the email · sending · the investor portal · questions and answers · reminders · the register of interest · the certificate · the verification page.
+Sign-in · uploading a spreadsheet · the email · sending · the investor portal · questions and answers · reminders · the register of interest · the certificate · the verification page.
 
 ---
 
