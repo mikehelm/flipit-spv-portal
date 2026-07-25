@@ -34,6 +34,7 @@ import { isoToday } from '@/lib/money'
 import type { PrivilegedActor } from './authz'
 import type { ConfirmedMapping } from './mapping'
 import type { ImportContext, PreparedRow } from './validate'
+import { getCurrentApproval } from '@/lib/compliance/approvals'
 
 const SINGLETON = 'singleton'
 
@@ -121,6 +122,27 @@ async function loadServiceConfig() {
 export async function loadImportContext(round: RoundSummary): Promise<ImportContext> {
   const config = await loadServiceConfig()
 
+  // The approved jurisdiction list comes from the CURRENT COMPLIANCE APPROVAL,
+  // not from service_config.
+  //
+  // There were two independent lists here, in two tables, with nothing keeping
+  // them in step: service_config.approved_jurisdictions, written by the owner's
+  // settings page, and compliance_approvals.approved_jurisdictions, written when
+  // an approval is recorded. Import consulted the first; the send gate
+  // (isJurisdictionApproved, lib/compliance/jurisdictions.ts) consults the
+  // second.
+  //
+  // The seed leaves the config list empty on purpose — until somebody qualified
+  // names the cleared countries, nobody is clearable. So in the ordinary setup
+  // order (record the approval, then import the spreadsheet) every single row
+  // imported with blocked = true. Not one recipient outside the list: the whole
+  // batch, which is precisely the failure BUILD_SPEC §9 and AC7 forbid.
+  //
+  // One list, and it is the one the gate itself trusts. No approval means an
+  // empty list means every row blocks — which is correct, because with no
+  // approval nothing may be sent to anyone anyway (§8.2).
+  const approval = await getCurrentApproval('INVITATION')
+
   const existingRecipients = await db
     .select({ email: recipients.email })
     .from(recipients)
@@ -129,7 +151,7 @@ export async function loadImportContext(round: RoundSummary): Promise<ImportCont
   return {
     today: isoToday(),
     flipitShare: round.flipitShare,
-    approvedJurisdictions: config?.approvedJurisdictions ?? [],
+    approvedJurisdictions: approval?.approvedJurisdictions ?? [],
     aggregateRaiseUsd: config?.aggregateRaiseUsd ?? '0',
     existingEmails: existingRecipients.map((row) => row.email.toLowerCase()),
     decimalPlaces: config?.decimalPlaces ?? 3,
