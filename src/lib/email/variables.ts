@@ -489,6 +489,37 @@ export function resolveEmailVariables(
     }
   }
 
+<<<<<<< HEAD
+=======
+  // --- flags ---------------------------------------------------------------
+
+  // The flag follows the operator's *chosen* contact method and nothing else.
+  //
+  // An earlier version also required the number to be present — `contactMethod
+  // === 'PHONE' && hasPhone`. That reads as defensive but it is the "leave it
+  // blank" path this module exists to refuse: with the method set to PHONE and
+  // no number configured, the flag went false, the whole contact block was
+  // skipped, `{{sender_phone}}` was never referenced, and the email sent
+  // silently missing the contact line AC21 requires pre-flight to catch.
+  //
+  // Tied to the method alone, a missing number leaves `{{sender_phone}}`
+  // unresolved inside a rendered block, `renderEmail` throws, and pre-flight
+  // names the recipient. EMAIL_ONLY is still absent-not-blank: it is handled
+  // above, where the variable is set to null with source ABSENT and both flags
+  // fall false because the method is neither PHONE nor WHATSAPP.
+  const flags: Record<EmailFlagName, boolean> = {
+    contact_phone: defaults.contactMethod === 'PHONE',
+    contact_whatsapp: defaults.contactMethod === 'WHATSAPP',
+  }
+
+  // The operator has not answered §2.1 step 2 at all. Nothing here invents an
+  // answer: the phone line stays required and the message says why.
+  if (defaults.contactMethod === null && variables.sender_phone === null) {
+    notes.sender_phone =
+      'The operator has not chosen a contact method yet (BUILD_SPEC §2.1 step 2). Finish operator setup before sending.'
+  }
+
+>>>>>>> c6e37a5734f287d0afb3f54a476fe6c0a2537a19
   return { variables, sources, flags, notes }
 }
 
