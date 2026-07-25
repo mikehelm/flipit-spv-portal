@@ -18,7 +18,6 @@
     "setup-link": "tsx scripts/mint-setup-link.ts"
   },
   "dependencies": {
-    "argon2": "^0.45.1",
     "decimal.js": "^10.6.0",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.11",
@@ -53,7 +52,6 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "argon2",
       "esbuild"
     ]
   }
