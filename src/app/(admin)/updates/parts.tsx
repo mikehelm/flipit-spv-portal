@@ -12,7 +12,7 @@ import {
 import { ActionForm } from '@/components/admin/action-form'
 import { Checkbox, Field, Select, TextArea, TextInput } from '@/components/admin/ui'
 import { NON_ADDRESSABLE_NOTE, type UpdateAudience } from '@/lib/updates/audience'
-import { WITHDRAWAL_NOTICE } from '@/lib/updates/service'
+import { WITHDRAWAL_NOTICE } from '@/lib/updates/copy'
 
 /**
  * The operator's update surfaces. BUILD_SPEC §6.

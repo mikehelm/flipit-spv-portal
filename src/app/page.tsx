@@ -42,6 +42,14 @@ export default function Home() {
         </p>
       </div>
 
+      <p className="mt-6 text-sm leading-relaxed text-[#9498b5]">
+        Received an unexpected invitation and want to check it is genuine?{' '}
+        <Link href="/verify" className="text-[#F59A23]">
+          How to verify a message from us
+        </Link>
+        . That page is public, needs no sign-in, and is safe to reach by typing.
+      </p>
+
       <div className="mt-10 rounded-sm border hairline bg-[#14162f] p-5">
         <p className="text-sm font-semibold text-white">Deployment</p>
         <dl className="mt-3 grid gap-2 text-sm text-[#9498b5] sm:grid-cols-[9rem_1fr]">

@@ -11,7 +11,7 @@ import {
 } from '@/actions/offers'
 import { ActionForm } from '@/components/admin/action-form'
 import { Checkbox, Field, Select, TextArea, TextInput } from '@/components/admin/ui'
-import { FUNDS_CONFIRMATION_NOTICE, STAGE_LABEL } from '@/lib/portal/advance'
+import { FUNDS_CONFIRMATION_NOTICE, STAGE_LABEL } from '@/lib/portal/stages'
 import { OFFER_STAGES, type OfferStage } from '@/lib/portal/timeline'
 
 /** Operator-side status advancement. BUILD_SPEC §5. */

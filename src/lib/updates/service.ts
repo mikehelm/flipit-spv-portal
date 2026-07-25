@@ -37,6 +37,10 @@ import {
   type UpdateAudience,
 } from './audience'
 import { buildUpdateNotification } from './notification'
+import { WITHDRAWAL_NOTICE } from './copy'
+
+/** Re-exported for server callers; defined in `./copy`, which has no database. */
+export { WITHDRAWAL_NOTICE }
 
 export const UPDATES_PATH = '/updates'
 export const PORTAL_PATH = '/portal'
@@ -352,10 +356,6 @@ export async function withdrawUpdate(input: {
   return { ok: true }
 }
 
-export const WITHDRAWAL_NOTICE =
-  'Withdrawing removes it from every portal. It does not un-send it — anyone who has already ' +
-  'read it has already read it, and anyone who was emailed still has the email. The withdrawal, ' +
-  'its reason and the title are recorded in the audit log.'
 
 // ---------------------------------------------------------------------------
 // Notifying — one recipient at a time (§6, §14)

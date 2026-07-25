@@ -9,7 +9,8 @@ import { requireOnboardedAdmin } from '@/lib/auth/guards'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { listCertificates } from '@/lib/certificate/issue'
 import { formatMoney, formatPercentage } from '@/lib/money'
-import { STAGE_LABEL, loadStageHistory, nextStage } from '@/lib/portal/advance'
+import { loadStageHistory } from '@/lib/portal/advance'
+import { STAGE_LABEL, nextStage } from '@/lib/portal/stages'
 import { OFFER_STAGES, type OfferStage } from '@/lib/portal/timeline'
 import {
   AcceptedAmountForm,

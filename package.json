@@ -16,7 +16,8 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "setup-link": "tsx scripts/mint-setup-link.ts",
-    "reminders:run": "tsx scripts/run-reminders.ts"
+    "reminders:run": "tsx scripts/run-reminders.ts",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
   },
   "dependencies": {
     "decimal.js": "^10.6.0",

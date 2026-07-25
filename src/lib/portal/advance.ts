@@ -22,39 +22,23 @@ import { db } from '@/db'
 import { commitments, fundsReceipts, offerStatusEvents, offers } from '@/db/schema'
 import { audit, type Actor } from '@/lib/audit'
 import { Dec, isoToday, parseMoney } from '@/lib/money'
-import { OFFER_STAGES, type OfferStage } from './timeline'
-
-export type StageResult = { ok: true } | { ok: false; message: string }
-
-export const STAGE_LABEL: Readonly<Record<OfferStage, string>> = {
-  INVITATION_SENT: 'Invitation sent',
-  RESPONSE_RECORDED: 'Response recorded',
-  DOCUMENTS_ISSUED: 'Documents issued',
-  COMMITMENT_AGREED: 'Commitment agreed',
-  ALLOCATION_ACCEPTED: 'Allocation accepted',
-  PAYMENT_INSTRUCTIONS_ISSUED: 'Payment instructions issued',
-  FUNDS_RECEIVED: 'Funds received',
-  COMPLETED: 'Completed',
-}
-
-export function stageIndex(stage: OfferStage): number {
-  return OFFER_STAGES.indexOf(stage)
-}
+import type { OfferStage } from './timeline'
+import {
+  FUNDS_CONFIRMATION_NOTICE,
+  MIN_CORRECTION_REASON,
+  STAGE_LABEL,
+  nextStage,
+  stageIndex,
+} from './stages'
 
 /**
- * The next stage, or null at the end.
- *
- * Advancing is deliberately one step at a time. Jumping from "documents
- * issued" straight to "funds received" would leave an investor's timeline
- * claiming things happened that nobody recorded, and the timeline is the thing
- * they read to know where they stand.
+ * Re-exported for server callers. The definitions live in `./stages`, which
+ * imports no database, so a client component can use the labels without
+ * dragging the postgres driver into the browser bundle.
  */
-export function nextStage(stage: OfferStage): OfferStage | null {
-  return OFFER_STAGES[stageIndex(stage) + 1] ?? null
-}
+export { FUNDS_CONFIRMATION_NOTICE, MIN_CORRECTION_REASON, STAGE_LABEL, nextStage, stageIndex }
 
-/** The minimum length of a correction's reason. §5 requires one; this is teeth. */
-export const MIN_CORRECTION_REASON = 10
+export type StageResult = { ok: true } | { ok: false; message: string }
 
 // ---------------------------------------------------------------------------
 // Advancing
@@ -294,11 +278,6 @@ export interface FundsReceivedInput {
   actorUserId: string | null
   now?: Date
 }
-
-export const FUNDS_CONFIRMATION_NOTICE =
-  'Recording funds received tells the investor their money has arrived and generates their ' +
-  'participation certificate. Re-type the amount and tick the confirmation — it is a financial ' +
-  'assertion they will rely on.'
 
 /**
  * Record that money arrived.

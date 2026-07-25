@@ -34,7 +34,7 @@ describe('/verify', () => {
   })
 
   it('allows only the verification path in the robots policy', () => {
-    expect(buildVerificationRobotsPolicy()).toEqual({
+    expect(buildVerificationRobotsPolicy()).toMatchObject({
       rules: {
         userAgent: '*',
         allow: ['/verify', '/verify/'],

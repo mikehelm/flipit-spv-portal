@@ -531,3 +531,39 @@ A PDF is a small text format: a few objects, a content stream of drawing operato
 
 - The signatory's role is hard-coded as "SPV Manager", matching the invitation template's sign-off. §5.1 says "his stated role" and onboarding does not currently capture one. A settings field would be better; the current value is at least consistent with what the investor has already been sent.
 - The PDF has no logo image, because embedding one would mean an image handler in `pdf.ts` and the whole point of that file is that it stays small. The branding is the wordmark, the palette and the accent rule. Worth a look at the rasterised page before launch — it is in this session's notes as a rendered image.
+
+---
+
+## WP14 — Anti-phishing page and indexing — done, and a build gate added
+
+The verification page itself was built early in a parallel session and is good: it names Michael and David, the exact sending address, the exact link domain, what the email will and will not ask, the standing payment-details warning, and a route to verify by other means. This package checked it against §15.1, wired it in, and fixed the indexing — which was broken.
+
+**`robots.ts` was at `app/verify/robots.ts`.** Next.js only publishes that metadata file from the root of `app/`; nested, it generates `/verify/robots.txt`, which is a path no crawler ever requests. **The site had no robots.txt at all**, and the unit test passed the whole time because it called the function rather than asking where the file was. It is now `src/app/robots.ts`, and the test asserts the file's *location* as well as its contents — and asserts that no nested copy has reappeared.
+
+**Built:** the sitemap §15 implies — one entry, the verification page, and a test asserting no portal, admin or api path is in it. `X-Robots-Tag` response headers in `next.config.ts`: `noindex, nofollow, noarchive, nosnippet` on every path, with `/verify`, `/robots.txt` and `/sitemap.xml` opted back in. A link to the page from the public front door, alongside the existing ones from the portal sign-in, the dead-link page and the invitation footer.
+
+**`pnpm build` is now part of the gate**, and there is a `pnpm check` script that runs typecheck, lint, tests and build together.
+
+That is the other finding of this package, and it is worth stating plainly: **the production build catches a whole class of defect that typecheck, lint and the test suite pass straight through.** Building this package found two, both shipped in earlier packages and both fatal to a deploy:
+
+- `updates/parts.tsx` (WP11) imported one string constant from `lib/updates/service.ts`, which imports the database. That pulled the entire postgres driver into the browser bundle. `Module not found: Can't resolve 'tls'`.
+- `recipients/[offerId]/parts.tsx` (WP13) did the same through `lib/portal/advance.ts`.
+
+Neither is visible to `tsc`, to eslint, or to vitest, because none of them draws the server/client boundary. Both are now split: the presentational half lives in a database-free module (`lib/portal/stages.ts`, `lib/updates/copy.ts`) and the server module re-exports it. Every package from here runs `pnpm build` before it is called finished.
+
+**Decisions:**
+
+- *robots.txt is the polite one of three layers, not an access control.* It is a request, and a crawler that ignores it is not doing anything a browser could not. The header and the per-route `noindex` are the other two, and every private route is behind a session check regardless.
+- *The header matters more than the meta tag.* A `<meta name="robots">` only exists inside an HTML document. A downloaded participation certificate — an investor's name and the amount they transferred — has no head to put a tag in. `X-Robots-Tag` covers route handlers, PDFs and API replies.
+- *The sitemap carries no `lastModified`.* It would be the time this deployment was built, which is information about the operation rather than about the page, and the page's usefulness does not decay.
+- *`X-Frame-Options: DENY` and `Referrer-Policy: no-referrer` went in alongside.* Not indexing, but the same one-line-per-risk shape: an investor's portal must not be framed by a third party, and a referrer header must not carry a claim token to an outside site.
+
+**Deviations:** none.
+
+**Checklist:** point 9 is this package's, and it is now true rather than nominally true.
+
+9. The verification page is the only indexable route. Three tests: exactly one `page.tsx` in the tree sets `index: true` and it is `verify/page.tsx`; the root layout's default is `index: false` so a page that forgets is still safe; and the catch-all header sets `noindex` for everything a meta tag cannot reach. The generated `robots.txt` and `sitemap.xml` were read out of a real production build rather than inferred.
+
+**Uncertain:**
+
+- `/verify` is a memorable path but it is not obviously *ours*. Somebody who has thrown the email away has to remember the domain as well. §15.1 wants it "safe to reach by typing", which it is, but the practical version of that is the address being on something they already have — worth a line in the invitation's plain-text part beyond the footer link.
