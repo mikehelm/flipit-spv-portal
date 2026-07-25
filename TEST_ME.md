@@ -4,7 +4,7 @@ Rewritten after every work package, so it always describes the current state.
 
 **Current state: work packages 0 to 14 and 16 to 20 are complete — every package except 15, images and video, which is deferred until somewhere to store a file is chosen. Two-factor sign-in, the last release gate, is now built too.** You can sign in, import a spreadsheet of recipients, see the email each one would receive with their real figures, record a compliance approval, walk the pre-flight checklist, send an invitation to one person at a time, follow the link in that invitation into the investor's own private portal, ask and answer questions — privately to one person, or published to everyone with the asker removed — keep a register of interest that can turn into a real offer, publish updates to everyone, to a subset, or to one person, queue automatic reminders for people who have not answered, walk an investor along the eight-step timeline, record that their funds arrived, and hand them a participation certificate as a PDF. Sending a real email needs a Gmail app password, which nobody has connected yet — everything up to that point works.
 
-The most recent package went over every screen for how it looks and how it reads: the brand colours, how it behaves on a phone, and whether somebody using a keyboard or a screen reader can get around it. There is a section on that below, and it is worth ten minutes with your phone.
+The last two packages are the ones that check everything else and then put it somewhere real: a table saying, for each of the forty-eight things the specification requires, which test proves it — and a runbook for the day it goes live. **ACCEPTANCE.md** and **DEPLOYMENT.md** are those two documents, and the plain-English version of each is further down, under "The forty-eight things this was meant to do" and "Putting it somewhere real".
 
 ---
 
@@ -349,6 +349,13 @@ It is worth opening even if you never run a test, because it is the honest accou
 
 The document is generated from the tests rather than written alongside them, so it cannot quietly go out of date. A test reads the specification itself and fails if the wording here drifts from the wording there.
 
+Six of the forty-eight were checked only indirectly — the neighbouring behaviour was tested, but the statement itself was not — and each now has a test of its own. That the preview is byte-for-byte the email that gets sent. That an investor's link carries a token and nothing about them, in any encoding. That the three statements ending "and it is written to the audit log" are true of the log and not just of the screen.
+
+**Two faults found while filling those gaps**, both in the audit log, both now fixed:
+
+- The reminder queue recorded who changed it only when a person did. The scheduled run — the one that creates and deletes queued reminders overnight, with nobody watching — recorded nothing at all. Unattended changes are precisely the ones most in need of a trail; they are now recorded against "system".
+- The guard that keeps secrets out of the audit log read only the top level of an entry, and missed the name the settings screen actually uses for the OpenAI key. It now reads every level. It still reads *names* and never *values* — a sign-in legitimately records that the method was a password, and a check that cries wolf is a check somebody eventually switches off.
+
 ## Putting it somewhere real
 
 **`DEPLOYMENT.md` in this repository is the runbook.** It is written to be followed by one person, in order, on the day: what to set, what to check, what to re-enter, and what each refusal means when you meet one.
@@ -393,6 +400,7 @@ Worth trying, because these are all meant to work:
 ## What is not built yet
 
 - **Documents, images and video.** All need somewhere to store a file, which has not been chosen yet. Nothing else depends on them.
+- **Editing the "Coming to your portal" tiles.** The tiles are there and the rules about their wording are enforced; the screen to change them is not built. See number 30 in `ACCEPTANCE.md`.
 
 ## The round, and closing it
 

@@ -28,7 +28,7 @@ import {
   reminderSchedules,
   rounds,
 } from '@/db/schema'
-import { audit, type Actor } from '@/lib/audit'
+import { audit, systemActor, type Actor } from '@/lib/audit'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { isoToday } from '@/lib/money'
 import {
@@ -238,9 +238,12 @@ export async function refreshQueue(input: {
     }
   }
 
-  if (input.actor && (outcome.created > 0 || outcome.removed > 0)) {
+  // The scheduled run calls this with no actor. A refresh creates and deletes
+  // queued reminders, so an unattended one is exactly the change that most
+  // needs a trail — it falls back to the system actor rather than to silence.
+  if (outcome.created > 0 || outcome.removed > 0) {
     await audit({
-      actor: input.actor,
+      actor: input.actor ?? systemActor,
       entityType: 'round',
       entityId: input.roundId,
       action: 'reminder.queue_refreshed',

@@ -32,11 +32,18 @@ Where a check runs:
 
 - `src/lib/sending/approved-source.test.ts` — unit — "loads the template the same way on both sides of the gate"
 - `src/lib/email/render.test.ts` — unit — "renders the invitation with every figure in both parts"
+- `src/lib/sending/snapshot.test.ts` — unit — "renders the preview from the same source the send snapshots"
+- `src/lib/sending/snapshot.test.ts` — unit — "has no second rendering path anywhere in the application"
+- `src/lib/sending/snapshot.test.ts` — unit — "differs from the email it will send only in the claim token"
+- `src/lib/sending/snapshot.test.ts` — unit — "stores the rendered subject and both bodies rather than re-rendering"
 
 ## 4. Each send produces one personalized email to one recipient and records its result individually. No bulk-send path exists anywhere in the UI or API.
 
 - `src/lib/email/transport/retry.test.ts` — unit — "takes one message, not a list — there is no bulk entry point"
 - `src/lib/email/transport/retry.test.ts` — unit — "reports every attempt so a send event can be written for each"
+- `src/lib/sending/snapshot.test.ts` — unit — "writes exactly one snapshot and one send event per call"
+- `src/lib/sending/snapshot.test.ts` — unit — "takes a single recipient and offers no list parameter"
+- `src/lib/sending/snapshot.test.ts` — unit — "exposes no bulk send in the server action or the row it is bound to"
 
 ## 5. Investor links reveal no personal data in the URL.
 
@@ -47,6 +54,10 @@ Where a check runs:
 - `scripts/verify-lifecycle.ts` — database — "two simultaneous redemptions produce exactly one success"
 - `scripts/verify-lifecycle.ts` — database — "an expired claim link is refused"
 - `scripts/verify-lifecycle.ts` — database — "no token is stored in the clear — only its hash"
+- `src/lib/portal/links.test.ts` — unit — "reveals no part of the recipient’s name or address, in any encoding"
+- `src/lib/portal/links.test.ts` — unit — "reveals no offer id, account id, amount or percentage"
+- `src/lib/portal/links.test.ts` — unit — "no portal route accepts anything but a token in its URL"
+- `src/lib/portal/links.test.ts` — unit — "cannot be pointed at a host a caller supplied"
 
 ## 6. Sending is impossible without a current compliance approval, and editing one character of the template disables sending until re-approval.
 
@@ -90,6 +101,10 @@ Where a check runs:
 - `scripts/verify-certificate.ts` — database — "without the confirmation tick, nothing is recorded"
 - `scripts/verify-certificate.ts` — database — "a mismatched re-typed amount records nothing"
 - `scripts/verify-certificate.ts` — database — "and truly nothing was written"
+- `src/lib/audit-coverage.test.ts` — unit — "records nothing when the confirmation is not ticked"
+- `src/lib/audit-coverage.test.ts` — unit — "records nothing when the re-typed amount is a cent out"
+- `src/lib/audit-coverage.test.ts` — unit — "records the action string the criterion names"
+- `src/lib/audit-coverage.test.ts` — unit — "keeps the bank reference off the funds-received entry (§5)"
 
 ## 13. A published update appears in the intended investors' portals and in no one else's, and its notification email contains no financial detail.
 
@@ -105,11 +120,17 @@ Where a check runs:
 - `src/lib/portal/access.test.ts` — unit — "sunset still lets an investor in to take their records away"
 - `scripts/verify-rounds.ts` — database — "gives an active investor"
 - `scripts/verify-export.ts` — database — "the export itself is audited"
+- `src/lib/export/secrets.test.ts` — unit — "produces the same export bytes whatever mode the service is put into"
+- `src/lib/export/secrets.test.ts` — unit — "puts no service-mode precondition anywhere in the export path"
+- `src/lib/export/secrets.test.ts` — unit — "gates each export route on identity alone"
 
 ## 15. An investor account can hold a second offer under a second round without schema changes.
 
 - `src/db/schema.test.ts` — unit — "investor accounts carry no round reference — they are durable (§4.3)"
 - `src/db/schema.test.ts` — unit — "an offer belongs to a round and an account, so accounts outlive rounds (§4.3)"
+- `src/db/second-offer.test.ts` — unit — "holds a second offer under a second round with no schema change"
+- `src/db/second-offer.test.ts` — unit — "matches an incoming row to the account that already exists"
+- `src/db/second-offer.test.ts` — unit — "scopes the recipient row to its round, so the same address can appear in the next one"
 
 ## 16. David can reply and the message is logged against the correct record and thread.
 
@@ -168,6 +189,10 @@ Where a check runs:
 - `src/lib/email/transport/secret.test.ts` — unit — "cannot be reached by JSON.stringify, even nested"
 - `src/lib/audit.test.ts` — unit — "names every offending key so the fix is obvious"
 - `scripts/verify-export.ts` — database — "no metadata key looks like a credential or a body"
+- `src/lib/export/secrets.test.ts` — unit — "names no credential in any recipient or audit export header"
+- `src/lib/export/secrets.test.ts` — unit — "never selects, decrypts or returns the stored key from the settings action"
+- `src/lib/export/secrets.test.ts` — unit — "has no console call in any export module, export route or settings file"
+- `src/lib/export/secrets.test.ts` — unit — "reads the key the settings action itself uses, and reads it at every depth"
 
 ## 26. A percentage column that could read as 5% or 0.05 raises an explicit question rather than being coerced.
 
@@ -196,6 +221,9 @@ Where a check runs:
 - `src/lib/portal/roadmap.test.ts` — unit — "rejects a promise of return, valuation or liquidity"
 - `src/lib/portal/roadmap.test.ts` — unit — "rejects a timeline — §13.1: "No dates. No soon.""
 - `src/lib/portal/roadmap.test.ts` — unit — "is rendered beneath the tiles on the investor portal"
+- `src/lib/audit-coverage.test.ts` — unit — "calls the one audit helper from inside its own body"
+- `src/lib/audit-coverage.test.ts` — unit — "names every exported reminder mutation that writes to the database"
+- `src/lib/audit-coverage.test.ts` — unit — "registers cancelMany even though it delegates its writes"
 
 **Note.** Half of this is not built. The wording constraint is enforced, and the standing line §13.1 requires is on the page and cannot be switched off. "Configurable by the owner" is not: the tiles are seeded and there is no screen to add, rename or hide one. `forbiddenWordsInTileLabel` is the gate that surface must call, and it exists ahead of it.
 
@@ -239,11 +267,17 @@ _No automated check._
 - `src/lib/qa/service.test.ts` — unit — "waits when there is no answer at all"
 - `src/lib/qa/messages.test.ts` — unit — "says plainly that nothing has gone to the investor yet"
 - `scripts/verify-qa.ts` — database — "a notification that cannot be sent does not lose the question"
+- `src/lib/qa/defaults.test.ts` — unit — "confirms in the words PORTAL_COPY uses, once the question is recorded"
+- `src/lib/qa/defaults.test.ts` — unit — "is the same confirmation whatever the account, and repeats nothing back"
+- `src/lib/qa/defaults.test.ts` — unit — "confirms even when the notification to David could not get out"
 
 ## 37. An answer defaults to private — visible only to the asker — and is published only when the box is explicitly ticked.
 
 - `src/lib/qa/visibility.test.ts` — unit — "still lets a read-only visitor read their own correspondence"
 - `scripts/verify-qa.ts` — database — "saving does not publish"
+- `src/lib/qa/defaults.test.ts` — unit — "hands recordAnswer publish false when the field never arrives"
+- `src/lib/qa/defaults.test.ts` — unit — "reads a field that never arrived as unticked"
+- `src/lib/qa/defaults.test.ts` — unit — "has no visibility flag anywhere in the module that defaults to true"
 
 ## 38. A published entry shows no name, initials, email, or identifying timestamp, and David can rewrite the question text for publication while the original is preserved on the record.
 
@@ -274,6 +308,8 @@ _No automated check._
 - `scripts/verify-certificate.ts` — database — "a certificate is issued"
 - `scripts/verify-certificate.ts` — database — "carrying the investor’s name"
 - `scripts/verify-certificate.ts` — database — "the amount received"
+- `src/lib/audit-coverage.test.ts` — unit — "gives each audited mutation an action string of its own"
+- `src/lib/qa/anonymity.test.ts` — unit — "returns null for a withdrawn entry even if the flag was left set"
 
 ## 43. The anti-phishing page is publicly reachable without sign-in, is the only indexed route, and names the exact sending address and link domain.
 

@@ -87,6 +87,22 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
         'loads the template the same way on both sides of the gate',
       ),
       unit('src/lib/email/render.test.ts', 'renders the invitation with every figure in both parts'),
+      unit(
+        'src/lib/sending/snapshot.test.ts',
+        'renders the preview from the same source the send snapshots',
+      ),
+      unit(
+        'src/lib/sending/snapshot.test.ts',
+        'has no second rendering path anywhere in the application',
+      ),
+      unit(
+        'src/lib/sending/snapshot.test.ts',
+        'differs from the email it will send only in the claim token',
+      ),
+      unit(
+        'src/lib/sending/snapshot.test.ts',
+        'stores the rendered subject and both bodies rather than re-rendering',
+      ),
     ],
   },
   {
@@ -101,6 +117,18 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
       unit(
         'src/lib/email/transport/retry.test.ts',
         'reports every attempt so a send event can be written for each',
+      ),
+      unit(
+        'src/lib/sending/snapshot.test.ts',
+        'writes exactly one snapshot and one send event per call',
+      ),
+      unit(
+        'src/lib/sending/snapshot.test.ts',
+        'takes a single recipient and offers no list parameter',
+      ),
+      unit(
+        'src/lib/sending/snapshot.test.ts',
+        'exposes no bulk send in the server action or the row it is bound to',
       ),
     ],
   },
@@ -118,6 +146,22 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
       ),
       database('scripts/verify-lifecycle.ts', 'an expired claim link is refused'),
       database('scripts/verify-lifecycle.ts', 'no token is stored in the clear — only its hash'),
+      unit(
+        'src/lib/portal/links.test.ts',
+        'reveals no part of the recipient’s name or address, in any encoding',
+      ),
+      unit(
+        'src/lib/portal/links.test.ts',
+        'reveals no offer id, account id, amount or percentage',
+      ),
+      unit(
+        'src/lib/portal/links.test.ts',
+        'no portal route accepts anything but a token in its URL',
+      ),
+      unit(
+        'src/lib/portal/links.test.ts',
+        'cannot be pointed at a host a caller supplied',
+      ),
     ],
   },
   {
@@ -222,6 +266,22 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
       ),
       database('scripts/verify-certificate.ts', 'a mismatched re-typed amount records nothing'),
       database('scripts/verify-certificate.ts', 'and truly nothing was written'),
+      unit(
+        'src/lib/audit-coverage.test.ts',
+        'records nothing when the confirmation is not ticked',
+      ),
+      unit(
+        'src/lib/audit-coverage.test.ts',
+        'records nothing when the re-typed amount is a cent out',
+      ),
+      unit(
+        'src/lib/audit-coverage.test.ts',
+        'records the action string the criterion names',
+      ),
+      unit(
+        'src/lib/audit-coverage.test.ts',
+        'keeps the bank reference off the funds-received entry (§5)',
+      ),
     ],
   },
   {
@@ -254,6 +314,18 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
       ),
       database('scripts/verify-rounds.ts', 'gives an active investor'),
       database('scripts/verify-export.ts', 'the export itself is audited'),
+      unit(
+        'src/lib/export/secrets.test.ts',
+        'produces the same export bytes whatever mode the service is put into',
+      ),
+      unit(
+        'src/lib/export/secrets.test.ts',
+        'puts no service-mode precondition anywhere in the export path',
+      ),
+      unit(
+        'src/lib/export/secrets.test.ts',
+        'gates each export route on identity alone',
+      ),
     ],
   },
   {
@@ -267,6 +339,18 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
       unit(
         'src/db/schema.test.ts',
         'an offer belongs to a round and an account, so accounts outlive rounds (§4.3)',
+      ),
+      unit(
+        'src/db/second-offer.test.ts',
+        'holds a second offer under a second round with no schema change',
+      ),
+      unit(
+        'src/db/second-offer.test.ts',
+        'matches an incoming row to the account that already exists',
+      ),
+      unit(
+        'src/db/second-offer.test.ts',
+        'scopes the recipient row to its round, so the same address can appear in the next one',
       ),
     ],
   },
@@ -400,6 +484,22 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
       unit('src/lib/email/transport/secret.test.ts', 'cannot be reached by JSON.stringify, even nested'),
       unit('src/lib/audit.test.ts', 'names every offending key so the fix is obvious'),
       database('scripts/verify-export.ts', 'no metadata key looks like a credential or a body'),
+      unit(
+        'src/lib/export/secrets.test.ts',
+        'names no credential in any recipient or audit export header',
+      ),
+      unit(
+        'src/lib/export/secrets.test.ts',
+        'never selects, decrypts or returns the stored key from the settings action',
+      ),
+      unit(
+        'src/lib/export/secrets.test.ts',
+        'has no console call in any export module, export route or settings file',
+      ),
+      unit(
+        'src/lib/export/secrets.test.ts',
+        'reads the key the settings action itself uses, and reads it at every depth',
+      ),
     ],
   },
   {
@@ -451,6 +551,18 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
       unit('src/lib/portal/roadmap.test.ts', 'rejects a promise of return, valuation or liquidity'),
       unit('src/lib/portal/roadmap.test.ts', 'rejects a timeline — §13.1: "No dates. No soon."'),
       unit('src/lib/portal/roadmap.test.ts', 'is rendered beneath the tiles on the investor portal'),
+      unit(
+        'src/lib/audit-coverage.test.ts',
+        'calls the one audit helper from inside its own body',
+      ),
+      unit(
+        'src/lib/audit-coverage.test.ts',
+        'names every exported reminder mutation that writes to the database',
+      ),
+      unit(
+        'src/lib/audit-coverage.test.ts',
+        'registers cancelMany even though it delegates its writes',
+      ),
     ],
     manual:
       'Half of this is not built. The wording constraint is enforced, and the standing ' +
@@ -542,6 +654,18 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
         'says plainly that nothing has gone to the investor yet',
       ),
       database('scripts/verify-qa.ts', 'a notification that cannot be sent does not lose the question'),
+      unit(
+        'src/lib/qa/defaults.test.ts',
+        'confirms in the words PORTAL_COPY uses, once the question is recorded',
+      ),
+      unit(
+        'src/lib/qa/defaults.test.ts',
+        'is the same confirmation whatever the account, and repeats nothing back',
+      ),
+      unit(
+        'src/lib/qa/defaults.test.ts',
+        'confirms even when the notification to David could not get out',
+      ),
     ],
   },
   {
@@ -551,6 +675,18 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
     covered: [
       unit('src/lib/qa/visibility.test.ts', 'still lets a read-only visitor read their own correspondence'),
       database('scripts/verify-qa.ts', 'saving does not publish'),
+      unit(
+        'src/lib/qa/defaults.test.ts',
+        'hands recordAnswer publish false when the field never arrives',
+      ),
+      unit(
+        'src/lib/qa/defaults.test.ts',
+        'reads a field that never arrived as unticked',
+      ),
+      unit(
+        'src/lib/qa/defaults.test.ts',
+        'has no visibility flag anywhere in the module that defaults to true',
+      ),
     ],
   },
   {
@@ -606,6 +742,14 @@ export const ACCEPTANCE_CRITERIA: Criterion[] = [
       database('scripts/verify-certificate.ts', 'a certificate is issued'),
       database('scripts/verify-certificate.ts', 'carrying the investor’s name'),
       database('scripts/verify-certificate.ts', 'the amount received'),
+      unit(
+        'src/lib/audit-coverage.test.ts',
+        'gives each audited mutation an action string of its own',
+      ),
+      unit(
+        'src/lib/qa/anonymity.test.ts',
+        'returns null for a withdrawn entry even if the flag was left set',
+      ),
     ],
   },
   {
