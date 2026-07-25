@@ -135,12 +135,35 @@ The link in an invitation goes to `/portal/claim/…`. Opening it is what verifi
 
 - Open the same claim link twice. It works once.
 - Make up a link and open it. It fails with exactly the same page as an expired one, a spent one, and one belonging to somebody who has been suspended. There is no wording anywhere that confirms an address exists.
-- At `/portal/signin`, ask for a link with an address that has a record, and then with one that does not. The answer is the same sentence both times.
-- Suspend an investor. Their session dies on their very next click, their unused links stop working, and asking for a new one is accepted politely and produces nothing.
+- At `/portal/signin`, ask for a link with an address that has a record, and then with one that does not. The answer is the same sentence both times — **and takes the same time**. That second part matters more than it sounds: the form is public and nobody has to be signed in to use it, so if a known address came back faster than an unknown one, anyone could work out who is on the list by timing it.
+- Suspend an investor, from **Investors** (see below). Their session dies on their very next click, their unused links stop working, and asking for a new one is accepted politely and produces nothing.
 - Close an investor's account. By default they can still sign back in and read their own record — an investor who has sent money should not lose the record of it.
 - Look at a timeline step that has not been reached. It says "Not yet reached. There is nothing for you to do at this stage." and shows no amount, no date and no blank where one would go.
 
 **What an investor cannot see, by design:** that any other investor exists. No count, no total raised, no position in any queue, and no wording that hints at any of it. The code that loads their page is bound to their own account and never loads anybody else's data at all.
+
+---
+
+## Investors — access, suspension and closure
+
+Sign in as the operator and open **Investors**. Every account is here: their status, how many offers they hold, whether their mailbox has been verified, when they last signed in, and the whole history of status changes with the reason recorded against each one.
+
+**The number worth looking at is on every row:** how many live sessions and unspent links that person holds *right now*. Suspending somebody ends all of them in the same instant the status is written, and it is better to see what that means before you press the button than after.
+
+To change somebody's status you give three things: where they are going, a reason of at least ten characters, and the word — `SUSPEND`, `CLOSE`, `ARCHIVE` — typed out. The reason goes on that investor's own record with your name and the time. The typed word is there because a click on the wrong row looks exactly like a click on the right one.
+
+**Things worth trying:**
+
+- **Suspend somebody who is signed in.** Their next click takes them to a notice, not their record. Their unspent links stop working. Asking for a new link is accepted with the same polite sentence as always and produces nothing at all.
+- **Then check another investor.** Untouched — still signed in, links still good. Suspension is about one person.
+- **Try it without a reason.** Refused, and nothing changes — not the status, not the sessions, not the links.
+- **Try to archive as the operator.** Refused. Archiving is the owner's, and the attempt is logged.
+- **Restore them to active.** It works — a suspension is reversible. But it does not un-revoke anything: they sign back in the ordinary way. Reversing a decision does not resurrect the credentials that decision killed.
+- **Close an account.** Same revocation, but by default they can still sign back in and read their own record. That default is on the owner's settings page.
+
+**Nothing on this screen emails anybody.** There is a checkbox recording whether you have told the investor, and it is recorded either way — but telling them is an update or an email you write deliberately. The application does not send on a status change.
+
+If you would rather see this exercised against a real database than click through it, run `pnpm verify:lifecycle`. It sets up two investors with two sessions and two links each, checks thirty things, and cleans up after itself.
 
 ---
 
