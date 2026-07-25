@@ -231,12 +231,18 @@ describe('the operator contact method', () => {
     expect(whatsapp.flags).toEqual({ contact_phone: false, contact_whatsapp: true })
   })
 
-  it('sets no flag when the number is missing, so no label renders alone', () => {
+  it('keeps the flag set when the number is missing, so pre-flight sees it — AC21', () => {
+    // The label never renders alone, because the email never renders at all:
+    // the flag stays true, {{sender_phone}} is referenced inside a live block,
+    // and rendering fails by name. Dropping the flag here would send a
+    // contact-less email quietly, which is the failure AC21 is written against.
     const context = resolveEmailVariables(
       recipient(),
       defaults({ contactMethod: 'PHONE', defaultSenderPhone: null }),
     )
-    expect(context.flags.contact_phone).toBe(false)
+    expect(context.flags.contact_phone).toBe(true)
+    expect(context.variables.sender_phone).toBeNull()
+    expect(context.notes.sender_phone).toBeDefined()
   })
 
   it('says so plainly when the operator has not chosen a contact method', () => {

@@ -492,6 +492,13 @@ export interface BatchValidationResult {
    * nothing in the batch can send until it is fixed.
    */
   templateErrors: Array<{ kind: EmailTemplateKind; message: string }>
+  /**
+   * Something in the service configuration is unfinished, so no recipient in
+   * the batch can be rendered honestly. Kept apart from `templateErrors`
+   * because the fix is in settings rather than in a template, and apart from
+   * `problems` because it is not attributable to any one recipient.
+   */
+  configurationErrors: string[]
 }
 
 /**
@@ -518,7 +525,21 @@ export function validateBatch(
 
   const problems: BatchProblem[] = []
   const templateErrors: BatchValidationResult['templateErrors'] = []
+  const configurationErrors: string[] = []
   const affected = new Set<string>()
+
+  // §2.1 step 2 unanswered. Both contact flags are false, so every contact
+  // block is skipped and every recipient renders perfectly — which is exactly
+  // why this has to be checked here rather than inferred from the render. An
+  // invitation to a securities offer that names no way to reach a human is not
+  // a thing this application sends.
+  if (defaults.contactMethod === null) {
+    configurationErrors.push(
+      'The operator has not chosen a contact method (BUILD_SPEC §2.1 step 2). ' +
+        'Finish operator onboarding before sending — otherwise the invitation ' +
+        'carries no way to make contact.',
+    )
+  }
 
   const parsed: EmailTemplateSource[] = []
   for (const template of templates) {
@@ -569,10 +590,14 @@ export function validateBatch(
   }
 
   return {
-    ok: problems.length === 0 && templateErrors.length === 0,
+    ok:
+      problems.length === 0 &&
+      templateErrors.length === 0 &&
+      configurationErrors.length === 0,
     checked: recipients.length,
     problems,
     affectedOfferIds: [...affected],
     templateErrors,
+    configurationErrors,
   }
 }

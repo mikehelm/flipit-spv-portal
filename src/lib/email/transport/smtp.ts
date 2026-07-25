@@ -1,3 +1,4 @@
+import type { SecureVersion } from 'node:tls'
 import { inspect } from 'node:util'
 import nodemailer from 'nodemailer'
 import { classifySendError } from './classify'
@@ -52,7 +53,12 @@ export interface SmtpClientOptions {
   greetingTimeout: number
   socketTimeout: number
   pool: boolean
-  tls: { minVersion: string; servername: string }
+  /**
+   * `minVersion` is narrowed to the literals Node's TLS stack accepts rather
+   * than `string`. Typed as `string` a typo compiles and then silently falls
+   * back to the runtime default, which is a quieter failure than it deserves.
+   */
+  tls: { minVersion: SecureVersion; servername: string }
 }
 
 export interface SmtpSendOptions {

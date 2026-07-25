@@ -326,7 +326,18 @@ describe('validateBatch — pre-flight, BUILD_SPEC §19 and AC21', () => {
       problems: [],
       affectedOfferIds: [],
       templateErrors: [],
+      configurationErrors: [],
     })
+  })
+
+  it('blocks the whole batch when the operator has chosen no contact method', () => {
+    // Both contact flags are false here, so every recipient renders cleanly.
+    // The block has to come from the configuration check, not from the render.
+    const result = validateBatch([recipient()], defaults({ contactMethod: null }))
+    expect(result.ok).toBe(false)
+    expect(result.problems).toEqual([])
+    expect(result.configurationErrors).toHaveLength(1)
+    expect(result.configurationErrors[0]).toMatch(/contact method/i)
   })
 })
 
