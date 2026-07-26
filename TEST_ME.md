@@ -6,6 +6,8 @@ Rewritten after every work package, so it always describes the current state.
 
 You can also upload brand images that are stripped of their embedded location and camera data before they are stored; David can record a short personal video in the browser or upload one from his phone, watch it in place, and publish it to the portal when he is ready; and you can put a subscription agreement or any other PDF on an investor's record, check it, and issue it to their portal.
 
+**Since then, six more pieces have landed**, all of them things the build had written down as unfinished rather than new ideas. Files can now be stored in a real cloud bucket instead of only on a disk, which is what a live deployment needs. A document you have already issued can be **corrected** — the new version replaces the old on the investor's portal, and the old one stays visible and marked as replaced, so a correction is never a silent swap. Uploaded videos now have their metadata stripped like everything else. David's video **plays on an iPhone**, which it did not before. Videos are sent as a stream rather than being held whole in memory. And `pnpm media:check` tells you whether every stored file is actually there and the size its record says — the command to run after restoring a backup.
+
 The last two packages are the ones that check everything else and then put it somewhere real: a table saying, for each of the forty-eight things the specification requires, which test proves it — and a runbook for the day it goes live. **ACCEPTANCE.md** and **DEPLOYMENT.md** are those two documents, and the plain-English version of each is further down, under "The forty-eight things this was meant to do" and "Putting it somewhere real".
 
 ---
