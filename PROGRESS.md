@@ -5456,3 +5456,153 @@ measuring the wrong thing.
   costs.* Both are guesses stated as facts in these notes.
 - *The password-reset journey is still not built,* and is a decision for Michael
   rather than a thing to build over him. It belongs in OPEN_DECISIONS.md.
+
+## The recorder, driven
+
+Three consecutive entries ended with the same line: *"the recorder component
+itself is still driven by nobody. Arm, start, stop, review, discard, upload —
+the state machine in `recorder.tsx` — has never been exercised."* It is the only
+path in this application that **produces** a file from a browser rather than
+accepting one, it holds a live camera, and everything about it had been verified
+by reading it.
+
+It stayed unrun because it needs a fixture nothing else needed: `MEDIA_STORE`
+configured, an **operator** rather than the owner, that operator **onboarded**,
+a camera, and a browser willing to record from one.
+
+**Built.** `scripts/verify-recorder.ts` — `pnpm verify:recorder`, 47 checks, in
+a real Chromium with a synthetic capture device.
+
+- The owner gets no recorder, no file input, and a 403 from the upload endpoint
+  with a message naming whose video it is.
+- An operator who has not finished onboarding is sent to onboarding, and **that
+  screen is opened by an automated check for the first time.** It was named as
+  unreachable in two previous Uncertain lists, because `verify:viewport` signs in
+  as the owner and the page is operator-only.
+- All six §2.1 steps, through the real forms and the real server actions.
+- Camera on; camera off **with the tracks stopped**, which is the difference
+  between the light going out and the light staying on.
+- Record, watch the timer count, stop. A `blob:` on the review element, and the
+  camera released without being asked.
+- *Record it again* discards: no row, no file.
+- *Use this one* uploads: one unpublished row, one file, and the bytes on disk
+  equal to the bytes the row claims.
+- A text file wearing a `.mp4` extension is refused, with the server's own
+  sentence shown in the recorder and nothing stored.
+- Navigating away leaves no camera running.
+- And no Content-Security-Policy violation through any of it — the surface the
+  policy notes single out as most likely to be silently broken by a header, and
+  the one nothing had ever pressed.
+
+**Decisions.**
+
+- ***Its own script, not another section of `verify:viewport`.*** The previous
+  entry's Uncertain list said that run had become a security suite wearing a
+  viewport name. This needs a differently-configured server — `MEDIA_STORE` set
+  — so it could not have shared one anyway, and the split is the direction that
+  file should have been going.
+- ***Onboarding is walked, not written.*** The first version set
+  `onboarding_completed_at` and reloaded, and the application sent the operator
+  straight back. §2.1's rule requires **every step done *and* the completion
+  recorded**, precisely so that a setup which has since lost a step walks the
+  operator back through the gap rather than silently no longer working. The
+  fixture was asking the application to accept a state it is designed to reject,
+  and the application was right. Doing the six steps properly is more work and it
+  is also what made the onboarding screen testable at all.
+- ***The forms are waited on through the database, not the page.*** They are
+  `useActionState`: the click posts, the server revalidates, React re-renders in
+  place, and there is no navigation — so `networkidle` is satisfied before
+  anything has happened and the next step reaches for a control that has not been
+  drawn. What actually settles is the row the action wrote.
+- ***The fixture puts the sending account back.*** Step 3 stores an SMTP pair,
+  and this run supplies an obviously fake one. Left behind, it would leave a
+  developer's own database claiming a sending account is connected when none is
+  — discovered later, on a screen about sending, by somebody who did not run
+  this. Four columns are captured before and restored after, and a check asserts
+  that onboarding left `smtpLastVerifiedAt` null: **storing a credential is not
+  verifying one**, and sending stays refused. No gate was touched and this script
+  cannot send.
+- ***The onboarding trail is reset at the start, and only the operator's.***
+  Three of the six steps are recorded as audit entries rather than columns, which
+  makes onboarding sticky: a half-finished run leaves a button reading
+  "Understood — noted again" where the next run expects "Understood". That is
+  exactly what happened. The filter names one user and the
+  `operator_onboarding.%` actions; nothing else in the log is touched. A check
+  that only passes on a clean database is a check nobody runs twice, and this one
+  now passes twice in a row.
+- ***`--use-fake-device-for-media-stream`, and deliberately not
+  `--use-fake-ui-for-media-stream`.*** The second auto-accepts everything,
+  including a request the Permissions-Policy header has already refused — an
+  earlier entry found it making a broken `camera=()` look fine. Playwright's
+  granted permission is kept, because that is what a *person* grants.
+- ***Proved by breaking it.*** `releaseCamera()` was removed from the
+  MediaRecorder's `onstop`, rebuilt, and run: *"and the camera is released
+  without being asked"* failed and nothing else did. Restored, `git status`
+  clean, 47 of 47.
+
+**A second finding, from the same break.** The helper that counts live camera
+tracks read `document.querySelector('video')` — the first video element. Once a
+video has been stored the page renders a *preview* of it above the recorder, so
+the first element is the preview, which has a `src` and never a `srcObject`. The
+camera therefore read as off while it was on. That is the wrong answer in the
+dangerous direction: a check for "the camera was released" passing because it
+was looking at the wrong element. It now scans every video element on the page.
+
+**Deviations.** None. No application file changed in this entry.
+
+**Checklist.**
+
+1. *Money as a `number`?* No.
+2. *A send path bypassing a gate?* No — and this is the one to read carefully,
+   because the fixture touches the mail configuration. It stores a credential
+   through the ordinary onboarding form and asserts that the connection is
+   **not** marked verified afterwards. The §18.1 base-URL guard and the
+   verified-connection gate are both untouched, and nothing here sends.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No. This is one operator's own
+   video; no investor data is read or rendered.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The fake app
+   password is in the script's source as an obviously invalid constant and is
+   never printed — the failure details print an element, a status, or a count.
+   `connectSendingAccount` already logs only `{ transport: 'SMTP' }`, and this
+   run is a demonstration that it does.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2415) and `pnpm build` are green.
+`pnpm verify:recorder` is 47 of 47, twice in a row; `pnpm verify:viewport` is
+323 of 323.
+
+**Uncertain.**
+
+- ***The 64 MB limit is never reached.*** The client refuses an oversized file
+  before it posts, and the server refuses it again on the declared length and
+  then on the bytes. None of those three refusals has been seen. Producing a
+  64 MB fixture is the only reason, and it is a poor one — a temporary file of
+  the right size would exercise all three.
+- ***Publishing is not driven.*** This run stops at an unpublished video. The
+  publish control, the take-down, and the rule that an unpublished video is
+  unreachable by an investor are covered by other checks at the database level
+  and by nothing in a browser.
+- ***The caption and transcript fields are not filled in.*** They sit on the
+  same page and are the text alternative an investor gets if the video will not
+  play, which makes them an accessibility surface rather than a nicety.
+- ***A second recording replacing a published one is not exercised.*** The
+  component renders a specific warning for that case — *"Uploading a replacement
+  **takes it down**"* — and the run never reaches a state where it appears.
+- *The image upload preview and the email template preview are still
+  unexercised.* Both are named in the CSP notes alongside the recorder, and the
+  recorder was the largest of the three.
+- *Nothing measures bundle size, and nothing measures what the middleware
+  costs.*
+- *`img-src data:`, `media-src blob:` and `worker-src blob:` have never been
+  asked what an attacker could do with them.* Every other directive is now
+  `'self'` or `'none'`.
+- *The password-reset journey is still not built,* and belongs in
+  OPEN_DECISIONS.md as a question for Michael rather than in another Uncertain
+  list.

@@ -27,6 +27,7 @@
     "verify:2fa": "tsx scripts/verify-second-factor.ts",
     "verify:account-access": "tsx scripts/verify-account-access.ts",
     "verify:media": "tsx scripts/verify-media.ts",
+    "verify:recorder": "tsx scripts/verify-recorder.ts",
     "verify:memory": "tsx scripts/verify-memory.ts",
     "verify:object-store": "tsx scripts/verify-object-store.ts",
     "media:check": "tsx scripts/check-media.ts",
