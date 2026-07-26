@@ -10,10 +10,14 @@
  *   - a queued reminder can be cancelled and is never recreated,
  *   - nothing sends in a non-active service mode.
  *
- *   pnpm tsx scripts/verify-reminders.ts
+ * And, since the job went on a schedule, the fifth: that two runs at once send
+ * one message rather than two. That section spawns a real second process.
+ *
+ *   pnpm verify:reminders
  */
 
 import 'dotenv/config'
+import { spawn } from 'node:child_process'
 import { eq, isNull, like } from 'drizzle-orm'
 import { db } from '@/db'
 import {
@@ -27,8 +31,9 @@ import {
   users,
 } from '@/db/schema'
 import { SERVICE_CONFIG_ID } from '@/lib/auth/service-config'
+import { withRunLock } from '@/lib/reminders/lock'
 import { cancelReminder, loadQueue, refreshQueue, rescheduleReminder } from '@/lib/reminders/queue'
-import { runDueReminders, sendOne } from '@/lib/reminders/run'
+import { ALREADY_CLAIMED_REASON, runDueReminders, sendOne } from '@/lib/reminders/run'
 
 const PREFIX = 'wp12-verify'
 let actor: { kind: 'user'; id: string; label: string }
@@ -77,6 +82,163 @@ async function cleanup(): Promise<void> {
 function futureDeadline(days: number): string {
   const date = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
   return date.toISOString().slice(0, 10)
+}
+
+/**
+ * One runner at a time. BUILD_SPEC §6.5, §14.
+ *
+ * The hazard this covers arrives with the schedule, not with the code: an hourly
+ * cron plus a run that takes longer than an hour means two runs overlapping, and
+ * before this there was nothing stopping both of them sending the same reminder.
+ *
+ * Two defences, proved separately, because the point of having two is that
+ * neither depends on the other:
+ *
+ *   - the advisory lock, proved against a real second process taking a real
+ *     second database session,
+ *   - the per-row claim, proved by claiming a row and then asking the sender for
+ *     it, which is what the loser of a race does.
+ */
+async function oneRunnerAtATime(input: {
+  roundId: string
+  offerId: string
+}): Promise<void> {
+  console.log('\nOne runner at a time (§6.5, §14)')
+
+  // --- The lock, against a second process ---------------------------------
+  const outside = await probeLockFromAnotherProcess()
+  check('the lock is free when nothing is running', outside === 'FREE', outside)
+
+  const insideLock = await withRunLock(async () => probeLockFromAnotherProcess())
+  check('the lock was taken', insideLock.acquired)
+  check(
+    'and a second process is refused while it is held',
+    insideLock.result === 'BUSY',
+    String(insideLock.result),
+  )
+
+  const afterRelease = await probeLockFromAnotherProcess()
+  check('the lock is released afterwards', afterRelease === 'FREE', afterRelease)
+
+  const heldElsewhere = await withRunLock(async () => runDueReminders({ actor }))
+  check(
+    're-entering within one process is the same run, not a competing one',
+    heldElsewhere.acquired && heldElsewhere.result?.ran === true,
+  )
+
+  // Two runs started at the same instant. Both reach Postgres before either
+  // has the lock, so exactly one of them can win.
+  const [a, b] = await Promise.all([runDueReminders({ actor }), runDueReminders({ actor })])
+  check(
+    'of two runs started at once, exactly one runs',
+    [a.ran, b.ran].filter(Boolean).length === 1,
+    `${a.ran} and ${b.ran}`,
+  )
+  const stopped = a.ran ? b : a
+  check(
+    'and the one that did not run sent nothing and considered nothing',
+    stopped.sent === 0 && stopped.considered === 0 && stopped.outcomes.length === 0,
+  )
+
+  // --- The claim, on its own ----------------------------------------------
+  await db
+    .update(reminderEvents)
+    .set({ skippedReason: null, sentAt: null, cancelledAt: null, claimedAt: null })
+    .where(eq(reminderEvents.offerId, input.offerId))
+
+  const target = await db.query.reminderEvents.findFirst({
+    where: eq(reminderEvents.offerId, input.offerId),
+  })
+  if (!target) {
+    check('a reminder exists to race for', false, 'none found')
+    return
+  }
+
+  await db
+    .update(reminderEvents)
+    .set({ scheduledFor: new Date(Date.now() - 60_000), claimedAt: new Date() })
+    .where(eq(reminderEvents.id, target.id))
+
+  const loser = await sendOne({ reminderId: target.id, actor })
+  check(
+    'a run that finds the row already claimed leaves it alone',
+    loser.kind === 'SKIPPED' && loser.reason === ALREADY_CLAIMED_REASON,
+    loser.kind === 'SENT' ? 'it sent' : `${loser.kind}: ${loser.reason.slice(0, 60)}`,
+  )
+
+  const untouched = await db.query.reminderEvents.findFirst({
+    where: eq(reminderEvents.id, target.id),
+  })
+  check(
+    'and writes no outcome over the top of the run that won',
+    untouched?.sentAt === null && untouched?.skippedReason === null,
+  )
+
+  const claimedQueue = await loadQueue(input.roundId)
+  const claimedRow = claimedQueue.find((row) => row.id === target.id)
+  check('the queue shows it as being sent', claimedRow?.state === 'SENDING')
+
+  const refusedCancel = await cancelReminder({
+    reminderId: target.id,
+    actorUserId: null,
+    actor,
+  })
+  check('it cannot be cancelled while a run holds it', !refusedCancel.ok)
+
+  const beforeRefresh = await countReminders(input.offerId)
+  await refreshQueue({ roundId: input.roundId, actor })
+  const afterRefresh = await countReminders(input.offerId)
+  const survived = await db.query.reminderEvents.findFirst({
+    where: eq(reminderEvents.id, target.id),
+  })
+  check('a queue refresh does not delete it', survived !== undefined)
+  check(
+    'and does not plan a second reminder on top of it',
+    afterRefresh <= beforeRefresh,
+    `${beforeRefresh} then ${afterRefresh}`,
+  )
+
+  const released = await rescheduleReminder({
+    reminderId: target.id,
+    scheduledFor: new Date(Date.now() + 2 * 86400000),
+    actor,
+  })
+  check('rescheduling releases it, which is how a dead run is recovered', released.ok)
+
+  const afterRelease2 = await db.query.reminderEvents.findFirst({
+    where: eq(reminderEvents.id, target.id),
+  })
+  check('and the claim is gone', afterRelease2?.claimedAt === null)
+}
+
+async function countReminders(offerId: string): Promise<number> {
+  const rows = await db
+    .select({ id: reminderEvents.id })
+    .from(reminderEvents)
+    .where(eq(reminderEvents.offerId, offerId))
+  return rows.length
+}
+
+/**
+ * Ask a genuinely separate process whether it can take the lock.
+ *
+ * Separate on purpose. An advisory lock is held by a database session, and
+ * proving exclusion from inside the session that holds it proves nothing.
+ */
+function probeLockFromAnotherProcess(): Promise<string> {
+  return new Promise((resolve) => {
+    const child = spawn('pnpm', ['tsx', 'scripts/try-reminder-lock.ts'], {
+      cwd: process.cwd(),
+      env: process.env,
+    })
+    let out = ''
+    child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString()))
+    child.stderr.on('data', (chunk: Buffer) => (out += chunk.toString()))
+    child.on('close', () => {
+      const line = out.trim().split('\n').map((row) => row.trim()).filter(Boolean).pop() ?? ''
+      resolve(line)
+    })
+  })
 }
 
 async function main(): Promise<void> {
@@ -383,6 +545,8 @@ async function main(): Promise<void> {
     .update(reminderSchedules)
     .set({ enabled: true, daysBefore: [7, 2], maxPerRecipient: 2 })
     .where(eq(reminderSchedules.id, schedule.id))
+
+  await oneRunnerAtATime({ roundId: round.id, offerId: chaseable.offer.id })
 
   await cleanup()
 

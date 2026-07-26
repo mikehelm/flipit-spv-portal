@@ -45,6 +45,8 @@ function StatePill({ row }: { row: QueueRow }) {
       return <Pill tone="neutral">Cancelled</Pill>
     case 'SKIPPED':
       return <Pill tone="warn">Skipped</Pill>
+    case 'SENDING':
+      return <Pill tone="warn">Being sent</Pill>
     case 'HELD':
       return <Pill tone="warn">Will not send</Pill>
     default:
@@ -53,7 +55,10 @@ function StatePill({ row }: { row: QueueRow }) {
 }
 
 function QueueEntry({ row }: { row: QueueRow }) {
-  const pending = row.state === 'QUEUED' || row.state === 'HELD'
+  // A row being sent keeps its controls, but only the reschedule one does
+  // anything: cancelling is refused while a run holds it, and rescheduling is
+  // the operator's way of releasing a run that died mid-send.
+  const pending = row.state === 'QUEUED' || row.state === 'HELD' || row.state === 'SENDING'
 
   return (
     <li className="rounded-sm border hairline bg-paper p-4">
@@ -82,6 +87,15 @@ function QueueEntry({ row }: { row: QueueRow }) {
         </p>
       ) : null}
 
+      {row.state === 'SENDING' ? (
+        <p className="mt-3 border-l-2 border-warn pl-3 text-xs leading-relaxed text-dim">
+          A scheduled run took this reminder at {row.claimedAt ? formatWhen(row.claimedAt) : ''}{' '}
+          and is sending it. Nothing else will send it while it is in this state, which is what
+          stops the same message going out twice. If it is still here long after the run should
+          have finished, the run stopped part way — reschedule it to release it.
+        </p>
+      ) : null}
+
       {pending ? (
         <div className="mt-4 flex flex-wrap items-start gap-2">
           <CancelButton reminderId={row.id} />
@@ -103,8 +117,17 @@ export default async function RemindersPage() {
   const schedule = round ? await loadSchedule(round.id) : null
   const queue = round ? await loadQueue(round.id) : []
 
-  const pending = queue.filter((row) => row.state === 'QUEUED' || row.state === 'HELD')
-  const done = queue.filter((row) => row.state !== 'QUEUED' && row.state !== 'HELD')
+  // "Upcoming" is everything that has not finished, which includes the one being
+  // sent right now — it is the row the operator most needs to see, and burying
+  // it under the sent ones is how a run that died mid-send goes unnoticed.
+  const upcoming = (row: QueueRow) =>
+    row.state === 'QUEUED' || row.state === 'HELD' || row.state === 'SENDING'
+  const pending = queue.filter(upcoming)
+  const done = queue.filter((row) => !upcoming(row))
+  // A reminder being sent is not offered in the bulk list, because cancelling it
+  // is refused. A checkbox that ticks and then does nothing is worse than no
+  // checkbox.
+  const cancellable = pending.filter((row) => row.state !== 'SENDING')
 
   return (
     <>
@@ -189,13 +212,13 @@ export default async function RemindersPage() {
           )}
         </section>
 
-        {pending.length > 1 ? (
+        {cancellable.length > 1 ? (
           <Card
             title="Cancel several at once"
             description="Cancelling in bulk removes messages. There is no button anywhere that sends several."
           >
             <CancelManyForm
-              reminders={pending.map((row) => ({
+              reminders={cancellable.map((row) => ({
                 id: row.id,
                 label: `${row.recipientName} — ${formatWhen(row.scheduledFor)}`,
               }))}

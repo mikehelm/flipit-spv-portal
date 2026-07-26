@@ -313,6 +313,66 @@ Worth knowing before you meet one at speed.
   R2 and MinIO have not been on the other end of it. Configure one, upload one
   image, and watch it — that is the whole outstanding step, and it is minutes
   rather than work.
-- **A managed queue.** Reminders run from `pnpm reminders:run`, which needs a
-  scheduler. Anything that can run a command on a cadence will do; §18 suggests
-  a managed queue and at this scale a scheduled task is enough.
+- **The scheduler itself, installed on the deployment.** Reminders run from
+  `pnpm reminders:run`, which needs something to run it. §8 below is what to
+  install; it is a single cron line and it has not been added to any machine yet.
+
+---
+
+## 8. The schedule
+
+One entry. `pnpm reminders:run` sends the reminders that are due and, on a
+deadline date, the §6.6 digest to the operator. Nothing else in the application
+needs a schedule to be correct.
+
+```cron
+# Reminders and the deadline digest. Hourly, on the hour.
+0 * * * * cd /srv/spv && /usr/bin/pnpm reminders:run >> /var/log/spv/reminders.log 2>&1
+```
+
+Hourly rather than daily, and it does not matter if a run is missed. Reminders
+are planned to a specific hour and a run that catches one a few hours late still
+sends it; a run that misses it by two days finds it stale and skips it rather
+than sending a nudge about a deadline that has since moved closer.
+
+**Two runs at once is expected, and safe.** It only takes a run that lasts longer
+than an hour — fifty recipients with SMTP retries behind them will do it — and
+then the next hourly run starts while the first is still going. The whole job
+runs inside a Postgres advisory lock: the second run does nothing, writes a line
+saying so, and exits zero. Behind the lock, each reminder is taken by an atomic
+claim before it is sent, so even two runs that somehow both got past the lock
+cannot send the same message twice. `src/lib/reminders/lock.ts` is the argument
+for having both.
+
+Because a blocked second run exits zero, **do not** alert on the exit code alone
+expecting it to mean "nothing was sent". Read the log line.
+
+### When a reminder sits on the queue marked "Being sent"
+
+That means a run took it and has not finished. Usually the run is still going and
+it resolves within the minute. If it does not:
+
+```
+pnpm reminders:lock      # BUSY = a run is genuinely in progress. FREE = it is not.
+```
+
+`FREE` with a row still marked as being sent means a run was killed between
+taking the reminder and finishing with it. The claim does not expire on a timer —
+deliberately, because a claim that timed out would reopen the double-send window
+it exists to close — so the row waits for a person. **Reschedule it** from the
+reminders page: that releases the claim, records who did it, and puts the
+reminder back in the queue. Nothing else clears it.
+
+Whether the email actually went out before the run died is a question for the
+Gmail Sent folder, not for this application, which is why releasing it is a
+deliberate act rather than an automatic one.
+
+### Proving it still works
+
+```
+pnpm verify:reminders
+```
+
+Forty-two checks against a real Postgres, including two runs started at the same
+instant and a genuinely separate process trying to take the lock while this one
+holds it. Run it after any change to the reminder path.

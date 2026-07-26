@@ -17,6 +17,8 @@
     "db:push": "drizzle-kit push",
     "setup-link": "tsx scripts/mint-setup-link.ts",
     "reminders:run": "tsx scripts/run-reminders.ts",
+    "reminders:lock": "tsx scripts/try-reminder-lock.ts",
+    "verify:reminders": "tsx scripts/verify-reminders.ts",
     "verify:viewport": "tsx scripts/verify-viewport.ts",
     "acceptance": "tsx scripts/acceptance-table.ts",
     "verify:deployment": "tsx scripts/verify-deployment.ts",

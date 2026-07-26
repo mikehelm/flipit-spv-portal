@@ -259,6 +259,38 @@ pnpm reminders:run
 
 Run it and it prints what it considered, sent, skipped, blocked and failed — counts and reasons, never an address or a message. With no Gmail app password and no reminder approval recorded, everything is refused, which is the correct behaviour and worth seeing once.
 
+### Two runs at once
+
+Once that job is on a timer, sooner or later two of them overlap. It only takes a run that lasts longer than the gap between runs — fifty recipients, each retried a couple of times by a slow mail server, is enough. Both runs then look at the same queue, both reach the same conclusion about the same person, and without something stopping them both send. The investor gets the same email twice, from a securities offer, and it cannot be taken back.
+
+Try it. Open two terminals and start it in both at the same moment:
+
+```bash
+pnpm reminders:run
+```
+
+One of them does the work. The other prints a sentence saying another run is already in progress and that it sent nothing, and stops. That is the intended behaviour, not a failure — it exits normally, so do not wire an alarm to it.
+
+There are two separate things stopping the duplicate, on purpose, because a single defence that is usually enough is not the standard for the one thing here that sends with nobody watching. The first is a lock on the database that only one run can hold. The second is that each reminder is *taken* by the run that is about to send it, in a single step that cannot half-happen, so even two runs that somehow both got past the lock cannot both take the same one.
+
+A reminder that has been taken shows on the queue as **Being sent**, and while it is in that state nothing else will touch it — you cannot cancel it, and rebuilding the queue leaves it alone.
+
+**If a run is killed part way through**, a reminder can be left sitting in that state for good. That is deliberate: the alternative is a timer that eventually decides the run must be dead and lets somebody else send it, which is precisely how the same message goes out twice. So it waits for you. Ask whether a run is actually going:
+
+```bash
+pnpm reminders:lock
+```
+
+`BUSY` means one is, and it will sort itself out. `FREE` means no run is behind that row. In that case **reschedule** the reminder from the page — that releases it, puts it back in the queue with your name on the record, and is the only thing that does. Whether the email went out before the run died is a question for the Sent folder in Gmail, which is exactly why this asks you rather than guessing.
+
+To see all of it proved at once, against a real database and with a genuinely separate second process trying to muscle in:
+
+```bash
+pnpm verify:reminders
+```
+
+Forty-two checks, and the last dozen are this.
+
 ---
 
 ## Updates
@@ -522,6 +554,7 @@ Worth trying, because these are all meant to work:
 - **An email when a document is issued or corrected.** Deliberate, but somebody will expect it. Send a message or an update alongside.
 - **A real storage bucket, actually connected.** The code to use one is now written and tested (see "The media library"), but only against a stand-in on the same machine. Pointing it at a real Amazon or Cloudflare bucket and uploading one image is the last step, and it is minutes rather than work.
 - **Anything that deletes a stray file for you.** `pnpm media:check` now finds them — it checks that every record has its file *and* that every stored file has a record — but it only ever reports. Deciding that a file nothing points at is safe to delete is a judgement it does not have the information to make, so it leaves that to you.
+- **The timer that runs the reminder job.** The job itself is finished, and it is now safe to run on one (see "Two runs at once"), but nothing on any machine is running it yet. It is a single line in a cron table and the line is written out in `DEPLOYMENT.md` §8, ready to paste.
 
 ## The round, and closing it
 

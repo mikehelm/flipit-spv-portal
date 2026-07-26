@@ -2498,3 +2498,152 @@ checks, up from 39.
   section, and that is deliberate rather than annoying.
 - *Still nothing runs any of this on a schedule.* Unchanged, and still the most
   obvious next thing.
+
+## One reminder runner at a time — the hole the schedule opens
+
+Every one of the twenty packages is built, and the item that has appeared under
+*Uncertain* at the end of the last several sections is the same one: nothing
+runs any of this on a schedule. Putting the reminder job on a timer is a runbook
+line, not a package, so it kept being described as the obvious next thing and
+kept not being the thing anybody built.
+
+It turns out it could not have been done safely. `runDueReminders` selects the
+rows that are due and then loops, sending them one at a time, and nothing marks
+a row as taken until `sent_at` is written *after* the send succeeds. Read as a
+command a person types, that is fine. Read as a command a scheduler types, there
+is a window between the select and the write that is as wide as the whole run,
+and an hourly cron plus a run that lasts longer than an hour puts a second run
+inside it. Fifty recipients with SMTP retries and backoff behind them is enough
+to last an hour. Both runs select the same rows. Both pass the same gates,
+because every gate is a question about the recipient rather than about the run.
+The investor receives the same securities email twice.
+
+So the schedule is still not installed — that is one cron line and it is now
+written out in `DEPLOYMENT.md` §8 — but the thing it would have run is now safe
+to run twice at once.
+
+**Built.**
+
+- **`src/lib/reminders/lock.ts`** — a Postgres advisory lock held for the length
+  of a run. `pg_try_advisory_lock`, on its own connection, released in a
+  `finally`. A run that cannot take it does nothing at all: no queue refresh, no
+  reads, no sends, and a `RunSummary` with `ran: false` so a caller can tell
+  *nothing ran* apart from *nothing was due*.
+- **A `claimed_at` column on `reminder_events`**, taken by a single atomic
+  `UPDATE ... WHERE claimed_at IS NULL ... RETURNING`, placed after every gate
+  and immediately before the send. Two runs racing there means one of them
+  updates no rows and stops without writing anything.
+- **The rest of the system taught what an in-flight row is.** A queue refresh no
+  longer deletes one, and still counts its slot so nothing plans a second
+  reminder on top of it. It counts against the recipient's cap. It cannot be
+  cancelled. It reads as `SENDING` on the queue and shows on the page as *Being
+  sent*, above the sent ones rather than buried under them.
+- **Rescheduling releases a claim**, and nothing else does.
+- **The deadline digest moved inside the lock.** §6.6's email to the operator has
+  the same check-then-send shape — read the audit log for a previous digest, then
+  send — and two runs both reading "none has been sent" both send one. `withRunLock`
+  is re-entrant within a process so the script can hold it across both halves of
+  the job while `runDueReminders` still takes it for itself for every other caller.
+- **`pnpm reminders:lock`** — asks whether a run is in progress and answers
+  `BUSY` or `FREE`. An operational question with an operational answer, and also
+  the genuinely separate process that `pnpm verify:reminders` uses to prove the
+  lock excludes anybody at all.
+- **Thirty new unit tests and thirteen new database-backed checks.**
+  `pnpm verify:reminders` is now 42 checks and is registered as a script; the
+  last dozen are two runs started at the same instant, a second process refused
+  while the first holds the lock, and every one of the in-flight rules above.
+
+**Decisions.**
+
+- ***Two defences, not one.*** The lock alone would cover the case that actually
+  happens. It does not cover two deployments pointed at one database, or a
+  `sendOne` called from a script while the cron job runs, or somebody changing
+  `lock.ts` without reading it. The claim alone would cover all of those and
+  would still let two runs both refresh the queue and both walk the same list.
+  Either alone is *usually* enough, and "usually" is not the standard for the
+  only thing in this application that sends with nobody watching.
+- ***`pg_try_advisory_lock`, never `pg_advisory_lock`.*** A run that queues
+  behind another run is a run that begins sending at an unpredictable time,
+  which is the opposite of what a schedule is for. It tries once and leaves.
+- ***The lock takes its own connection.*** An advisory lock belongs to a session
+  and `db` is a pool of ten, so the statement that takes it and the statement
+  that releases it are not guaranteed to reach the same connection — a pooled
+  lock is one that may never be released. The alternative, a transaction-scoped
+  lock, fixes that and introduces something worse: the whole run inside one
+  transaction, where a rollback erases the record of emails that have already
+  left the building.
+- ***The claim does not expire.*** This is the decision I expect to be argued
+  with, so: a claim with a timeout reopens the window it was added to close, and
+  the two failures either side of it are not equal. A reminder that never goes
+  out is visible on the queue, marked, and recoverable by one deliberate act. A
+  securities email delivered twice cannot be recovered at all. Where the spec is
+  silent the conservative option wins, and here the conservative option is the
+  one that fails towards silence.
+- ***Rescheduling is the release valve, and it is the only one.*** No "clear
+  claim" button, because a button that says "this run is dead, let somebody else
+  send it" is an override on the gate in everything but name. Rescheduling
+  already exists, already requires a person to choose a new time, and already
+  writes an audit entry with their name on it. The metadata now records whether
+  it released a claim.
+- ***An in-flight row counts against the cap.*** It has not been sent, but it is
+  being sent, and a cap that only notices afterwards can be exceeded by one every
+  time two things happen at once.
+- ***The blocked second run exits zero.*** It is the safety mechanism working. An
+  alert that fires when nothing is wrong is an alert that gets switched off, and
+  the runbook says to read the log line rather than the exit code.
+- ***The re-entrancy flag is module-private, not a parameter.*** An option would
+  be a way for a caller to turn the lock off, and the standing rule is that
+  nothing may add an override to this gate. A caller cannot set this; only
+  `withRunLock` does, and it clears it in the same `finally` that unlocks.
+
+**Deviations.** None. `CODEX_TASKS.md` has no WP21 — every package is built —
+and this is one of the open items the Uncertain notes have been carrying.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here touches money; grepped the changed
+   files for `parseFloat`, `Number(` and `.toNumber(` and there is nothing.
+2. *A send path bypassing compliance or the token check?* No — the claim is
+   placed *after* `loadGateContext('REMINDER')` and after the eligibility and
+   staleness checks, so it narrows the send path and never widens it. There is a
+   test asserting that ordering against the source text.
+3. *One recipient or the whole batch?* One. The claim is per row; a lost race
+   stops one reminder and the loop continues.
+4. *Can an operator record, amend or void an approval?* Untouched.
+5. *Does anything reveal another investor?* No investor-facing surface changed.
+   The new state and its explanation are on the operator's reminders page.
+6. *Tokens single-use, hashed, expiring?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No.
+   `try-reminder-lock.ts` prints one word. `run-reminders.ts` gained no field,
+   and there is a test asserting it never prints `.email`, `.subject`, `.html`
+   or `.text`.
+9. *Indexable routes?* None added.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched, and still inside `sendOneEmail`, which is still
+    behind the claim.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (1880, up from 1850) and `pnpm build`
+are green. `pnpm verify:reminders` is 42 of 42, `pnpm verify:lifecycle` 39,
+`pnpm verify:roadmap` 18, and `pnpm media:check` is clean.
+
+**Uncertain.**
+
+- *The cron line is written and installed nowhere.* This package removed the
+  reason not to install it; it did not install it. That is still a deployment
+  step and it still needs a machine.
+- *The re-entrant flag assumes the nesting is sequential.* It is — the script
+  awaits the reminders, then the digest — but two `withRunLock` calls genuinely
+  concurrent inside one process would both proceed once the flag is set. Nothing
+  does that today and nothing should; if something ever needs to, the flag should
+  become a counter with a queue rather than a boolean.
+- *A run killed between the claim and the send leaves a row nobody will send.*
+  Deliberately, and the runbook says what to do. But nobody has been woken up by
+  it yet, and the honest test of "visible and recoverable" is somebody
+  encountering it cold rather than me asserting it here.
+- *Nothing yet notices that a reminder has been marked "being sent" for six
+  hours.* The state is visible if the operator opens the page. It is not visible
+  if they do not. A daily check that looks for stuck claims is the obvious next
+  thing, and it is the same shape as the media check — a script that reports and
+  never acts.

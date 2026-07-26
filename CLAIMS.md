@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| WP21 — one reminder runner at a time | 26 Jul session (cloud) | 2026-07-26 01:10 | `src/lib/reminders/lock.ts` (new), `run.ts`, `scripts/run-reminders.ts`, `scripts/verify-reminders.ts`, a migration adding `claimed_at` to `reminder_events` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -90,6 +90,18 @@ and there is a boundary test that fails if one starts to.
 real command, spawned, against a store holding a missing file and two orphans.
 It was the last thing in the repository with no automated check behind it.
 
-The largest left are running these checks on a schedule rather than from the
-runbook, and the open question — sharpened by corrections — of whether issuing a
-document should notify the investor at all. Neither is a package.
+**The reminder job is safe to run on a schedule now**, as of 26 July. It was
+not: two overlapping runs both selected the same due rows and both sent, which
+is what an hourly cron and a run lasting over an hour produce. There are now two
+independent defences — a Postgres advisory lock around the whole run, and an
+atomic `claimed_at` claim on each row — and `pnpm verify:reminders` is 42 checks
+including two runs started at the same instant and a separate process refused
+the lock. The §6.6 deadline digest is inside the same lock. The cron line itself
+is written out in `DEPLOYMENT.md` §8 and is installed on no machine.
+
+The largest left are installing that schedule and running the *checks* on one
+too, and the open question — sharpened by corrections — of whether issuing a
+document should notify the investor at all. Neither is a package. Nothing yet
+notices a reminder that has been marked "being sent" for hours because the run
+that took it died; that is the most obvious next thing and it is the same shape
+as `pnpm media:check` — a script that reports and never acts.

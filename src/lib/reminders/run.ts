@@ -19,10 +19,15 @@
  *      hash and its own compliance approval. Reminders do not send under the
  *      invitation email's approval." The approval and drift passed to
  *      `sendInvitation` are loaded for `REMINDER` and nothing else.
- *   4. **The transport gate**, inside `sendOneEmail`: credential, service mode,
+ *   4. **The claim.** One atomic UPDATE that takes the row, requiring
+ *      `claimed_at` to still be null. Two runs racing here means one of them
+ *      updates no rows and stops. It is the last thing before the send and the
+ *      first thing that is not reversible, which is where it belongs. See
+ *      `lock.ts` for why there are two defences rather than one.
+ *   5. **The transport gate**, inside `sendOneEmail`: credential, service mode,
  *      production deployment. A separate authority from the compliance gate;
  *      both apply.
- *   5. **Record**, whatever happened. §6.5: "Every reminder — sent, cancelled,
+ *   6. **Record**, whatever happened. §6.5: "Every reminder — sent, cancelled,
  *      skipped, failed — is written to the audit log."
  *
  * One recipient per call to `sendOne`. The runner loops over due reminders, but
@@ -38,8 +43,20 @@ import { loadGateContext } from '@/lib/compliance'
 import { loadSendTarget } from '@/lib/sending/data'
 import { loadSenderDefaults } from '@/lib/email/variables'
 import { sendInvitation } from '@/lib/sending/send-invitation'
+import { withRunLock } from './lock'
 import { currentRound, loadQueue, refreshQueue } from './queue'
 import { isStale, STALE_SKIP_REASON } from './schedule'
+
+/**
+ * What a run says when another run already holds the row.
+ *
+ * Distinct from `RUN_IN_PROGRESS_MESSAGE`, which is about a whole run that never
+ * started. This one is about one reminder that somebody else is sending right
+ * now, and the correct response to it is to leave it alone.
+ */
+export const ALREADY_CLAIMED_REASON =
+  'Another run took this reminder first and is sending it now. This run left it alone rather ' +
+  'than sending the same message twice.'
 
 export type ReminderOutcome =
   | { kind: 'SENT'; reminderId: string; offerId: string; messageId: string }
@@ -48,6 +65,13 @@ export type ReminderOutcome =
   | { kind: 'FAILED'; reminderId: string; offerId: string; reason: string }
 
 export interface RunSummary {
+  /**
+   * False when another run held the lock and this one did nothing at all — no
+   * queue refresh, no reads, no sends. Every count below is zero in that case,
+   * and zero-because-nothing-was-due and zero-because-nothing-ran are different
+   * facts that the operator needs to be able to tell apart.
+   */
+  ran: boolean
   considered: number
   sent: number
   skipped: number
@@ -153,7 +177,39 @@ export async function sendOne(input: {
   const { approval, drift } = await loadGateContext('REMINDER')
   const defaults = await loadSenderDefaults()
 
-  // --- 4 and 5. Send, and record ------------------------------------------
+  // --- 4. The claim -------------------------------------------------------
+  // Everything above this line is a read of state that another run is reading
+  // at the same time and reaching the same conclusion about. This is the line
+  // that only one of them can cross. `claimedAt: null` in the WHERE clause is
+  // the whole mechanism: Postgres serialises the two updates and the loser
+  // matches no rows.
+  const claimed = await db
+    .update(reminderEvents)
+    .set({ claimedAt: now })
+    .where(
+      and(
+        eq(reminderEvents.id, event.id),
+        isNull(reminderEvents.claimedAt),
+        isNull(reminderEvents.sentAt),
+        isNull(reminderEvents.cancelledAt),
+        isNull(reminderEvents.skippedReason),
+      ),
+    )
+    .returning({ id: reminderEvents.id })
+
+  if (claimed.length === 0) {
+    // No skip is written and no audit entry either: this run did not decide
+    // anything about this reminder, and the run that did will record what it did
+    // with it. Writing a skip here would overwrite the winner's outcome.
+    return {
+      kind: 'SKIPPED',
+      reminderId: event.id,
+      offerId: event.offerId,
+      reason: ALREADY_CLAIMED_REASON,
+    }
+  }
+
+  // --- 5 and 6. Send, and record ------------------------------------------
   const result = await sendInvitation({
     target,
     defaults,
@@ -184,6 +240,14 @@ export async function sendOne(input: {
     if (result.permanent) {
       await skip(event.id, result.message, actor, 'PERMANENT_FAILURE')
     } else {
+      // Release the claim. A transient failure is the one outcome where the row
+      // must stay available, and a claim that outlived the attempt that took it
+      // would turn "the next run tries again" into "nothing ever tries again".
+      await db
+        .update(reminderEvents)
+        .set({ claimedAt: null })
+        .where(eq(reminderEvents.id, event.id))
+
       await audit({
         actor,
         entityType: 'reminder',
@@ -233,9 +297,12 @@ async function skip(
   actor: Actor,
   code: string,
 ): Promise<void> {
+  // The claim is released alongside the skip. Nothing was sent, so the row must
+  // not go on counting against the recipient's cap or reading as in flight; and
+  // `skippedReason` is what stops it being picked up again, not the claim.
   await db
     .update(reminderEvents)
-    .set({ skippedReason: reason })
+    .set({ skippedReason: reason, claimedAt: null })
     .where(eq(reminderEvents.id, reminderId))
 
   await audit({
@@ -253,17 +320,45 @@ async function skip(
  * Bounded by `limit` so a first run against a long-neglected queue cannot turn
  * into an unbounded burst of mail. What was left is reported rather than
  * silently dropped — the next run picks it up.
+ *
+ * The whole of it runs under the advisory lock in `lock.ts`. A run that cannot
+ * take the lock returns `ran: false` having touched nothing: it does not refresh
+ * the queue, it does not read the due rows, and it certainly does not send. See
+ * that file for why the lock is not the only defence.
  */
 export async function runDueReminders(options: {
   now?: Date
   limit?: number
   actor?: Actor
 } = {}): Promise<RunSummary> {
+  const attempt = await withRunLock(() => runDueRemindersUnderLock(options))
+
+  if (!attempt.acquired) {
+    return {
+      ran: false,
+      considered: 0,
+      sent: 0,
+      skipped: 0,
+      blocked: 0,
+      failed: 0,
+      outcomes: [],
+    }
+  }
+
+  return attempt.result
+}
+
+async function runDueRemindersUnderLock(options: {
+  now?: Date
+  limit?: number
+  actor?: Actor
+}): Promise<RunSummary> {
   const now = options.now ?? new Date()
   const limit = options.limit ?? 50
   const actor = options.actor ?? systemActor
 
   const summary: RunSummary = {
+    ran: true,
     considered: 0,
     sent: 0,
     skipped: 0,
@@ -288,6 +383,10 @@ export async function runDueReminders(options: {
         isNull(reminderEvents.sentAt),
         isNull(reminderEvents.cancelledAt),
         isNull(reminderEvents.skippedReason),
+        // A claimed row belongs to somebody else. `sendOne` would refuse it
+        // anyway; leaving it out here means it is not even counted as
+        // considered, which is what the operator would expect to read.
+        isNull(reminderEvents.claimedAt),
       ),
     )
     .orderBy(asc(reminderEvents.scheduledFor))

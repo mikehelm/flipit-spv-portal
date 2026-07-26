@@ -52,10 +52,11 @@ export interface QueueRow {
   sentAt: Date | null
   cancelledAt: Date | null
   skippedReason: string | null
+  claimedAt: Date | null
   responseDeadline: string
   /** Evaluated now, not when the row was written. */
   eligibility: EligibilityDecision
-  state: 'QUEUED' | 'SENT' | 'CANCELLED' | 'SKIPPED' | 'HELD'
+  state: 'QUEUED' | 'SENT' | 'CANCELLED' | 'SKIPPED' | 'HELD' | 'SENDING'
 }
 
 /** The round's schedule, or null when none is configured. */
@@ -99,7 +100,12 @@ async function loadCandidates(roundId: string): Promise<
 
   for (const row of rows) {
     const actuallySent = await db
-      .select({ id: reminderEvents.id, sentAt: reminderEvents.sentAt })
+      .select({
+        id: reminderEvents.id,
+        sentAt: reminderEvents.sentAt,
+        claimedAt: reminderEvents.claimedAt,
+        skippedReason: reminderEvents.skippedReason,
+      })
       .from(reminderEvents)
       .where(eq(reminderEvents.offerId, row.offerId))
 
@@ -113,7 +119,15 @@ async function loadCandidates(roundId: string): Promise<
       blocked: row.blocked,
       emailStatus: row.emailStatus as ReminderCandidate['emailStatus'],
       responseDeadline: row.responseDeadline,
-      remindersSent: actuallySent.filter((event) => event.sentAt !== null).length,
+      // A row that a run has claimed and not yet finished counts against the
+      // cap. It has not been sent, but it is being sent, and a cap that only
+      // notices after the fact is a cap that can be exceeded by one every time
+      // two things happen at once.
+      remindersSent: actuallySent.filter(
+        (event) =>
+          event.sentAt !== null ||
+          (event.claimedAt !== null && event.skippedReason === null),
+      ).length,
     })
   }
 
@@ -171,9 +185,20 @@ export async function refreshQueue(input: {
       .from(reminderEvents)
       .where(eq(reminderEvents.offerId, candidate.offerId))
 
-    const pending = existing.filter(
+    // Rows that still occupy a slot in the plan: not sent, not cancelled.
+    const active = existing.filter(
       (event) => event.sentAt === null && event.cancelledAt === null,
     )
+
+    // Of those, the ones this refresh may delete. A row a run has claimed and
+    // not finished with is excluded, because that run may be inside the send
+    // this instant; deleting it would destroy the row that is about to record
+    // what happened, leaving an email that went out with nothing in the database
+    // saying so. It stays out of `pending` but stays in `active`, so nothing
+    // plans a second reminder for the same moment on top of it.
+    const inFlight = (event: (typeof existing)[number]) =>
+      event.claimedAt !== null && event.skippedReason === null
+    const pending = active.filter((event) => !inFlight(event))
 
     // Eligibility is evaluated ignoring the service mode when deciding whether
     // to hold a plan: a read-only week should not delete next week's reminders,
@@ -196,7 +221,11 @@ export async function refreshQueue(input: {
 
     if (!schedule) continue
 
-    const alreadySent = existing.filter((event) => event.sentAt !== null).length
+    // In flight counts as sent for the purpose of the cap, for the reason given
+    // in `loadCandidates`.
+    const alreadySent = existing.filter(
+      (event) => event.sentAt !== null || inFlight(event),
+    ).length
     const remaining = Math.max(0, context.maxPerRecipient - alreadySent)
 
     const planned = planReminders({
@@ -207,8 +236,12 @@ export async function refreshQueue(input: {
     })
 
     const plannedTimes = new Set(planned.map((row) => row.scheduledFor.getTime()))
+    // `active`, not `pending`: an in-flight row already occupies its moment, and
+    // a plan that ignored it would insert a second row for the same time and the
+    // same recipient — the exact duplicate this package exists to prevent,
+    // arriving by the back door.
     const existingTimes = new Set(
-      pending.map((event) => event.scheduledFor.getTime()),
+      active.map((event) => event.scheduledFor.getTime()),
     )
     // A cancelled reminder is never recreated. §6.5 gives the operator the
     // ability to cancel; recomputing it back into existence would take it away.
@@ -283,6 +316,10 @@ export async function loadQueue(roundId: string): Promise<QueueRow[]> {
       ? evaluateEligibility(candidate, context)
       : { eligible: true }
 
+    // `SENDING` sits directly under `SENT` because it is the closest thing to
+    // it: a run has taken this row and the message may already have left. It
+    // outranks eligibility, which is a statement about what *would* be decided
+    // and no longer applies once the decision has been made.
     const state: QueueRow['state'] =
       row.event.sentAt !== null
         ? 'SENT'
@@ -290,9 +327,11 @@ export async function loadQueue(roundId: string): Promise<QueueRow[]> {
           ? 'CANCELLED'
           : row.event.skippedReason !== null
             ? 'SKIPPED'
-            : eligibility.eligible
-              ? 'QUEUED'
-              : 'HELD'
+            : row.event.claimedAt !== null
+              ? 'SENDING'
+              : eligibility.eligible
+                ? 'QUEUED'
+                : 'HELD'
 
     return {
       id: row.event.id,
@@ -305,6 +344,7 @@ export async function loadQueue(roundId: string): Promise<QueueRow[]> {
       sentAt: row.event.sentAt,
       cancelledAt: row.event.cancelledAt,
       skippedReason: row.event.skippedReason,
+      claimedAt: row.event.claimedAt,
       responseDeadline: row.responseDeadline,
       eligibility,
       state,
@@ -334,6 +374,15 @@ export async function cancelReminder(input: {
     return {
       ok: false,
       message: 'That reminder has already gone out. Cancelling it now would change nothing.',
+    }
+  }
+  if (event.claimedAt !== null && event.skippedReason === null) {
+    return {
+      ok: false,
+      message:
+        'That reminder is being sent right now. Cancelling it would record a cancellation for ' +
+        'a message that may already have left. Refresh in a moment: it will show as sent, or, ' +
+        'if the run stopped part way, as still being sent, and rescheduling it releases it.',
     }
   }
   if (event.cancelledAt !== null) return { ok: true }
@@ -390,9 +439,23 @@ export async function rescheduleReminder(input: {
     }
   }
 
+  // Rescheduling releases the claim, and this is the only thing that does.
+  //
+  // A run that is killed between claiming a row and finishing with it leaves the
+  // row claimed for ever — deliberately, because a claim that expired on a timer
+  // would reopen the double-send window it was added to close. That leaves the
+  // operator holding a reminder that will never go out, which is recoverable and
+  // visible, and this is how they recover it: by looking at a row marked as
+  // being sent, deciding it is not, and giving it a new time. A person, a
+  // deliberate act, and an audit entry with their name on it.
   await db
     .update(reminderEvents)
-    .set({ scheduledFor: input.scheduledFor, cancelledAt: null, cancelledById: null })
+    .set({
+      scheduledFor: input.scheduledFor,
+      cancelledAt: null,
+      cancelledById: null,
+      claimedAt: null,
+    })
     .where(eq(reminderEvents.id, input.reminderId))
 
   await audit({
@@ -404,6 +467,7 @@ export async function rescheduleReminder(input: {
       offerId: event.offerId,
       from: event.scheduledFor.toISOString(),
       to: input.scheduledFor.toISOString(),
+      releasedClaim: event.claimedAt !== null,
     },
   })
 

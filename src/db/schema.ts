@@ -937,6 +937,26 @@ export const reminderEvents = pgTable(
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     cancelledById: text('cancelled_by_id').references(() => users.id),
     skippedReason: text('skipped_reason'),
+    /**
+     * When a run took this row in order to send it. BUILD_SPEC §6.5, §14.
+     *
+     * Reminders are the one unattended sender, and the moment the job goes on a
+     * schedule it becomes possible for two runs to overlap — an hourly cron and
+     * a run that takes longer than an hour is all it needs. Without this column
+     * both runs read the same due row, both pass the same gates, and the
+     * investor receives the same message twice.
+     *
+     * It is set by an UPDATE that names the row and requires the column to still
+     * be null, so exactly one of two racing runs can set it. The run that does
+     * not set it sends nothing.
+     *
+     * It does not expire. A claim that timed out would reopen the window it was
+     * added to close, and the two failures are not equal: a reminder that never
+     * goes out is visible on the queue and the operator can release it by
+     * rescheduling, while a securities email delivered twice cannot be taken
+     * back.
+     */
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
     sequence: integer('sequence').notNull(),
     createdAt: createdAt(),
   },
