@@ -81,8 +81,10 @@ export function amzTimestamps(now: Date): { amzDate: string; datestamp: string }
   return { amzDate, datestamp: amzDate.slice(0, 8) }
 }
 
+export type S3Method = 'PUT' | 'GET' | 'DELETE' | 'HEAD'
+
 export interface CanonicalInput {
-  method: 'PUT' | 'GET' | 'DELETE'
+  method: S3Method
   uri: string
   /** Lowercase header names to values. Must include `host` and `x-amz-*`. */
   headers: Readonly<Record<string, string>>
@@ -179,7 +181,7 @@ export interface SignedRequest {
 export function signRequest(
   config: S3Config,
   request: {
-    method: 'PUT' | 'GET' | 'DELETE'
+    method: S3Method
     key: string
     body?: Uint8Array
     contentType?: string
@@ -233,7 +235,13 @@ export function signRequest(
  */
 export function verifySignature(
   config: S3Config,
-  received: { method: 'PUT' | 'GET' | 'DELETE'; key: string; body?: Uint8Array; contentType?: string; amzDate: string },
+  received: {
+    method: S3Method
+    key: string
+    body?: Uint8Array
+    contentType?: string
+    amzDate: string
+  },
   authorization: string,
 ): boolean {
   const offered = /Signature=([0-9a-f]{64})$/.exec(authorization)?.[1]
@@ -283,7 +291,7 @@ const ATTEMPTS = 3
 const BACKOFF_MS = [100, 400]
 const TIMEOUT_MS = 30_000
 
-/** A body that ends immediately, for a response that came with none. */
+/** A body that ends immediately, for a response that arrived with none. */
 function emptyBody(): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -295,7 +303,7 @@ function emptyBody(): ReadableStream<Uint8Array> {
 /**
  * How many bytes a response body will produce, or null if it did not say.
  *
- * `Content-Length` first, because it is what the store is asserting about the
+ * `Content-Length` first, because it is the store's own assertion about the
  * body it is sending. `Content-Range` second, because a 206 always carries one
  * and it names the same number a different way — a useful second answer when a
  * proxy has stripped the length. Null last, and the caller refuses on it: a
@@ -304,17 +312,18 @@ function emptyBody(): ReadableStream<Uint8Array> {
 export function responseLength(response: {
   headers: { get(name: string): string | null }
 }): number | null {
-  const declared = Number(response.headers.get('content-length'))
-  if (response.headers.get('content-length') !== null && Number.isSafeInteger(declared) && declared >= 0) {
-    return declared
+  const declared = response.headers.get('content-length')
+  if (declared !== null && /^\d+$/.test(declared) && Number.isSafeInteger(Number(declared))) {
+    return Number(declared)
   }
 
-  const contentRange = /^bytes (\d+)-(\d+)\/(?:\d+|\*)$/.exec(
+  const span = /^bytes (\d+)-(\d+)\/(?:\d+|\*)$/.exec(
     (response.headers.get('content-range') ?? '').trim(),
   )
-  if (contentRange) {
-    const start = Number(contentRange[1])
-    const end = Number(contentRange[2])
+
+  if (span) {
+    const start = Number(span[1])
+    const end = Number(span[2])
     if (Number.isSafeInteger(start) && Number.isSafeInteger(end) && end >= start) {
       return end - start + 1
     }
@@ -341,17 +350,10 @@ export class S3ObjectClient {
   }
 
   private async send(
-    method: 'PUT' | 'GET' | 'DELETE',
+    method: S3Method,
     key: string,
     body?: Uint8Array,
     contentType?: string,
-    /**
-     * Headers put on the request but deliberately **not** in the signature. S3
-     * signs the headers it is told to and permits others; keeping the signed
-     * set identical for every request means one canonical shape to reason about
-     * rather than one per caller. Only `Range` uses this.
-     */
-    extraHeaders?: Readonly<Record<string, string>>,
   ): Promise<Response> {
     let lastError: unknown = null
 
@@ -361,7 +363,7 @@ export class S3ObjectClient {
       try {
         const response = await fetch(signed.url, {
           method,
-          headers: { ...signed.headers, ...extraHeaders },
+          headers: signed.headers,
           body: body ? (body.slice() as Uint8Array<ArrayBuffer>) : undefined,
           signal: AbortSignal.timeout(TIMEOUT_MS),
           // No redirect is ever followed. A redirect off a signed request goes
@@ -451,53 +453,88 @@ export class S3ObjectClient {
   }
 
   /**
-   * Bytes `start` to `end` inclusive, in one buffer.
+   * Bytes `start` to `end` inclusive, and **only** a 206 is accepted.
    *
-   * `openObject` with the body drained. The rules about what is accepted live
-   * there, in the one place both the buffering and the streaming caller go
-   * through, so there is no shape of response that is refused on one path and
-   * allowed on the other.
+   * A store that ignores `Range` answers 200 with the whole object, and a
+   * client that quietly sliced that would look identical to one honouring the
+   * range — right up until a sixty-megabyte video was being held in memory to
+   * serve two seconds of it. So a 200 here is an error with a message naming
+   * the problem, not a silent fallback.
+   *
+   * `Range` is deliberately not part of the signature. S3 signs the headers it
+   * is told to sign, and adding an unsigned header is permitted; keeping the
+   * signed set identical to the plain GET's means one canonical request shape
+   * to reason about rather than two.
    */
   async getObjectRange(key: string, start: number, end: number): Promise<Uint8Array | null> {
-    const opened = await this.openObject(key, { start, end })
-    if (opened === null) return null
+    const signed = signRequest(this.config, { method: 'GET', key, now: new Date() })
 
-    return new Uint8Array(await new Response(opened.body).arrayBuffer())
+    const response = await fetch(signed.url, {
+      method: 'GET',
+      headers: { ...signed.headers, range: `bytes=${start}-${end}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      redirect: 'error',
+    })
+
+    if (response.status === 404) {
+      const verdict = await this.isAbsence(response)
+      if (verdict.absent) return null
+      await this.refuse(response, 'GET', verdict.code)
+    }
+
+    if (response.status === 200) {
+      await response.arrayBuffer().catch(() => undefined)
+      throw new S3RequestError(
+        200,
+        null,
+        'The object store ignored a range request and offered the whole object. ' +
+          'This build will not serve a partial response it did not receive.',
+      )
+    }
+
+    if (response.status !== 206) await this.refuse(response, 'GET')
+
+    return new Uint8Array(await response.arrayBuffer())
   }
 
   /**
-   * The object, or a range of it, as a body that has not been read.
+   * The object's bytes as a stream, never all in memory at once.
    *
-   * `fetch` hands back a stream; every read in this class used to end in
-   * `arrayBuffer()`, which is where the buffering was. Returning the stream
-   * means a sixty-megabyte video crosses this process a chunk at a time,
-   * pulled at the speed the investor's socket drains.
+   * Two things are deliberately different from the buffered reads above.
    *
-   * **A ranged read accepts only a 206.** A store that ignores `Range` answers
-   * 200 with the whole object, and a client that quietly sliced that would look
-   * identical to one honouring the range — right up until the whole video was
-   * in memory to serve two seconds of it. So a 200 to a ranged GET is an error
-   * naming the problem, not a silent fallback.
+   * **No retry.** A retry means sending the request again, and the caller of a
+   * stream has already been handed one — a second attempt would have to be
+   * spliced into a response that is partly written. A failure to *start* is
+   * still an error before anything is sent; a failure part way through ends
+   * the stream, which is what a truncated download looks like at every layer.
    *
-   * **A response with no length is refused.** Every S3-compatible store sends
-   * `Content-Length` on a GET, and a 206 additionally sends `Content-Range`. A
-   * response carrying neither is something between here and the bucket doing
-   * the unexpected, and the honest answer is to say so rather than to serve an
-   * unknown number of bytes under a length this code guessed at.
+   * **No timeout on the body.** The buffered reads abort after thirty seconds
+   * because a request that has not finished by then has failed. A stream is
+   * different: a sixty-megabyte video on a slow phone connection is *supposed*
+   * to take minutes, and a timeout that fires mid-download would cut it off.
+   * A stalled connection is the socket's problem to notice, not this timer's.
    *
-   * `Range` is deliberately not part of the signature — see `send`.
+   * **A response that does not say how long it is, is refused.** Every
+   * S3-compatible store sends `Content-Length` on a GET and a `Content-Range`
+   * on a 206; a response carrying neither is something between here and the
+   * bucket doing the unexpected. The alternative to refusing is inventing a
+   * length and promising it to a browser, which then holds the connection open
+   * waiting for bytes that are not coming.
    */
-  async openObject(
+  async openObjectStream(
     key: string,
     range?: { start: number; end: number },
-  ): Promise<{ body: ReadableStream<Uint8Array>; length: number } | null> {
-    const response = await this.send(
-      'GET',
-      key,
-      undefined,
-      undefined,
-      range ? { range: `bytes=${range.start}-${range.end}` } : undefined,
-    )
+  ): Promise<{ stream: ReadableStream<Uint8Array>; length: number } | null> {
+    const signed = signRequest(this.config, { method: 'GET', key, now: new Date() })
+
+    const headers: Record<string, string> = { ...signed.headers }
+    if (range) headers.range = `bytes=${range.start}-${range.end}`
+
+    const response = await fetch(signed.url, {
+      method: 'GET',
+      headers,
+      redirect: 'error',
+    })
 
     if (response.status === 404) {
       const verdict = await this.isAbsence(response)
@@ -515,7 +552,8 @@ export class S3ObjectClient {
       )
     }
 
-    if (response.status !== (range ? 206 : 200)) await this.refuse(response, 'GET')
+    const expected = range ? 206 : 200
+    if (response.status !== expected) await this.refuse(response, 'GET')
 
     const length = responseLength(response)
 
@@ -529,9 +567,42 @@ export class S3ObjectClient {
       )
     }
 
-    // A 204, or any status a store answers with no body at all: the object is
-    // there and there is nothing to read from it.
-    return { body: response.body ?? emptyBody(), length }
+    // A response with no body at all: the object is there, and there is
+    // nothing to read from it.
+    return { stream: (response.body as ReadableStream<Uint8Array> | null) ?? emptyBody(), length }
+  }
+
+  /**
+   * How many bytes are actually there, without fetching any of them.
+   *
+   * A HEAD, so that checking a sixty-megabyte video costs a round trip rather
+   * than a download. Null for an object that is not there — the same answer
+   * `getObject` gives, for the same reason.
+   */
+  async headObject(key: string): Promise<{ sizeBytes: number } | null> {
+    const response = await this.send('HEAD', key)
+
+    if (response.status === 404) {
+      const verdict = await this.isAbsence(response)
+      if (verdict.absent) return null
+      await this.refuse(response, 'HEAD', verdict.code)
+    }
+
+    if (!response.ok) await this.refuse(response, 'HEAD')
+
+    const declared = response.headers.get('content-length')
+    // A store that answers a HEAD without a length is one this check cannot
+    // use. Saying so beats reporting a size of zero and calling it a mismatch.
+    if (declared === null || !/^\d+$/.test(declared)) {
+      throw new S3RequestError(
+        response.status,
+        null,
+        'The object store answered a HEAD without a usable Content-Length, so the size of ' +
+          'the stored object cannot be checked.',
+      )
+    }
+
+    return { sizeBytes: Number(declared) }
   }
 
   async deleteObject(key: string): Promise<void> {

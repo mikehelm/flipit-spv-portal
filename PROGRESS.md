@@ -1838,125 +1838,341 @@ asserts the client refuses it.
 
 ---
 
-## Streaming a media response — the sixty megabytes the range work left behind
+## Streaming a media response, instead of holding it in memory
 
-*26 July 2026. Claimed by the previous session at 00:02 and never started — the
-container it was in was discarded a minute later. Taken over rather than
-re-claimed, per CLAIMS.md's own rule about a stale row.*
+Not a numbered work package. The item the range change left behind, and named
+under its Uncertain: *"a request with no `Range` header still holds a
+sixty-megabyte video in one buffer."*
 
-The range work fixed the video that would not play on an iPhone and wrote its
-own remaining problem down under Uncertain: *"the whole-file response still
-reads the whole file into memory."* That is the ordinary case, not the exotic
-one. A `<video>` element sends `Range` when it is **seeking**; when it is simply
-downloading — which is what every desktop browser does on load — it sends no
-`Range` at all and takes the 200. So the branch that held a sixty-megabyte
-video in one buffer was the branch nearly every viewer used, once per viewer, on
-the one route several people plausibly open in the same minute of a raise.
+Ranges fixed the seeking. They did not fix the shape: every response — the whole
+file and every partial one — was read into a `Uint8Array` and handed to a
+`Response`, so serving one video to one phone on a slow connection pinned sixty
+megabytes of heap for the length of the download. Two investors watching at once
+was a hundred and twenty.
 
 **Built.**
 
-- **`StoredStream` and `MediaStore.openStream(key, range?)`** — the read an HTTP
-  response should use. It hands back a `ReadableStream` that has not been read,
-  the content type, and a `length` taken from the source itself: `stat` on a
-  filesystem, `Content-Length` on an object store. Never from a database column.
-- **A filesystem implementation on a file handle**, streamed with
-  `handle.createReadStream({ start, end })`, which closes the descriptor when
-  the stream ends, errors **or is cancelled** — the third being the one that
-  matters, since a browser seeking away mid-download cancels the body.
-- **An object-store implementation that hands the `fetch` body on** rather than
-  draining it, via a new `S3ObjectClient.openObject`. The buffering in that
-  class was one `arrayBuffer()` call; there is now none on the serving path.
-- **`serveMedia` builds every body from a stream** — the 206 and, the point of
-  the exercise, the 200.
-- **`getRange` on both stores, and `getObjectRange` on the client, are now
-  `openStream` with a collector on the end.** One implementation of the
-  arithmetic per store rather than two, and the buffering read is a named
-  function called `collect` rather than the default everything falls into.
-- **Thirty-six new tests**, including four shape assertions in `boundary.test.ts`
-  that would fail on a single `store.get(` put back into `serve.ts` for
-  convenience.
+- **`MediaStore.openStream(key, range?)`** on the interface, with a real
+  implementation on both stores — `createReadStream` with a start and an end on
+  the filesystem, the `fetch` response body passed straight through on the
+  object store.
+- **`serveMedia` builds every response from a stream.** A boundary test asserts
+  the module contains no `new Uint8Array(`, no `store.get(` and no `getRange(`
+  at all.
+- **Eleven tests** across the parity suite, including that a streamed range and
+  a buffered one return byte-identical answers on both implementations.
 
 **Decisions.**
 
-- ***The proof is about when bytes move, not which bytes arrive.*** A buffered
-  implementation and a streaming one return identical bodies, so a test that
-  only checks the body cannot tell them apart, and "it streams" would decay to a
-  comment. So: a spy store whose stream counts pulls asserts that a built
-  `Response` has pulled **zero** bytes and that reading it pulls all of them; a
-  real 200 KiB file asserts the body arrives in more than one chunk, which a
-  buffered read cannot do; and an S3 test stands up a server that sends half the
-  body, waits, then sends the rest, and asserts `openObject` returned during the
-  wait.
-- ***`get` still buffers, and is still what the image and document routes use.***
-  An image is capped at five megabytes and a document at twenty; the video is
-  the one thing here that is sixty. Converting the other two would be the same
-  change to two more routes with their own header sets and their own boundary
-  tests, for a ceiling a third the size. Recorded rather than done.
-- ***A response whose length nobody stated is refused.*** Every S3-compatible
-  store sends `Content-Length` on a GET, and a 206 also sends `Content-Range`;
-  `responseLength` reads the first, falls back to the second, and returns null
-  otherwise — on which `openObject` refuses. The alternative is inventing a
-  length and promising it to a browser, which holds a connection open waiting
-  for bytes that are not coming. The refusal names nothing from the body.
-- ***`Content-Range` is built from what the store is about to send, not from
-  what was asked for.*** They differ only when the stored file is shorter than
-  the row says, and in that case the old code sent a `Content-Length` of what it
-  read alongside a `Content-Range` promising what was requested — a response
-  that hangs a player. A test truncates a file behind its row and pins the
-  corrected header.
-- ***A range that begins past the real end of a real object is the ordinary
-  404.*** The store distinguishes it from absence — null means gone, length zero
-  means there and shorter than claimed — and `serveMedia` deliberately collapses
-  the two, because the alternative is a 416 quoting a size that is wrong, and
-  neither answer is one an investor is entitled to tell apart.
-- ***The ranged read now goes through `send`,*** so it retries a 5xx like every
-  other verb. A GET is idempotent; the previous single-shot fetch was an
-  omission rather than a policy. `Range` is still outside the signature, so the
-  canonical request shape is unchanged.
-- ***`FakeS3` now sets `Content-Length` by hand.*** Node answers chunked
-  otherwise, and a fake that omits a header every real store sends is a fake
-  that lets a client come to depend on not having one. The genuinely
-  length-less case is covered by a separate bare server, which is refused.
+- ***`get` and `getRange` stay.*** Several callers genuinely want bytes — the
+  ingest verification reads a stored file back to compare it against what was
+  uploaded — and making them drain a stream to get a `Uint8Array` would be a
+  worse interface for the sake of tidiness. `openStream` is for the one case
+  where the bytes are going straight to a socket.
+- ***Absence is decided before a stream exists.*** The filesystem store stats the
+  file first and the object store checks the status before returning the body.
+  A stream that failed part way through would already have sent a 200, and after
+  the status line has gone there is no way left to say 404.
+- ***`Content-Length` now comes from the recorded `size_bytes`***, not from
+  counting what was read — a stream has no length until it has been drained, and
+  omitting the header would stop a browser showing a progress bar and stop
+  Safari seeking. The row is written from the ingest result and is the authority
+  on how big the object is. **A store whose file disagreed with its row would
+  now send a wrong length**, which is a real trade and is written into the
+  module rather than hidden.
+- ***No retry on a streamed read.*** A retry means sending the request again, and
+  the caller has already been handed a stream — a second attempt would have to
+  be spliced into a response that is partly written. Failing to *start* is still
+  an error before anything is sent; failing part way ends the stream, which is
+  what a truncated download looks like at every layer anyway.
+- ***No timeout on a streamed body.*** The buffered reads abort after thirty
+  seconds because a request that has not finished by then has failed. A stream
+  is the opposite: a sixty-megabyte video on a slow phone connection is
+  *supposed* to take minutes, and a timer would cut it off. A stalled connection
+  is the socket's problem to notice.
+- *A ranged stream still refuses a 200.* Same rule as the buffered ranged read,
+  and the same reason — a store that ignores `Range` must not be able to look
+  like one that honours it.
 
-**Deviations.** `MediaStore` gained a method again — a breaking change to the
-seam, and both implementations have it. Nothing outside `src/lib/media` calls
+**Deviations.** `MediaStore` gained a second method, so the seam has changed
+twice in one session. Both implementations have it and the interface requires
 it.
 
-**Checklist.**
+**Checklist.** Point 9 is this change's; the rest were re-checked because it
+changes how two routes send their bodies.
 
-1. **No monetary value is a JavaScript number.** A byte offset is not money. The
-   existing assertion that `parseFloat` and `.toNumber(` appear in no media
-   module still covers every file here.
+1. **No monetary value is a JavaScript number.** Nothing here touches money.
 2. **No send path bypasses anything.** Nothing here sends. `verify:deployment`
-   re-run — 56 checks, including that a real invitation is refused off the
-   production deployment and a test send to the operator is still allowed.
+   re-run — 56 checks pass.
 3. **A jurisdiction block still stops one recipient.** Untouched.
 4. **The operator still cannot record, amend or void an approval.** Untouched.
-5. **No investor-facing response reveals another investor.** The access checks
-   are unchanged and still run before a byte is read — `serveMedia` is reached
-   only after `mayViewVideo` has said yes. The one new refusal, a stored file
-   shorter than its row, is the route's own 404 rather than a new status, so a
-   deployment's storage trouble is not something an investor can detect.
-   `verify:deployment` still checks an anonymous range request gets the same 404
-   as anything else.
+5. **No investor-facing response reveals another investor.** Every access check
+   still runs before a byte is read and in the same order; `serveMedia` is
+   reached only after `mayViewVideo` has said yes. The existing boundary test
+   pinning that the session is read before the store is touched still passes,
+   and `verify:deployment` re-checks over real HTTP that an anonymous range
+   request is the same 404 as anything else.
 6. **Claim and sign-in tokens are single-use, hashed and expiring.** Untouched.
 7. **Suspension revokes sessions and refuses new links.** Untouched.
-8. **No log line carries a token, a body or a key.** Nothing added calls
-   `console`. The new refusal message quotes no part of the response it refuses.
-9. **The verification page is still the only indexable route.** `BASE_HEADERS`
-   is still defined once and spread exactly three times, and the boundary test
-   that pins that count still passes.
+8. **No log line carries a token, a body or a key.** Neither changed module
+   calls `console`; a stream is not logged, counted or inspected on its way
+   through.
+9. **The verification page is still the only indexable route.** The 200, the 206
+   and the 416 still carry one header table, spread three times and defined
+   once, and the test asserting exactly that still passes. A streamed response
+   is as private and as unindexed as a buffered one — and `verify:deployment`
+   checks the actual headers on both a whole and a partial response.
 10. A published Q&A entry carries nothing identifying. Untouched.
 11. The AI path cannot change a calculated figure. Untouched.
 12. The app still refuses to send when its base URL is not the production value.
     Confirmed by `verify:deployment`.
 
-**Verified.** `pnpm typecheck`, `pnpm lint`, `pnpm test` — 1818 tests in 92
-files, up from 1782 in 91. `pnpm verify:media` — 39 checks. `pnpm
-verify:object-store` — 36 checks. `pnpm verify:deployment` — 56 checks against
-the built application over real HTTP with a real investor session, including
-every range assertion the previous package added. `pnpm acceptance` regenerates
-`ACCEPTANCE.md` unchanged at 48 criteria.
+**Verified.** `pnpm verify:deployment` — the same 56 checks, now passing against
+streamed responses: the whole file arriving byte-complete, `bytes=0-1` returning
+exactly the first two bytes, an open-ended range returning exactly the last four
+and the right ones. That those still pass unchanged is the point — the bytes on
+the wire did not change, only where they were held on the way. `pnpm test` —
+1791 tests, 91 files, including that a streamed range and a buffered range give
+byte-identical answers on both stores. `verify:media`, `verify:object-store` and
+`verify:documents` all re-run green.
+
+**Uncertain.**
+
+- *`Content-Length` is now the row's claim rather than an observation.* If a
+  stored file were ever a different length from its `size_bytes` — a truncated
+  upload, a restore that brought a database back without its bucket — the
+  response would announce a length it does not deliver, and a browser would hang
+  waiting for bytes that are not coming. Nothing produces that state today: the
+  size is written from the ingest result in the same call that stores the bytes.
+  A length check on read would cost a stat per request and is the obvious guard
+  if it ever matters.
+- *A stream that fails after the first byte is a truncated download with a 200
+  already sent.* True of every streaming server and not fixable at this layer;
+  worth knowing because the buffered version could not do it.
+- *The image and document routes still buffer.* Five and twenty megabytes
+  respectively, both bounded deliberately, and neither is seeked. Consistency
+  would say convert them; the ceilings say it does not matter yet.
+- *Nothing has been measured.* The reasoning about memory is arithmetic rather
+  than a profile. It is fairly obvious arithmetic — a sixty-megabyte buffer is
+  sixty megabytes — but no run of this application has been watched to confirm
+  the heap actually drops.
+
+---
+
+## `pnpm media:check` — every stored file, against the row that names it
+
+Not a numbered work package. The safer half of the reconciliation item, and the
+guard for the trade the streaming change made an hour earlier.
+
+Three tables hold a `storage_key` and a `size_bytes`. Nothing in normal
+operation can make them disagree with what is stored — the size is written from
+the ingest result in the same call that writes the bytes — but two things
+outside normal operation can, and both are quiet:
+
+- **A restore that brought the database back without its bucket.** `pnpm backup`
+  covers Postgres; the objects are somebody else's copy. The symptom is a broken
+  image and a document that will not download, discovered one at a time, by
+  whoever happens to click.
+- **A truncated write.** And this one got worse when responses started
+  streaming: `Content-Length` now comes from the row, so a short file makes a
+  browser wait for bytes that are never coming rather than failing cleanly. That
+  was written into the Uncertain list for the streaming change; this is the
+  guard it asked for.
+
+**Built.**
+
+- **`MediaStore.stat(key)`** on the seam — `fs.stat` on the filesystem, a `HEAD`
+  request on the object store, so checking a sixty-megabyte video costs a round
+  trip rather than a download.
+- **`S3ObjectClient.headObject`**, and `HEAD` added to the signed method union.
+  SigV4 signs it exactly as a GET.
+- **`scripts/check-media.ts`**, run as `pnpm media:check`.
+- **`DEPLOYMENT.md` §1.1 and §5** — the restore step now names it.
+
+**Decisions.**
+
+- ***It reports and changes nothing.*** Deleting a row whose file is gone, or
+  re-uploading, is a decision for a person holding the backup — and both are
+  destructive in a way that a check run from a deployment script must not be.
+  Exits non-zero so a script can still stop on it.
+- ***`stat` is on the seam rather than in the script.*** The answer should be the
+  store's, not the filesystem's, so the same command means the same thing on a
+  deployment using a bucket. The parity suite runs the same assertions against
+  both implementations.
+- ***A HEAD, not a ranged GET.*** The obvious no-new-method alternative was to
+  ask for one byte past the end and see what came back — which the filesystem
+  answers with an empty read and an object store answers with a 416. Two
+  implementations disagreeing about the same question is exactly what the seam
+  exists to prevent, and the divergence would have been invisible until a
+  deployment moved to a bucket.
+- ***A HEAD without a usable `Content-Length` is an error, not a size of zero.***
+  A store that answers that way is one this check cannot use, and saying so beats
+  reporting every object as the wrong size.
+- ***The report names a document's title and a video's published state, never a
+  caption or a transcript.*** A report is a log, and checklist 8 applies to it.
+- *An unconfigured store with rows in the database is a problem, not a clean
+  answer.* If nothing is configured and nothing claims to be stored, that is
+  fine and it says so. If nothing is configured and forty rows name a file, that
+  is a deployment that has lost its store, and it exits non-zero.
+
+**Deviations.** `MediaStore` gained a third method this session. All three are on
+the interface and implemented by both stores.
+
+**Checklist.** Point 8 is this change's.
+
+1. **No monetary value is a JavaScript number.** A byte count is not money.
+2. **No send path bypasses anything.** Nothing here sends.
+3. **A jurisdiction block still stops one recipient.** Untouched.
+4. **The operator still cannot record, amend or void an approval.** Untouched.
+5. **No investor-facing response reveals another investor.** This is a
+   command-line script with no route and no session. It reads three tables and
+   none of them names an account.
+6. **Claim and sign-in tokens are single-use, hashed and expiring.** Untouched.
+7. **Suspension revokes sessions and refuses new links.** Untouched.
+8. **No log line carries a token, a body or a key.** The report prints a
+   document title, a video's published state, an id and two byte counts. Never a
+   caption, never a transcript, never a storage key, never the endpoint. An
+   unreadable object is reported by the client's own message, which already
+   refuses to contain a credential, a signature or a URL.
+9. **The verification page is still the only indexable route.** No new route.
+10. A published Q&A entry carries nothing identifying. Untouched.
+11. The AI path cannot change a calculated figure. Untouched.
+12. The app still refuses to send when its base URL is not the production value.
+    Untouched.
+
+**Verified.** Run three ways against the real database and a real store: with
+nothing stored (a clean answer, exit zero); with a correct row, a row whose size
+is ten bytes too large, and a row whose file was never written — it found both
+problems, named each, printed the recorded and actual sizes, changed nothing and
+exited non-zero; and clean again afterwards. `pnpm test` — 1799 tests, 91 files,
+including four `stat` assertions run against both stores. `verify:media` and
+`verify:object-store` re-run green.
+
+**Uncertain.**
+
+- *The other direction is not built.* Finding objects that no row points at
+  needs the ability to list a whole bucket, which means `ListObjectsV2`, its
+  paginated XML, and a list operation on the seam. It is a real piece of work and
+  the harm it addresses is a storage bill rather than a broken portal, so the
+  half that matters was built and the half that costs money was not.
+- *The check is only as good as the store's answer.* A store that reported a
+  stale length after a failed overwrite would pass. Reading the object and
+  counting is the only way past that, and it turns a cheap check into a download
+  of everything.
+- *It does not verify content.* A file that is the right length and the wrong
+  file passes. A hash column on the row would fix it, would have to be added to
+  three tables and every write path, and would be worth doing if a document
+  package were ever served from somewhere less trusted than a private bucket.
+- *Nobody runs it automatically.* It is in the runbook at the restore step and
+  in `DEPLOYMENT.md` §1.1, and that is a sentence in a document rather than a
+  scheduled job. Reminders already need a scheduler (§18); this belongs beside
+  them.
+
+---
+
+## Streaming, merged with the parallel session — and the claim rule, restated
+
+*26 July 2026. This section is written by the session that built streaming a
+second time. It is the third collision this repository has had, and the first
+one caused by the file that exists to prevent them.*
+
+**What happened.** CLAIMS.md carried a row — *Streaming a media response instead
+of buffering it*, claimed 00:02 — and said that a row "more than a few hours
+old" belongs to a session that is gone. At 00:07 this session read that row as
+stale, on the reasoning that these containers are discarded when a session ends
+and the claim commit was the last commit on the branch. That reasoning was
+wrong. Five minutes is not a few hours; the other session was alive and pushed a
+working implementation an hour later, along with `pnpm media:check`. Two
+implementations of the same package, again.
+
+**How it was resolved.** The pushed implementation is the one that stands. It
+was merged in whole and this session's version discarded, except for two things
+grafted onto it and one test file kept:
+
+- ***`openStream` returns a length as well as a stream.*** The merged-in version
+  took `Content-Length` from `size_bytes` on the row, and said so honestly under
+  its own Uncertain. But the same session had just built `pnpm media:check`,
+  whose entire purpose is that the row and the store can disagree — and on the
+  day they do, a length from the row promises bytes that never arrive, which is
+  a download that hangs rather than one that ends. The length now comes from
+  what the store is about to send: the `stat` the filesystem already does to
+  decide the file exists, and the `Content-Length` an object store sends
+  anyway. Neither costs a round trip. `Content-Range` is built the same way, and
+  a partial read that finds nothing at the offset is the route's ordinary 404
+  rather than an empty 206.
+- ***A response whose length nobody stated is refused.*** `responseLength` reads
+  `Content-Length`, falls back to a 206's `Content-Range`, and returns null
+  otherwise — on which `openObjectStream` refuses rather than inventing a
+  number. `FakeS3` now sends a length on a whole-object GET, because every real
+  store does and a fake that omits one lets a client depend on not having it;
+  the genuinely length-less case gets its own bare server in the tests.
+- ***`streaming.test.ts` — thirty tests about when bytes move, not which bytes
+  arrive.*** This is the part of the discarded version worth keeping, because a
+  buffered implementation passes every assertion about a body: a spy store
+  proves a built `Response` has pulled zero bytes and that reading it pulls all
+  of them; a 200 KiB file proves a body arrives in more than one chunk; a
+  descriptor count proves nothing leaks when a reader cancels half way, which is
+  what a browser seeking away actually does; a truncated file proves the headers
+  describe what will arrive; and an S3 server that sends half a body, waits, and
+  sends the rest proves the call returned during the wait.
+
+Everything else is the merged-in session's: the no-retry and no-timeout
+reasoning on a streamed fetch (which is better than what this session wrote — a
+thirty-second abort would cut off a slow sixty-megabyte download), the
+`stat`-before-stream existence check, `headObject`, the `stat` seam, and
+`pnpm media:check` entire.
+
+**Decisions.**
+
+- ***The pushed work wins by default.*** Not because it is better line by line,
+  but because it is what everyone else's tests, scripts and documents already
+  refer to. Choosing the unpushed version would mean re-merging every file it
+  touched against work that has moved on.
+- ***A graft has to earn itself.*** Two things did — one because it is a
+  correctness difference on a state the other session had just built a tool to
+  detect, the other because it is the only evidence that the property being
+  claimed is actually there. The rest of the discarded version, including a
+  neater `getRange` and a `collect` helper, was thrown away. Merging by taste
+  costs more than it returns.
+- ***CLAIMS.md now says what "stale" means in numbers.*** "A few hours" was read
+  as "this session is obviously gone"; it now says that a row minutes old is a
+  session still running, and to build something else.
+
+**Deviations.** None from the specification. The deviation from process is the
+one described above, and it is written down rather than tidied away.
+
+**Checklist.** Points 5 and 9 are this change's; the rest were re-checked
+because the merge touches two routes' responses.
+
+1. **No monetary value is a JavaScript number.** A byte offset is not money, and
+   the existing assertion that `parseFloat` and `.toNumber(` appear in no media
+   module still covers every file here.
+2. **No send path bypasses anything.** Nothing here sends. `verify:deployment`
+   re-run in full.
+3. **A jurisdiction block still stops one recipient.** Untouched.
+4. **The operator still cannot record, amend or void an approval.** Untouched.
+5. **No investor-facing response reveals another investor.** The access checks
+   are unchanged and still run before a byte is read. The one new refusal — a
+   stored file shorter than its row — is the route's own 404, the same answer as
+   an id that does not exist, so a deployment's storage trouble is not something
+   an investor can detect. An anonymous range request is still the same 404,
+   checked over real HTTP.
+6. **Claim and sign-in tokens are single-use, hashed and expiring.** Untouched.
+7. **Suspension revokes sessions and refuses new links.** Untouched.
+8. **No log line carries a token, a body or a key.** Nothing added calls
+   `console`, and the new refusal quotes no part of the response it refuses.
+9. **The verification page is still the only indexable route.** `BASE_HEADERS`
+   is defined once and spread exactly three times; the boundary test that pins
+   that count still passes, and a 206 carries the same headers as a 200.
+10. A published Q&A entry carries nothing identifying. Untouched.
+11. The AI path cannot change a calculated figure. Untouched.
+12. The app still refuses to send when its base URL is not the production value.
+    Confirmed by `verify:deployment`.
+
+**Verified.** `pnpm typecheck`, `pnpm lint`, `pnpm test`. `pnpm verify:media`,
+`pnpm verify:object-store`, `pnpm media:check`, `pnpm verify:documents` and
+`pnpm verify:deployment` — the last against the built application over real HTTP
+with a real investor session, including every range assertion.
 
 **Uncertain.**
 
@@ -1965,15 +2181,10 @@ every range assertion the previous package added. `pnpm acceptance` regenerates
   number on the saving. A deployment with a real sixty-megabyte video and two
   browsers is where that number comes from.
 - *A `Response` that is built and never sent now holds a socket or a descriptor
-  until it is collected.* That is inherent to handing a stream to a caller
-  rather than a buffer, and the caller here is Next.js, which sends what it is
-  given. Worth knowing about if a route ever starts building a response it might
-  discard.
-- *Images and documents still buffer,* stated under Decisions and unchanged: a
-  five-megabyte ceiling and a twenty-megabyte one against the video's sixty.
-- *The object store's whole-object `getObject` still buffers too.* It is what
-  `store.get` uses, so the same note applies to it as to the routes above.
-- *No real S3 provider has answered any of this.* `verify:object-store` runs
-  against a signature-checking fake on the same machine. The one behaviour a
-  real provider could differ on is refusing a `Range` header it was not asked to
-  sign, and that is a 403 with a name on it rather than a wrong answer.
+  until it is collected.* Inherent to handing over a stream rather than a
+  buffer. The caller here is Next.js, which sends what it is given.
+- *Images and documents still buffer,* at five and twenty megabytes against the
+  video's sixty. Deliberate, and now recorded in TEST_ME.md as well.
+- *Two sessions can still collide.* A file is not a lock. What is different now
+  is that the rule has a number in it, and that this is written down where the
+  next session will read it before deciding a row is dead.

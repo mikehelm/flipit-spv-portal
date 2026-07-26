@@ -23,9 +23,10 @@
  * library, which is exactly the state a fresh install is in.
  */
 
-import { mkdir, open, readFile, rm, writeFile } from 'node:fs/promises'
-import path from 'node:path'
+import { createReadStream } from 'node:fs'
+import { mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
+import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { env } from '@/lib/env'
 import { S3ObjectClient } from './s3'
@@ -36,45 +37,26 @@ export interface StoredObject {
 }
 
 /**
- * A byte span, inclusive at both ends — the HTTP convention, because the only
- * caller is a route answering a `Range` header, and translating twice is how an
- * off-by-one gets in.
- */
-export interface ByteRange {
-  start: number
-  end: number
-}
-
-/**
  * An object being read, rather than an object that has been read.
  *
- * The difference is the whole point. `StoredObject` holds every byte in one
- * buffer: for a sixty-megabyte video that is sixty megabytes of process memory
- * per concurrent viewer, and the video is the one thing here that several
- * people plausibly open at the same minute. A `ReadableStream` is handed
- * straight to `Response`, which pulls from it at the speed the socket drains,
- * so what is in memory is a chunk rather than a file.
+ * `length` is how many bytes the stream will actually produce, taken from the
+ * source itself — the `stat` the filesystem store already does to decide the
+ * object exists, the `Content-Length` an object store sends anyway. Neither
+ * costs an extra round trip.
  *
- * `length` is how many bytes the stream will produce, read from the source
- * itself — `stat` on a filesystem, `Content-Length` on an object store — and
- * never from a database column. The column is what a range is *resolved*
- * against; what gets sent is what the store actually has.
+ * It is here because the alternative is a response whose `Content-Length` comes
+ * from a database column. Those agree until the day they do not — a partial
+ * write, a restored backup, an object replaced out of band — and on that day a
+ * response promising more bytes than will arrive is a download that hangs
+ * rather than one that ends. `pnpm media:check` exists precisely because that
+ * state is considered reachable; this is the same fact applied to the response.
+ * A range is still *resolved* against the recorded size. What is *promised* is
+ * what the store has.
  */
 export interface StoredStream {
   stream: ReadableStream<Uint8Array>
-  contentType: string
   length: number
 }
-
-/**
- * The content type every store reports, and why it is a constant.
- *
- * Never the type the storage layer echoes back: on a filesystem there is none,
- * and on an object store it is whatever was declared at upload — which is
- * exactly the value ingest refuses to trust. The real type is a column on the
- * row that names the key, sniffed from the bytes, and the caller has it.
- */
-const OPAQUE_TYPE = 'application/octet-stream'
 
 /** A stream that ends immediately. Not null: the object is there, and empty. */
 function emptyStream(): ReadableStream<Uint8Array> {
@@ -85,44 +67,6 @@ function emptyStream(): ReadableStream<Uint8Array> {
   })
 }
 
-/**
- * Every byte of a stream, in one buffer.
- *
- * This exists so that `getRange` — whose callers want bytes — is the streaming
- * read with a collector on the end, rather than a second implementation of the
- * same arithmetic. Two copies of "which bytes did they ask for" inside one
- * class is the duplication the range work went out of its way to avoid.
- *
- * It is also the honest name for what buffering is: a deliberate choice made
- * by a caller who knows the thing is small, not the default the whole system
- * falls into.
- */
-async function collect(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
-  const chunks: Uint8Array[] = []
-  let total = 0
-
-  const reader = stream.getReader()
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      chunks.push(value)
-      total += value.length
-    }
-  } finally {
-    reader.releaseLock()
-  }
-
-  const bytes = new Uint8Array(total)
-  let at = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, at)
-    at += chunk.length
-  }
-
-  return bytes
-}
-
 export interface MediaStore {
   /** Which implementation this is, for the settings screen to display. */
   readonly kind: 'filesystem' | 'object-store'
@@ -131,30 +75,47 @@ export interface MediaStore {
   put(key: string, bytes: Uint8Array, contentType: string): Promise<void>
   get(key: string): Promise<StoredObject | null>
   /**
-   * Bytes `start` to `end`, both inclusive, in one buffer.
+   * Bytes `start` to `end`, both inclusive — the HTTP convention, because the
+   * only caller is a route answering a `Range` header and translating twice is
+   * how an off-by-one gets in.
    *
    * Null means the object is not there, exactly as `get` does. The caller has
    * already resolved the range against the recorded size, so a range outside
    * the object is a caller error rather than a case to answer.
-   *
-   * This is `openStream` with a collector on the end. Prefer `openStream`
-   * unless the bytes are actually needed in hand — a range can be most of a
-   * file, so "it is only a range" is not a size argument.
    */
   getRange(key: string, start: number, end: number): Promise<StoredObject | null>
   /**
-   * The object, or part of it, as a stream that has not been read yet.
+   * The same bytes as `get`/`getRange`, as a stream that is never all in
+   * memory at once.
    *
-   * This is the read an HTTP response should use. Nothing is buffered: the
-   * bytes move when the consumer pulls them, which for a `Response` means when
-   * the client's socket has room.
+   * This is what the routes use. `get` stays because several callers genuinely
+   * want the bytes — the ingest verification reads a stored file to compare it,
+   * and a caller that wants a `Uint8Array` should not have to drain a stream to
+   * get one. `openStream` is for the one case where holding sixty megabytes to
+   * hand them straight to a socket is the wrong shape.
    *
-   * Null means the object is not there. A range that starts past the end of a
-   * real object is *not* null — the object exists — and comes back as a stream
-   * of length zero, so a caller can tell "gone" from "shorter than the row
-   * claims" and answer each properly.
+   * `range` is inclusive on both ends, as `getRange` is. Null means the object
+   * is not there — decided before a stream exists, because a stream that failed
+   * part way through would already have sent a 200 and there is no way left to
+   * say 404 after the status line has gone.
+   *
+   * A range that begins past the end of an object that *is* there is not null.
+   * It is a stream of length zero, so that a caller can tell "gone" from
+   * "shorter than the row claims" and answer each properly.
    */
-  openStream(key: string, range?: ByteRange): Promise<StoredStream | null>
+  openStream(
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<StoredStream | null>
+  /**
+   * How many bytes are actually stored under this key, without reading them.
+   *
+   * Null means the object is not there. This exists for one caller —
+   * `pnpm media:check`, which compares what is in the store against the rows
+   * that name it — and it is on the seam rather than in the script so that the
+   * answer is the store's rather than the filesystem's.
+   */
+  stat(key: string): Promise<{ sizeBytes: number } | null>
   remove(key: string): Promise<void>
 }
 
@@ -218,45 +179,24 @@ class FilesystemMediaStore implements MediaStore {
       const bytes = await readFile(file)
       // The content type is not read back from disk. It is a column on the
       // row that names this key, sniffed at ingest, and the caller has it.
-      return { bytes: new Uint8Array(bytes), contentType: OPAQUE_TYPE }
+      return { bytes: new Uint8Array(bytes), contentType: 'application/octet-stream' }
     } catch {
       return null
     }
   }
 
   /**
-   * Read only the bytes asked for — and only when they are wanted in hand.
+   * Read only the bytes asked for, with a file handle and a position.
    *
-   * One implementation of the arithmetic, in `openStream`, with a collector on
-   * the end. `readFile` then `slice` would be the third thing this method has
-   * been and the worst: the point of a range request is that a sixty-megabyte
-   * video is not in memory to serve two seconds of it.
+   * Not `readFile` then `slice`. The point of a range request is that a
+   * sixty-megabyte video does not have to be in memory for a browser to play
+   * two seconds of it, and reading the whole file first would keep the correct
+   * HTTP behaviour while throwing away the reason for it.
    */
   async getRange(key: string, start: number, end: number): Promise<StoredObject | null> {
-    if (end < start) return null
-
-    const opened = await this.openStream(key, { start, end })
-    if (!opened) return null
-
-    return { bytes: await collect(opened.stream), contentType: opened.contentType }
-  }
-
-  /**
-   * A file handle, a position, and a stream off it.
-   *
-   * `handle.createReadStream` closes the handle when the stream ends, errors
-   * *or is cancelled* — the third one being why this is not a hand-rolled pull
-   * loop. A browser that seeks away mid-download cancels the response body, and
-   * a descriptor leaked on that path is a leak on the most ordinary thing a
-   * video player does.
-   *
-   * The size comes from `stat` on the open handle rather than from the caller's
-   * recorded size, so what `length` promises is what the file will actually
-   * produce even if the row has drifted from the disk.
-   */
-  async openStream(key: string, range?: ByteRange): Promise<StoredStream | null> {
     const file = this.resolve(key)
-    if (range && range.end < range.start) return null
+    const length = end - start + 1
+    if (length <= 0) return null
 
     let handle
     try {
@@ -266,33 +206,57 @@ class FilesystemMediaStore implements MediaStore {
     }
 
     try {
-      const { size } = await handle.stat()
-
-      const start = range ? range.start : 0
-      // Clamped, never extended: asking past the end of a file yields what is
-      // there, which is the same thing the specification says about a range
-      // whose end is past the last byte.
-      const end = Math.min(range ? range.end : size - 1, size - 1)
-      const length = Math.max(0, end - start + 1)
-
-      if (length === 0) {
-        await handle.close()
-        return { stream: emptyStream(), contentType: OPAQUE_TYPE, length: 0 }
-      }
-
+      const buffer = Buffer.alloc(length)
+      const { bytesRead } = await handle.read(buffer, 0, length, start)
       return {
-        stream: Readable.toWeb(
-          handle.createReadStream({ start, end }),
-        ) as unknown as ReadableStream<Uint8Array>,
-        contentType: OPAQUE_TYPE,
-        length,
+        bytes: new Uint8Array(buffer.subarray(0, bytesRead)),
+        contentType: 'application/octet-stream',
       }
-    } catch (error) {
-      // Only reachable before the stream exists — after it, the stream owns the
-      // handle and closes it. Closing twice would be harmless; not closing here
-      // would leak a descriptor on a failed `stat`.
-      await handle.close().catch(() => undefined)
-      throw error
+    } finally {
+      await handle.close()
+    }
+  }
+
+  async openStream(
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<StoredStream | null> {
+    const file = this.resolve(key)
+    if (range && range.end < range.start) return null
+
+    // Existence is checked before a stream is built, so a missing file is a
+    // null here rather than an error event on a response that has already
+    // begun — by which point the status line has gone and there is no way
+    // left to say 404. The size comes back from the same call, so knowing how
+    // long the answer will be costs nothing extra.
+    let size: number
+    try {
+      size = (await stat(file)).size
+    } catch {
+      return null
+    }
+
+    const start = range ? range.start : 0
+    // Clamped, never extended: a range whose end is past the last byte gets
+    // what is there, which is what the specification says to do.
+    const end = Math.min(range ? range.end : size - 1, size - 1)
+    const length = Math.max(0, end - start + 1)
+
+    if (length === 0) return { stream: emptyStream(), length: 0 }
+
+    return {
+      stream: Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream<Uint8Array>,
+      length,
+    }
+  }
+
+  async stat(key: string): Promise<{ sizeBytes: number } | null> {
+    const file = this.resolve(key)
+
+    try {
+      return { sizeBytes: (await stat(file)).size }
+    } catch {
+      return null
     }
   }
 
@@ -350,38 +314,38 @@ class ObjectMediaStore implements MediaStore {
     // answer identically. The type is a column on the row that names this key,
     // sniffed from the bytes at ingest; what an object store echoes back is
     // whatever was declared to it, which is the thing ingest refuses to trust.
-    return { bytes, contentType: OPAQUE_TYPE }
-  }
-
-  /** The streaming read, collected. One range implementation, as above. */
-  async getRange(key: string, start: number, end: number): Promise<StoredObject | null> {
-    if (end < start) return null
-
-    const opened = await this.openStream(key, { start, end })
-    if (!opened) return null
-
-    return { bytes: await collect(opened.stream), contentType: opened.contentType }
+    return { bytes, contentType: 'application/octet-stream' }
   }
 
   /**
-   * The response body, handed on rather than drained.
+   * A `Range` header on the GET, and a 206 back.
    *
-   * `fetch` already gives a stream; the buffering was this class calling
-   * `arrayBuffer()` on it. Passing it through means a video read out of an S3
-   * bucket crosses this process a chunk at a time in both directions.
-   *
-   * A ranged read still refuses anything that is not a 206 — a store that
-   * ignores `Range` and sends the whole object would otherwise be
-   * indistinguishable from one honouring it, which is the failure this exists
-   * to make loud.
+   * The client refuses anything that is not a 206, rather than accepting a 200
+   * and slicing it here. A store that ignores `Range` and sends the whole
+   * object would otherwise look identical to one that honoured it, right up
+   * until a sixty-megabyte video was being held in memory to serve two
+   * seconds of it.
    */
-  async openStream(key: string, range?: ByteRange): Promise<StoredStream | null> {
+  async getRange(key: string, start: number, end: number): Promise<StoredObject | null> {
+    if (end < start) return null
+
+    const bytes = await this.client.getObjectRange(this.checked(key), start, end)
+    if (bytes === null) return null
+
+    return { bytes, contentType: 'application/octet-stream' }
+  }
+
+  async openStream(
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<StoredStream | null> {
     if (range && range.end < range.start) return null
 
-    const opened = await this.client.openObject(this.checked(key), range)
-    if (opened === null) return null
+    return this.client.openObjectStream(this.checked(key), range)
+  }
 
-    return { stream: opened.body, contentType: OPAQUE_TYPE, length: opened.length }
+  async stat(key: string): Promise<{ sizeBytes: number } | null> {
+    return this.client.headObject(this.checked(key))
   }
 
   async remove(key: string): Promise<void> {

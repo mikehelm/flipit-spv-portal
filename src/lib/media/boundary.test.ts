@@ -163,58 +163,40 @@ describe('the video is served only to authenticated investors — §13.3', () =>
 
   it('the range is resolved against the recorded size, never against a read', () => {
     const serve = read('src/lib/media/serve.ts')
-    expect(serve).toContain('resolveRange(input.request.headers.get(\'range\'), input.sizeBytes)')
-    // The whole object is never fetched in order to answer a partial request.
-    const partialBranch = serve.slice(serve.indexOf("outcome.kind === 'partial'"))
-    expect(partialBranch.slice(0, partialBranch.indexOf('return new Response'))).not.toContain(
-      'store.get(',
-    )
+    expect(serve).toContain("resolveRange(input.request.headers.get('range'), input.sizeBytes)")
   })
 
   /**
-   * The video response streams, and there is no shape of edit that quietly
-   * un-streams it. A single `await store.get(...)` put back for convenience
-   * would restore a sixty-megabyte buffer per viewer and pass every
-   * behavioural test in the suite, because the bytes that arrive would be
-   * identical. Only the shape tells them apart.
+   * The body is a stream. A route that buffered a sixty-megabyte video into one
+   * array to hand it to a socket held all of it in memory for as long as a
+   * phone on a slow connection took to pull it down.
    */
-  it('serveMedia never reads an object into memory, on any branch', () => {
+  it('no media response is ever built from a buffer', () => {
     const serve = code('src/lib/media/serve.ts')
 
+    expect(serve).not.toContain('new Uint8Array(')
     expect(serve).not.toContain('store.get(')
-    expect(serve).not.toContain('store.getRange(')
-    expect(serve).not.toContain('arrayBuffer(')
-    expect(serve).not.toContain('Uint8Array')
-    // Two bodies — the 200 and the 206 — and both of them are the store's
-    // stream rather than anything this module has held.
-    expect(serve.match(/new Response\(\w+\.stream,/g)?.length).toBe(2)
+    expect(serve).not.toContain('getRange(')
     expect(serve.match(/store\.openStream\(/g)?.length).toBe(2)
   })
 
-  it('both stores stream, and the range arithmetic exists once in each', () => {
-    const store = code('src/lib/media/store.ts')
+  /**
+   * The length promised is the store's, never the row's. The two agree until a
+   * partial write or a restored backup makes them disagree — a state
+   * `pnpm media:check` exists to find, and therefore one this response has to
+   * survive. A `Content-Length` taken from the column would promise bytes that
+   * never arrive, and a browser waits on those rather than giving up.
+   */
+  it('every length in a media response comes from the store, not the row', () => {
+    const serve = code('src/lib/media/serve.ts')
 
-    // Two implementations, two `openStream`s, and each `getRange` is that
-    // method with a collector on the end rather than a second copy of the
-    // arithmetic.
-    expect(store.match(/async openStream\(/g)?.length).toBe(2)
-    expect(store.match(/await this\.openStream\(key, \{ start, end \}\)/g)?.length).toBe(2)
-    // The buffering read exists in exactly one place, and it is the one named
-    // for what it does.
-    expect(store.match(/async function collect\(/g)?.length).toBe(1)
-  })
+    expect(serve.match(/'Content-Length': String\(opened\.length\)/g)?.length).toBe(2)
+    expect(serve).not.toContain("'Content-Length': String(input.sizeBytes)")
+    expect(serve).not.toContain("'Content-Length': String(range.length)")
 
-  it('the object-store client hands the body on rather than draining it', () => {
-    const s3 = code('src/lib/media/s3.ts')
-
-    const opener = s3.slice(s3.indexOf('async openObject('))
-    const body = opener.slice(0, opener.indexOf('async deleteObject('))
-
-    // `cancel()` is a drain that throws bytes away, which is what a refusal
-    // does; `arrayBuffer()` is a drain that keeps them, which is the thing
-    // this method exists not to do.
-    expect(body).not.toContain('arrayBuffer(')
-    expect(body).toContain('response.body ?? emptyBody()')
+    // The recorded size still resolves the range and still names the total in
+    // a `Content-Range` — the two things it is the authority on.
+    expect(serve.match(/input\.sizeBytes/g)?.length).toBe(3)
   })
 
   it('never indexed', () => {

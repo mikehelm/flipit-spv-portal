@@ -73,7 +73,7 @@ export class FakeS3 {
     for await (const chunk of request) chunks.push(chunk as Buffer)
     const body = Buffer.concat(chunks)
 
-    const method = request.method as 'PUT' | 'GET' | 'DELETE'
+    const method = request.method as 'PUT' | 'GET' | 'DELETE' | 'HEAD'
     const [, bucket, key] = (request.url ?? '').split('/')
 
     if (bucket !== FAKE_S3_BUCKET) {
@@ -143,17 +143,29 @@ export class FakeS3 {
         return
       }
 
-      // `Content-Length` is set by hand, because Node would otherwise answer
-      // this chunked and every real S3-compatible store states the length of
-      // the body it is sending. A fake that omits a header the real thing
-      // always sends is a fake that lets a client come to depend on not having
-      // one — and this client refuses a body whose length nobody stated.
+      // `content-length` by hand, because Node answers chunked otherwise, and
+      // every real S3-compatible store states the length of the body it is
+      // sending. A fake that omits a header the real thing always sends is a
+      // fake that lets a client come to depend on not having one — and this
+      // client refuses a body whose length nobody stated. The genuinely
+      // length-less case has its own bare server, in `streaming.test.ts`.
       response
         .writeHead(200, {
           'content-type': stored.contentType,
           'content-length': String(stored.bytes.length),
         })
         .end(stored.bytes)
+    } else if (method === 'HEAD') {
+      if (!stored) {
+        response.writeHead(404).end('<Error><Code>NoSuchKey</Code></Error>')
+        return
+      }
+      response
+        .writeHead(200, {
+          'content-type': stored.contentType,
+          'content-length': String(stored.bytes.length),
+        })
+        .end()
     } else if (method === 'DELETE') {
       this.objects.delete(key!)
       response.writeHead(204).end()

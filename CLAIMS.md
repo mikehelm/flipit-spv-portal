@@ -21,14 +21,21 @@ So: claim first. It costs a minute.
    meantime, and it may be the thing you were about to start.
 4. When the package lands, delete your row in the same commit.
 
-If a row is more than a few hours old, assume the session behind it is gone.
-Take the work, and say so in PROGRESS.md.
+**When is a row stale?** Not for **six hours**, and that number is not a guess —
+it was written after a row five minutes old was read as abandoned and the same
+package was built twice on 26 July. A row minutes or an hour old is a session
+that is still running, whatever the branch looks like: a claim is the *first*
+commit of a package, so a claim with no code after it is the normal state of
+work in progress, not evidence that it stopped.
+
+After six hours, take the work and say so in PROGRESS.md. Before then, build
+something else — there is always something else in the Uncertain notes.
 
 ## Claimed
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| *(nothing claimed — the table is empty and that is the normal state)* | | | |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -60,12 +67,19 @@ except PDF is now stripped, and PDF is deliberate.
 **Range requests on the video are done too** — the portal video answers 206,
 which is what Safari needs before it will play anything at all.
 
-**Streaming a media response is done too** — as of 26 July the video is sent as
-it is read rather than read and then sent, on both stores. The row claiming it
-was written at 00:02 by a session that was discarded before it started; a later
-session took the work under the stale-row rule above and said so in PROGRESS.md.
-Images and documents still buffer, deliberately and on the record.
+**Streaming is done too** — every media response is built from a stream rather
+than a buffer. **It was built twice**, on 26 July, by two sessions an hour
+apart: one claimed the row above at 00:02, the other read the row as stale five
+minutes later and took the work. Both were wrong about something — the rule says
+*hours*, not minutes, and a row five minutes old is a session that is still
+running. The merge kept the pushed implementation and grafted two things from
+the other onto it, which is recorded in PROGRESS.md. **If a row is minutes old,
+it is not stale. Ask before taking it, or build something else.**
 
-The largest left are a reconciliation pass for objects whose rows are gone, and
-the open question — sharpened by corrections — of whether issuing a document
-should notify the investor at all.
+**`pnpm media:check` is done too** — every record's file is checked for presence
+and size, which is the half of reconciliation that matters.
+
+The largest left are listing a bucket to find objects no row points at, running
+these checks on a schedule rather than from the runbook, and the open question —
+sharpened by corrections — of whether issuing a document should notify the
+investor at all. None of them is a package.

@@ -14,12 +14,20 @@
  * the one sniffed from the file's own bytes at upload rather than anything a
  * browser said.
  *
- * **Nothing here holds a file.** Every response body is the store's stream,
- * handed to `Response` and pulled from at the speed the client's socket
- * drains. The 200 was the case that mattered: a `<video>` element that is
- * downloading rather than seeking sends no `Range` at all, so the whole-file
- * branch was sixty megabytes of process memory per viewer, on the one route
- * several people plausibly open in the same minute.
+ * **The body is a stream, not a buffer.** A sixty-megabyte video was previously
+ * read into one `Uint8Array` and handed to a `Response`, which meant the whole
+ * file was in memory for as long as it took a phone on a slow connection to
+ * pull it down.
+ *
+ * **The range is resolved against the recorded size; the length promised is the
+ * store's.** Those two are the same number until the day they are not — a
+ * partial write, a restored backup, an object replaced out of band — and
+ * `pnpm media:check` exists because that day is considered reachable. On it, a
+ * `Content-Length` taken from the row would promise bytes that never arrive,
+ * which is a download that hangs rather than one that ends. So the header is
+ * built from what the store is about to send, which costs nothing: the
+ * filesystem `stat`s the file to decide it exists at all, and an object store
+ * sends a `Content-Length` whether it is read or not.
  */
 
 import {
@@ -74,46 +82,45 @@ export async function serveMedia(input: ServeMediaInput): Promise<Response> {
 
   if (outcome.kind === 'partial') {
     const { range } = outcome
-    const part = await input.store.openStream(input.storageKey, range)
-    if (!part) return input.notFound
+    const opened = await input.store.openStream(input.storageKey, range)
+    if (!opened) return input.notFound
 
-    // The object is there, and has nothing at that offset: the stored file is
-    // shorter than the row claims. That is the same 404 as an id that does not
-    // exist — the only answer that tells an investor nothing about the state of
-    // this deployment's storage.
-    if (part.length === 0) return input.notFound
+    // The object is there and has nothing at that offset: the stored file is
+    // shorter than the row claims. That is the route's own 404 — the same
+    // answer as an id that does not exist, and the only one that tells an
+    // investor nothing about the state of this deployment's storage.
+    if (opened.length === 0) return input.notFound
 
-    // Built from what the store is about to send, not from what was asked for.
-    // Where the two differ the row has drifted from storage, and a
-    // `Content-Range` promising bytes that will not arrive hangs a player
-    // rather than ending it.
+    // Named for the bytes that will actually arrive rather than the ones that
+    // were asked for. The two differ only when the row has drifted from the
+    // store, and on that path a promise of more is worse than a smaller truth.
     const sending = {
       start: range.start,
-      end: range.start + part.length - 1,
-      length: part.length,
+      end: range.start + opened.length - 1,
+      length: opened.length,
     }
 
-    return new Response(part.stream, {
+    return new Response(opened.stream, {
       status: 206,
       headers: {
         ...BASE_HEADERS,
         'Content-Type': input.contentType,
-        'Content-Length': String(part.length),
+        'Content-Length': String(opened.length),
         'Content-Range': contentRangeHeader(sending, input.sizeBytes),
         'Accept-Ranges': 'bytes',
       },
     })
   }
 
-  const object = await input.store.openStream(input.storageKey)
-  if (!object) return input.notFound
+  const opened = await input.store.openStream(input.storageKey)
+  if (!opened) return input.notFound
 
-  return new Response(object.stream, {
+  return new Response(opened.stream, {
     status: 200,
     headers: {
       ...BASE_HEADERS,
       'Content-Type': input.contentType,
-      'Content-Length': String(object.length),
+      'Content-Length': String(opened.length),
       'Accept-Ranges': 'bytes',
     },
   })

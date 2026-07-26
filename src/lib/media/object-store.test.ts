@@ -23,6 +23,27 @@ import { mediaStore, resetMediaStoreCache, type MediaStore } from './store'
 
 const KEY = 'img_STOREKEYSTOREKEYSTOREKEY'
 
+/** Read a whole stream into one array, for a test that wants to compare bytes. */
+async function drain(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = []
+  const reader = stream.getReader()
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value) chunks.push(value)
+  }
+
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+  const out = new Uint8Array(total)
+  let at = 0
+  for (const chunk of chunks) {
+    out.set(chunk, at)
+    at += chunk.length
+  }
+  return out
+}
+
 const ORIGINAL = { ...process.env }
 
 function restoreEnv(): void {
@@ -166,40 +187,105 @@ describe('both stores answer the same questions the same way', () => {
         )
       })
 
-      /**
-       * The streaming read is the one the video route uses, so both stores have
-       * to answer it the same way — the awkward answers included. A store that
-       * said "absent" where the other said "there, and empty" would make the
-       * choice of backend visible in an HTTP status code.
-       */
-      it('streams, and declares the length before a byte is read', async () => {
+      it('streams the whole object, and the stream is the bytes', async () => {
         const store = build()
-        const bytes = new Uint8Array(256)
-        for (let i = 0; i < bytes.length; i += 1) bytes[i] = i
+        const bytes = new Uint8Array(300)
+        for (let i = 0; i < bytes.length; i += 1) bytes[i] = i % 256
 
         await store.put('img_STREAMSTREAMSTREAMSTR', bytes, 'image/png')
 
-        const whole = (await store.openStream('img_STREAMSTREAMSTREAMSTR'))!
-        expect(whole.length).toBe(256)
-        expect(whole.contentType).toBe('application/octet-stream')
-        expect([...new Uint8Array(await new Response(whole.stream).arrayBuffer())]).toEqual([
-          ...bytes,
-        ])
-
-        const part = (await store.openStream('img_STREAMSTREAMSTREAMSTR', { start: 8, end: 11 }))!
-        expect(part.length).toBe(4)
-        expect([...new Uint8Array(await new Response(part.stream).arrayBuffer())]).toEqual([
-          8, 9, 10, 11,
-        ])
+        const opened = await store.openStream('img_STREAMSTREAMSTREAMSTR')
+        expect(opened).not.toBeNull()
+        // The length is known before a byte is read, and it is the store's own
+        // answer rather than anything a caller told it.
+        expect(opened!.length).toBe(300)
+        expect([...(await drain(opened!.stream))]).toEqual([...bytes])
       })
 
-      it('a stream of an object that is not there is null, and a backwards range too', async () => {
+      it('streams a range, inclusive on both ends', async () => {
         const store = build()
-        await store.put('img_STREAMNULLSTREAMNULLS', new Uint8Array([1, 2, 3]), 'image/png')
+        const bytes = new Uint8Array(300)
+        for (let i = 0; i < bytes.length; i += 1) bytes[i] = i % 256
 
-        expect(await store.openStream('img_NOTHINGHEREATALLNOTHING')).toBeNull()
-        expect(await store.openStream('img_STREAMNULLSTREAMNULLS', { start: 2, end: 1 })).toBeNull()
+        await store.put('img_STREAMRANGESTREAMRAN', bytes, 'image/png')
+
+        const two = await store.openStream('img_STREAMRANGESTREAMRAN', { start: 0, end: 1 })
+        expect(two!.length).toBe(2)
+        expect([...(await drain(two!.stream))]).toEqual([0, 1])
+
+        const tail = await store.openStream('img_STREAMRANGESTREAMRAN', { start: 297, end: 299 })
+        expect(tail!.length).toBe(3)
+        expect([...(await drain(tail!.stream))]).toEqual([297 % 256, 298 % 256, 299 % 256])
+
+        // Byte for byte the same answer as the buffered read, on both stores.
+        const buffered = await store.getRange('img_STREAMRANGESTREAMRAN', 10, 19)
+        const streamed = await store.openStream('img_STREAMRANGESTREAMRAN', { start: 10, end: 19 })
+        expect([...(await drain(streamed!.stream))]).toEqual([...buffered!.bytes])
+      })
+
+      /**
+       * The awkward answers, which both stores have to give identically or the
+       * choice of backend becomes visible in an HTTP status code.
+       */
+      it('a range past the end is empty rather than absent, and a backwards one is null', async () => {
+        const store = build()
+        await store.put('img_SHORTSHORTSHORTSHORTS', new Uint8Array([1, 2, 3]), 'image/png')
+
+        // There, and shorter than asked for. Not the same as gone.
+        const clamped = await store.openStream('img_SHORTSHORTSHORTSHORTS', { start: 1, end: 99 })
+        expect(clamped).not.toBeNull()
+        expect(clamped!.length).toBe(2)
+        expect([...(await drain(clamped!.stream))]).toEqual([2, 3])
+
+        expect(await store.openStream('img_SHORTSHORTSHORTSHORTS', { start: 2, end: 1 })).toBeNull()
+      })
+
+      /**
+       * Absence has to be decided BEFORE a response begins. A stream that
+       * failed part way through would already have sent a 200, and there is no
+       * way left to say 404 after the status line has gone.
+       */
+      it('an absent object is null before a stream exists, not an error during one', async () => {
+        const store = build()
+        expect(await store.openStream('img_NOSTREAMNOSTREAMNOSTR')).toBeNull()
+        expect(
+          await store.openStream('img_NOSTREAMNOSTREAMNOSTR', { start: 0, end: 1 }),
+        ).toBeNull()
+      })
+
+      it('a stream refuses a key that is not a storage key too', async () => {
+        const store = build()
         await expect(store.openStream('../../etc/passwd')).rejects.toThrow(/not a storage key/)
+      })
+
+      it('stat reports the size that is actually stored, without reading it', async () => {
+        const store = build()
+        const bytes = new Uint8Array(4321)
+
+        await store.put('img_STATSTATSTATSTATSTATS', bytes, 'image/png')
+
+        expect(await store.stat('img_STATSTATSTATSTATSTATS')).toEqual({ sizeBytes: 4321 })
+      })
+
+      it('stat of something absent is null, not an error', async () => {
+        const store = build()
+        expect(await store.stat('img_NOSTATNOSTATNOSTATNO')).toBeNull()
+      })
+
+      it('stat refuses a key that is not a storage key too', async () => {
+        const store = build()
+        await expect(store.stat('../../etc/passwd')).rejects.toThrow(/not a storage key/)
+      })
+
+      it('stat and a real read agree about the size', async () => {
+        const store = build()
+        const bytes = new Uint8Array(777)
+
+        await store.put('img_AGREEAGREEAGREEAGREEA', bytes, 'image/png')
+
+        const stat = await store.stat('img_AGREEAGREEAGREEAGREEA')
+        const read = await store.get('img_AGREEAGREEAGREEAGREEA')
+        expect(stat!.sizeBytes).toBe(read!.bytes.length)
       })
 
       it('says where it is writing, and never says it with a credential', () => {

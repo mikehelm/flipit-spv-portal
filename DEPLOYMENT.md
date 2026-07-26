@@ -93,8 +93,9 @@ model from the one the rest of this application uses.
 else. It is never logged, never written to the database and never returned to a
 browser.
 
-**The bucket does not travel with `pnpm backup`.** The backup covers the
-database, which holds the rows that *name* the objects. Moving deployments means
+**The bucket does not travel with `pnpm backup`, and `pnpm media:check` is how
+you find out.** The backup covers the database, which holds the rows that *name*
+the objects. Moving deployments means
 copying the bucket separately, or pointing the new deployment at the same one —
 the second is easier and is what §4.3 assumes. A database restored without its
 bucket produces rows whose files are missing, which shows up as broken images
@@ -104,6 +105,10 @@ and a document that will not download.
 retry, and the refusals — against a signature-checking server on localhost. It
 does not talk to a real provider; the first upload after configuring one is
 still the moment to watch.
+
+**`pnpm media:check` compares every stored file against the row that names it**,
+and it is the command to run after a restore. It reports anything missing or the
+wrong size, exits non-zero if there is a problem, and changes nothing. See §5.
 
 ---
 
@@ -257,6 +262,12 @@ migration, any restore, and any move to `disabled`. §7 already refuses to move
 the service to `disabled` without a completed export in the preceding seven
 days; that is an export of investor data for the investors' sake, and it is not
 a backup. Do both.
+
+**After any restore, run `pnpm media:check`.** The dump holds the rows that name
+every image, video and document; it does not hold the files. The check compares
+the two and reports anything missing or the wrong size. It changes nothing and
+exits non-zero if there is a problem, so it belongs in the same script as the
+restore rather than in somebody's memory.
 
 **Where to keep them.** Not on the same host. A dump contains every investor's
 name, address and figures — it is the most sensitive single artefact this
