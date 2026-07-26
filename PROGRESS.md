@@ -4093,3 +4093,137 @@ column empty by construction, which is not an empty column but a wrong one.
 - *A confirmed change does not re-run the import matcher.* Re-importing the
   original spreadsheet will match on the invited address, find nothing, and
   create a second account. §9's matching is by address and nothing else.
+
+## The checkboxes §8.2 said were configurable, and which did not exist
+
+§13 lists *"acknowledgement checkboxes, configurable, and not to be treated as a
+binding subscription unless the final legal documents expressly make them so"*.
+§8.2 says the same thing from the compliance side and says why: *"the portal's
+acknowledgement checkboxes are configurable so that approved wording can be
+applied without a code change."*
+
+There was no table, no column and no checkbox. The response form had three
+radios and a note. Of the five things the audit found unbuilt, this was the only
+one §8.2 makes a compliance requirement rather than a feature — and the only one
+where a subsequent code change would be needed to satisfy an approver, which is
+precisely what that sentence exists to prevent.
+
+**Built.**
+
+- **`acknowledgement_items`** — the wording, whether it is required, its order,
+  and a `revision` that moves when the words move. Archived, never deleted.
+- **`response_acknowledgements`** — what one investor ticked, **carrying a copy
+  of the words** rather than a foreign key to them. Append-only.
+- **`src/lib/portal/acknowledgements.ts`** — the parts that are deliberately not
+  configurable: the standing line, the wording gate, and which responses require
+  a tick. No database import, so it stays reviewable as a piece of text.
+- **`src/lib/portal/acknowledgements-data.ts`** — the reads and the one write.
+- **`/admin/acknowledgements`** — owner only, with the standing line shown and
+  marked as fixed.
+- **The portal form** renders them under "Before you record an interest", with
+  the standing line beneath, and comes back with the boxes as the investor left
+  them.
+- **`pnpm verify:acknowledgements`** — 21 database-backed checks.
+
+**Decisions.**
+
+- ***An acknowledgement stores the words, not a pointer to them.*** This is the
+  decision the whole package turns on. §8.2 makes the wording editable; an
+  acknowledgement whose text is a join is an acknowledgement that can be
+  rewritten after the fact from a settings screen. The label and the revision
+  are copied at the moment of ticking and never touched again, so an owner
+  correcting a typo cannot change what somebody agreed to last week.
+- ***The standing line is not configurable.*** §13's second clause is a
+  constraint on the application, not a default. It is a constant, there is no
+  column for it, no prop that could replace it, and archiving every item does
+  not remove it — because the section does not render at all with nothing
+  configured.
+- ***The wording gate refuses words that turn an acknowledgement into an
+  undertaking.*** "Subscribe", "binding", "irrevocable", "undertake",
+  "contract", "guarantee" and the phrases around them. Without it, §8.2's
+  "without a code change" would be the route by which §13's second clause is
+  broken — approved-looking wording saying "I agree to subscribe for the amount
+  shown" is a subscription agreement rendered as a tick box. Refused at write
+  time and named out loud, like `roadmap.ts`'s gate.
+- ***Required only for an expression of interest.*** Declining and asking a
+  question never require them. This is the one that reads backwards at first:
+  making somebody tick boxes before they may say "I am not interested" turns the
+  acknowledgements into a toll on declining, and an investor unwilling to tick
+  them is pushed toward silence — and silence and a decline are not the same
+  fact on a securities round. A person who has not understood something is also
+  exactly the person who should not be made to confirm they have, so the
+  question path is free too, and the refusal message says so.
+- ***Owner only.*** §8.2's fourth clause keeps compliance out of the operator's
+  hands, and wording an approver cleared is the same kind of thing as the
+  approval. Where the specification gives a role to compliance, that is the role.
+- ***Archive, never delete.*** Every acknowledgement carries its own copy of the
+  words, so deleting a row would not corrupt the evidence — but it would remove
+  the only place the operator can see what was on the portal at the time.
+- ***The revision moves only when the words move.*** Making a box optional is a
+  change to the process, not to what anybody agreed to. Bumping the revision for
+  it would make the audit trail claim the wording changed.
+- ***Nothing is seeded.*** An empty set is a supported state and the portal
+  simply shows no section. Seeding plausible wording would put unapproved words
+  on a securities offer page looking exactly like approved ones, which is worse
+  than an empty screen with an explanation on it.
+- ***Eight is the ceiling.*** Past that nobody reads them, which defeats the
+  purpose of asking.
+- ***The form posts ids; the words come from the table.*** An edited form can
+  add nothing to the record — an id that is not live is simply not among the
+  ticked items.
+- ***The audit entry counts them and does not quote them.*** Approved wording
+  has one home, and the audit log is exported (§20).
+
+**Deviations.** None. Both §13 and §8.2 asked for this and neither had it.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here touches an amount.
+2. *A send path bypassing a gate?* No. Nothing sends. Note what this does *not*
+   do: an acknowledgement is not wired into the compliance approval hash, and
+   deliberately — §8.2's hash covers *"the exact approved subject line and
+   body"* of the template, and folding portal wording into it would mean editing
+   a checkbox voids the approval that lets invitations go out.
+3. *One recipient or the whole batch?* Not applicable.
+4. *Can an operator record an approval?* No, and this extends that rule rather
+   than weakening it: all three write paths call `requireOwner`, asserted by
+   counting the guards against the exported functions so a fourth action cannot
+   be added without one.
+5. *Does anything reveal another investor?* No. Every read is keyed on one
+   offer, asserted at the source and again in `verify:acknowledgements` with a
+   second investor's offer present and returning nothing. The wording itself is
+   global and belongs to nobody.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched. A portal that cannot respond does not load the
+   wording at all.
+8. *Does any log line contain a token, a body or a key?* No. The response audit
+   entry carries a count; the owner-side entries carry a revision and a boolean.
+   No wording in any of them, asserted.
+9. *Indexable routes?* The admin page is `noindex`; the portal is unchanged.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2230, up from 2201) and `pnpm build`
+are green. `pnpm verify:acknowledgements` is 21 of 21.
+
+**Uncertain.**
+
+- *Nothing checks that the configured wording is the approved wording.* The
+  application can prove what an investor was shown and when; it cannot prove
+  that an approver ever saw it. The honest version is a second approval record
+  covering portal copy, hashed the way §8.2 hashes the template — which is a
+  real feature and a real decision about whether editing a checkbox should
+  disable the portal.
+- *Acknowledgements are not in the §20 export.* §20 lists thirteen things and
+  this is not among them, so no column was added to a schema that is pinned by
+  tests. An operator reading a record cannot currently see what was ticked from
+  any screen — `acknowledgementHistory` exists and has no caller, which is the
+  same shape of defect this package is fixing, one layer along. It is the next
+  thing to build here.
+- *An investor cannot see what they previously agreed to under older wording.*
+  The form shows today's words with their boxes ticked. If the wording has since
+  changed, what they actually agreed to is on the record and not on their screen.
+- *The forbidden-word list is a heuristic, not a lawyer.* It catches the obvious
+  ways of writing an undertaking. It would not catch a carefully worded one, and
+  it is not a substitute for the approver §8.2 requires.

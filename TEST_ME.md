@@ -410,6 +410,58 @@ Related, and worth knowing: the currency on that line used to be the word "USD" 
 
 ---
 
+## The checkboxes an investor ticks
+
+The specification asks for acknowledgement checkboxes on the portal, and asks
+for them to be **configurable — so that wording your compliance approver signs
+off can be applied without a developer touching the code.** There was no such
+thing: the response form had three radio buttons and a comment box.
+
+Sign in as the owner and open **Acknowledgements**. It starts empty, on purpose
+— seeding it with plausible-sounding wording would put unapproved words on a
+securities offer page looking exactly like approved ones. Add your approver's
+wording, one box at a time, and mark each as required or optional.
+
+Now sign in as an investor. Under the response form there is a new section,
+**Before you record an interest**, with your boxes in it. Try to record an
+interest without ticking a required one: the response is refused and nothing is
+saved.
+
+Things worth trying:
+
+- **Say "I am not interested" without ticking anything.** It works. So does
+  asking a question. The boxes are required only for recording an *interest* —
+  making somebody tick boxes before they may decline turns them into a toll on
+  saying no, and an investor who will not tick them would just say nothing
+  instead. Silence and a decline are not the same thing.
+- **Try to add wording that says "I agree to subscribe".** It is refused, and it
+  names the word. Same for *binding*, *irrevocable*, *undertake*, *contract*,
+  *guarantee*. A checkbox that reads as an undertaking is a subscription
+  agreement in disguise, and the specification is explicit that a tick is never
+  that — so wording that would make it one is refused at the settings screen,
+  which is the only place it could get in.
+- **Read the grey line beneath the boxes.** It says ticking is not a
+  subscription, not a commitment, and not a binding agreement. You cannot edit
+  it, switch it off, or remove it by archiving every box. The owner screen shows
+  it too, marked as fixed.
+- **Tick a box, then go back to the owner screen and change that box's
+  wording.** The investor's record still carries the words *as they were shown
+  when they ticked* — and says which revision. Editing approved wording never
+  rewrites what somebody already agreed to. This is the single most important
+  thing in this feature and there is a database test that proves it.
+- **Archive a box.** It disappears from the portal. Everything ticked under it
+  stays on the record. There is no delete.
+
+**Only the owner can touch any of this** — not the operator. The wording is part
+of what a compliance approver cleared, and the same rule that stops the operator
+recording an approval stops them editing the words behind it.
+
+**What is not there yet:** there is no screen showing you what an investor
+ticked. It is all recorded, with the wording and the timestamp, and nothing
+displays it. That is the next thing to build here.
+
+---
+
 ## Changing the address on a record
 
 An investor's only way back into the portal is a link emailed to the address on
@@ -743,6 +795,7 @@ Worth trying, because these are all meant to work:
 
 ## What is not built yet
 
+- **A screen showing what an investor acknowledged.** The ticks are recorded with the exact wording and the time (see "The checkboxes an investor ticks"), and nothing puts them on a screen or in the export.
 - **A screen for reversing a contact-address change.** An investor can now move the address on their record (see "Changing the address on a record"), and you can see in the audit log that one happened — but there is no operator screen showing what it was or putting it back.
 - **A note saying what changed in a correction.** A corrected document is versioned and both versions stay readable, but nothing records what was different — only the description, if somebody writes one.
 - **An email when a document is issued or corrected.** Deliberate, but somebody will expect it. Send a message or an update alongside.

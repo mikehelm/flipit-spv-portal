@@ -20,6 +20,15 @@ import { shouldShowVideoSection, videoTextAlternative } from '@/lib/media/video'
 import { currentVideo } from '@/lib/media/video-store'
 import { loadInvestorUpdates } from '@/lib/updates/data'
 import { pendingEmailChange } from '@/lib/portal/email-change'
+import {
+  ACKNOWLEDGEMENT_HEADING,
+  ACKNOWLEDGEMENT_STANDING_LINE,
+} from '@/lib/portal/acknowledgements'
+import {
+  activeAcknowledgementItems,
+  currentAcknowledgements,
+  type AcknowledgementItem,
+} from '@/lib/portal/acknowledgements-data'
 import { EmailSection } from './email-section'
 import { QaSection } from './qa-section'
 import { RegisterSection } from './register-section'
@@ -99,7 +108,68 @@ function Step({ step }: { step: TimelineStep }) {
   )
 }
 
-function OfferSection({ offer, allowResponse }: { offer: PortalOffer; allowResponse: boolean }) {
+/**
+ * The acknowledgement checkboxes. BUILD_SPEC §13, §8.2.
+ *
+ * The wording comes from the table an owner edits; the standing line beneath
+ * does not, and there is no prop here that could replace it. §13 makes "not to
+ * be treated as a binding subscription" a constraint on the application rather
+ * than a default, so the sentence is rendered from a constant and appears
+ * whenever the boxes do.
+ *
+ * With nothing configured the section does not appear at all — an empty set of
+ * approved wording is a supported state, not a gap to be filled with something
+ * invented here.
+ */
+function Acknowledgements({
+  items,
+  ticked,
+}: {
+  items: AcknowledgementItem[]
+  ticked: Set<string>
+}) {
+  if (items.length === 0) return null
+
+  return (
+    <fieldset className="mb-5 border-t hairline pt-5">
+      <legend className="mb-3 text-xs font-semibold uppercase tracking-wider text-silver2">
+        {ACKNOWLEDGEMENT_HEADING}
+      </legend>
+
+      {items.map((item) => (
+        <label key={item.id} className="mb-3 flex items-start gap-3 text-sm text-ftext">
+          <input
+            type="checkbox"
+            name="acknowledgement"
+            value={item.id}
+            defaultChecked={ticked.has(item.id)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-orange"
+          />
+          <span className="leading-relaxed">
+            {item.label}
+            {!item.required ? <span className="ml-2 text-xs text-muted">(optional)</span> : null}
+          </span>
+        </label>
+      ))}
+
+      <p className="mt-4 text-xs leading-relaxed text-muted">
+        {ACKNOWLEDGEMENT_STANDING_LINE}
+      </p>
+    </fieldset>
+  )
+}
+
+function OfferSection({
+  offer,
+  allowResponse,
+  acknowledgements,
+  ticked,
+}: {
+  offer: PortalOffer
+  allowResponse: boolean
+  acknowledgements: AcknowledgementItem[]
+  ticked: Set<string>
+}) {
   return (
     <section className="mt-10">
       <div className="rounded-sm border hairline bg-paper p-5">
@@ -191,8 +261,10 @@ function OfferSection({ offer, allowResponse }: { offer: PortalOffer; allowRespo
                 name="note"
                 defaultValue={offer.responseNote ?? ''}
                 rows={4}
-                className="mt-2 w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext placeholder:text-muted focus:border-orange"
+                className="mt-2 mb-5 w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext placeholder:text-muted focus:border-orange"
               />
+
+              <Acknowledgements items={acknowledgements} ticked={ticked} />
             </ActionForm>
           </div>
         </div>
@@ -303,6 +375,17 @@ export default async function PortalPage() {
   // own — and nothing is loaded at all for a reader who cannot see their record.
   const pending = canView(view.access) ? await pendingEmailChange(account.id) : null
 
+  // §13, §8.2. The configured wording, and what this investor has already
+  // ticked so the form comes back as they left it. Both are keyed on their own
+  // offers; the wording is global and belongs to nobody.
+  const acknowledgements = canRespond(view.access) ? await activeAcknowledgementItems() : []
+  const tickedByOffer = new Map<string, Set<string>>()
+  if (acknowledgements.length > 0) {
+    for (const offer of view.offers) {
+      tickedByOffer.set(offer.offerId, await currentAcknowledgements(offer.offerId))
+    }
+  }
+
   return (
     <>
       <main id="main" className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
@@ -339,6 +422,8 @@ export default async function PortalPage() {
                 key={offer.offerId}
                 offer={offer}
                 allowResponse={canRespond(view.access)}
+                acknowledgements={acknowledgements}
+                ticked={tickedByOffer.get(offer.offerId) ?? new Set()}
               />
             ))
           )

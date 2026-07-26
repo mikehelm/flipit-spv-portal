@@ -36,6 +36,10 @@ const ITEMS: NavItem[] = [
   { href: '/reminders', label: 'Reminders', roles: ['OWNER', 'OPERATOR'] },
   { href: '/register', label: 'Register', roles: ['OWNER', 'OPERATOR'] },
   { href: '/compliance', label: 'Compliance', roles: ['OWNER'] },
+  // §8.2 puts the acknowledgement wording under compliance — "approved wording
+  // applied without a code change" — and §8.2's fourth clause keeps compliance
+  // out of the operator's hands. Owner only, for the reason the approval is.
+  { href: '/admin/acknowledgements', label: 'Acknowledgements', roles: ['OWNER'] },
   { href: '/admin/security', label: 'Two-factor', roles: ['OWNER', 'OPERATOR'] },
   { href: '/admin/onboarding', label: 'Setup', roles: ['OPERATOR'] },
   { href: '/admin/invites', label: 'Operator access', roles: ['OWNER'] },

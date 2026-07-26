@@ -1114,6 +1114,65 @@ export const roadmapTiles = pgTable('roadmap_tiles', {
   createdAt: createdAt(),
 })
 
+/**
+ * The portal's acknowledgement checkboxes. BUILD_SPEC §13, §8.2.
+ *
+ * §8.2: *"the portal's acknowledgement checkboxes are configurable so that
+ * approved wording can be applied without a code change."* That sentence is the
+ * whole reason this is a table and not a constant — the wording is a compliance
+ * artefact and it belongs to the approver, not to a deployment.
+ *
+ * `revision` increments whenever the wording changes. It is not decoration: an
+ * acknowledgement is evidence of what a person agreed to, so it is the pair
+ * (item, revision) that identifies the words, and the words themselves are
+ * copied onto the acknowledgement anyway.
+ *
+ * Archived rather than deleted. A row somebody has ticked is part of the
+ * record, and a table whose history can be removed is not evidence.
+ */
+export const acknowledgementItems = pgTable('acknowledgement_items', {
+  id: id(),
+  label: text('label').notNull(),
+  /** A required item must be ticked before an interest can be recorded. */
+  required: boolean('required').notNull().default(true),
+  sortOrder: integer('sort_order').notNull().default(0),
+  revision: integer('revision').notNull().default(1),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+})
+
+/**
+ * What one investor ticked, and the exact words they were shown. §13, §8.2.
+ *
+ * **Append-only, and it stores the wording rather than pointing at it.** An
+ * acknowledgement whose text is a foreign key is an acknowledgement that can be
+ * rewritten after the fact by editing a row somewhere else — which is precisely
+ * what §8.2 makes configurable. So the label and the revision are copied here
+ * at the moment of ticking and never touched again.
+ *
+ * `itemId` survives the item being archived and is deliberately not cascaded:
+ * evidence does not disappear because somebody tidied a settings screen.
+ */
+export const responseAcknowledgements = pgTable(
+  'response_acknowledgements',
+  {
+    id: id(),
+    offerId: text('offer_id')
+      .notNull()
+      .references(() => offers.id, { onDelete: 'cascade' }),
+    itemId: text('item_id').references(() => acknowledgementItems.id, {
+      onDelete: 'set null',
+    }),
+    /** The words as shown, at the moment they were agreed to. */
+    label: text('label').notNull(),
+    revision: integer('revision').notNull(),
+    acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('response_acknowledgements_offer_idx').on(t.offerId, t.acknowledgedAt)],
+)
+
 // ---------------------------------------------------------------------------
 // Configuration, audit, export
 // ---------------------------------------------------------------------------

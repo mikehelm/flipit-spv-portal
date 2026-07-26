@@ -21,6 +21,14 @@ import {
   requestEmailChange,
 } from '@/lib/portal/email-change'
 import { deliverEmailChangeLink } from '@/lib/portal/send-email-change-link'
+import {
+  acknowledgementsRequiredFor,
+  missingAcknowledgementMessage,
+} from '@/lib/portal/acknowledgements'
+import {
+  activeAcknowledgementItems,
+  recordAcknowledgements,
+} from '@/lib/portal/acknowledgements-data'
 import { loadPortalView } from '@/lib/portal/data'
 import { destroyInvestorSession, readInvestorAccount } from '@/lib/portal/session'
 import { isoToday } from '@/lib/money'
@@ -220,24 +228,53 @@ export async function recordResponseAction(
 
   const note = parsed.data.note?.trim() ?? ''
 
+  // §13, §8.2. The wording comes from the table rather than the form: what the
+  // browser sends is a set of ids, and the words recorded against them are the
+  // ones the portal is configured with. A submission naming an id that is not
+  // live is simply not among the ticked items — there is nothing an edited form
+  // could add to the record.
+  const items = acknowledgementsRequiredFor(parsed.data.choice)
+    ? await activeAcknowledgementItems()
+    : []
+  const tickedIds = new Set(formData.getAll('acknowledgement').map(String))
+  const ticked = items.filter((item) => tickedIds.has(item.id))
+  const outstanding = items.filter((item) => item.required && !tickedIds.has(item.id))
+
+  if (outstanding.length > 0) {
+    return actionError(missingAcknowledgementMessage(outstanding.length))
+  }
+
+  const respondedAt = new Date()
+
   await db
     .update(offers)
     .set({
       responseChoice: parsed.data.choice,
       responseNote: note === '' ? null : note,
-      responseAt: new Date(),
+      responseAt: respondedAt,
       // §5 step 2. The stage only ever moves forward, and only from step 1.
       ...(offer.stage === 'INVITATION_SENT' ? { stage: 'RESPONSE_RECORDED' as const } : {}),
     })
     .where(eq(offers.id, offer.offerId))
+
+  // One row per ticked box, carrying the words as shown. Written after the
+  // response so that a set of acknowledgements never exists against a response
+  // that was not recorded, and stamped with the response's own time so the two
+  // can be read together.
+  await recordAcknowledgements({ offerId: offer.offerId, ticked, at: respondedAt })
 
   await audit({
     actor: { kind: 'investor', id: account.id, label: 'investor' },
     entityType: 'offer',
     entityId: offer.offerId,
     action: 'portal.response_recorded',
-    // The choice, never the message the investor wrote.
-    metadata: { choice: parsed.data.choice, hasNote: note !== '' },
+    // The choice, never the message the investor wrote, and never the wording —
+    // the acknowledgement rows hold that, with their revisions.
+    metadata: {
+      choice: parsed.data.choice,
+      hasNote: note !== '',
+      acknowledgements: ticked.length,
+    },
   })
 
   revalidatePath('/portal')

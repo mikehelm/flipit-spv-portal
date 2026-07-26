@@ -71,6 +71,13 @@
       "when": 1785039608247,
       "tag": "0009_certain_masked_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785040639756,
+      "tag": "0010_lethal_killraven",
+      "breakpoints": true
     }
   ]
 }
