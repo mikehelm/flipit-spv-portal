@@ -25,7 +25,26 @@ paid services sell you.
 
 ---
 
-## The two options
+## Option Z — your own Mac. $0, and no server at all.
+
+If you have a machine that is always on, it can serve the page **and** hold the
+database. There is no separate server anywhere. Cloudflare Tunnel (free) puts
+`spv.flipit.com` in front of it with real HTTPS, no port forwarding, no static
+IP, and your home address never published.
+
+Full steps: **`MAC_SETUP.md`**.
+
+The catch is not technical — it all works — it is that a Mac sleeps, reboots and
+leaves the house, and your home internet is not in your control. That only
+matters during the few weeks investors hold live links, and an investor hitting a
+dead link on a securities invitation is the worst first impression available.
+
+**The move is cheap if you set the domain up now.** Every investor link points at
+`spv.flipit.com`, not at your Mac. Relocating later is a database dump, a git
+clone and repointing the tunnel — about half an hour, and no link breaks. So this
+is not a decision you have to make today.
+
+## The two options if you would rather not
 
 ### Option A — one small server. About $5/month, all in.
 
