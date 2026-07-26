@@ -22,11 +22,14 @@ import {
   roadmapTiles,
   rounds,
   sendEvents,
+  users,
 } from '@/db/schema'
+import type { ContactMethod } from '@/lib/auth/onboarding'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { listCertificates } from '@/lib/certificate/issue'
 import { formatMoney, formatPercentage } from '@/lib/money'
 import { forbiddenWordsInTileLabel } from './roadmap'
+import { operatorContact, type PortalOperatorContact } from './operator-contact'
 
 /**
  * Every amount an investor sees carries its currency.
@@ -93,6 +96,14 @@ export interface PortalView {
    * service configuration alone; nothing here comes from an account.
    */
   contacts: PortalContact[]
+  /**
+   * How to reach the operator from a working portal. §2.1, §13.
+   *
+   * Null when nothing is configured — the section is absent rather than
+   * showing a route that is not one. Derived from operator configuration
+   * alone; nothing here comes from an account.
+   */
+  operatorContact: PortalOperatorContact | null
   /**
    * `sunset_closing_date`, formatted, when the portal is closing. §7, §11.3.
    *
@@ -263,6 +274,14 @@ export async function loadPortalView(accountId: string): Promise<PortalView | nu
     (tile) => !tile.hidden && forbiddenWordsInTileLabel(tile.label).length === 0,
   )
 
+  // The operator's chosen contact method (§2.1). One row, selected on role —
+  // there is no investor column in this query.
+  const [operator] = await db
+    .select({ contactMethod: users.contactMethod, contactValue: users.contactValue })
+    .from(users)
+    .where(eq(users.role, 'OPERATOR'))
+    .limit(1)
+
   return {
     accountId: account.id,
     name: account.name,
@@ -285,5 +304,14 @@ export async function loadPortalView(accountId: string): Promise<PortalView | nu
           serviceContactEmail: config.serviceContactEmail,
         })
       : [],
+    // §2.1, §13. The route on a *working* portal, which is the one that was
+    // missing — the notice contacts above appear only once the portal has
+    // stopped being useful. Operator configuration only; nothing here comes
+    // from an account.
+    operatorContact: operatorContact({
+      method: (operator?.contactMethod as ContactMethod | null) ?? null,
+      value: operator?.contactValue ?? null,
+      email: config.defaultSenderEmail,
+    }),
   }
 }

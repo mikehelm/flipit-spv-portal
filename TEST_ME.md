@@ -410,6 +410,42 @@ Related, and worth knowing: the currency on that line used to be the word "USD" 
 
 ---
 
+## A way to reach David from inside the portal
+
+At onboarding, David chooses how investors should reach him — phone, WhatsApp,
+or email only. That choice was being stored and never shown. The only contact
+details anywhere in the application appeared on the notice pages for suspended
+and closed accounts, which is to say they appeared exactly when the portal had
+stopped being useful. An investor with a live invitation in front of them had
+nowhere to go.
+
+Sign in as an investor and scroll to the bottom, under the paragraph explaining
+what the portal is and is not. There is now a short section headed **If you have
+a question**, carrying whichever route David chose:
+
+- **WhatsApp** — a tappable `wa.me` link, opening WhatsApp with his number.
+- **Phone** — a tappable number.
+- **Email only** — the address the invitation came from.
+
+Things worth knowing:
+
+- **It points at the questions section first**, and offers the direct route as
+  the alternative. A question asked in the portal reaches David *and* stays on
+  the investor's record, which is usually where it should be.
+- **A number that could not actually be dialled falls back to the email
+  address.** A phone link that does nothing is worse than an address, because it
+  looks like it worked.
+- **With nothing configured, the section is absent** rather than showing a route
+  that is not one.
+- **There is a warning underneath**: we will never ask for payment details, or
+  send a change of bank details, by message or by phone. A private message
+  channel is exactly where that request would arrive, and this is the only place
+  in the portal that opens one.
+- **No name.** The route makes it unnecessary, and a hard-coded first name goes
+  wrong quietly on the day somebody else is answering.
+
+---
+
 ## The checkboxes an investor ticks
 
 The specification asks for acknowledgement checkboxes on the portal, and asks

@@ -8,6 +8,10 @@ import { SiteFooter } from '@/components/site-footer'
 import { canRespond, canView } from '@/lib/portal/access'
 import { flagEnabled, PORTAL_FLAGS, readFeatureFlags } from '@/lib/flags'
 import { CONTACT_COPY, type PortalContact } from '@/lib/portal/contact'
+import {
+  OPERATOR_CONTACT_COPY,
+  OPERATOR_CONTACT_SAFETY,
+} from '@/lib/portal/operator-contact'
 import { noticeCopy } from '@/lib/portal/notices'
 import { loadPortalView, type PortalOffer } from '@/lib/portal/data'
 import { PAYMENT_SAFETY_NOTICE, type TimelineStep } from '@/lib/portal/timeline'
@@ -503,7 +507,40 @@ export default async function PortalPage() {
             investment are set out solely in the subscription and SPV documents you receive.
             If anything here appears inconsistent with those documents, the documents govern.
           </p>
-          <p className="mt-3 text-xs text-muted">
+          {/*
+            §13's "route to contact the operator", and §2.1's `wa.me` link.
+            Directly beneath the statement of what the portal is and is not,
+            because §13 lists the two together and because somebody who has just
+            read "this is not advice" is exactly who wants somewhere to ask.
+
+            Absent when nothing is configured. A contact section naming no route
+            is worse than no section.
+          */}
+          {view.operatorContact ? (
+            <div className="mt-6 border-t hairline pt-6">
+              <h2 className="text-sm font-semibold text-white">If you have a question</h2>
+              <p className="mt-2 text-sm leading-relaxed text-dim">
+                The questions section above reaches us and keeps your question on your
+                record, which is usually the best place for it.{' '}
+                {OPERATOR_CONTACT_COPY[view.operatorContact.kind]}
+                <a
+                  href={view.operatorContact.href}
+                  className="break-words text-orange underline"
+                  {...(view.operatorContact.kind === 'WHATSAPP'
+                    ? { target: '_blank', rel: 'noopener noreferrer' }
+                    : {})}
+                >
+                  {view.operatorContact.display}
+                </a>
+                .
+              </p>
+              <p className="mt-3 text-xs leading-relaxed text-muted">
+                {OPERATOR_CONTACT_SAFETY}
+              </p>
+            </div>
+          ) : null}
+
+          <p className="mt-6 text-xs text-muted">
             <Link href="/verify" className="text-orange">
               How to check a message really came from us
             </Link>

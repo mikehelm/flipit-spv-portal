@@ -4227,3 +4227,115 @@ are green. `pnpm verify:acknowledgements` is 21 of 21.
 - *The forbidden-word list is a heuristic, not a lawyer.* It catches the obvious
   ways of writing an undertaking. It would not catch a carefully worded one, and
   it is not a substitute for the approver §8.2 requires.
+
+## The route to David, on a portal that was working
+
+§2.1 captures the operator's contact preference — phone, WhatsApp or email-only
+— at onboarding, and says of the WhatsApp choice that *"it renders as a WhatsApp
+contact, **with a `wa.me` link in the portal**"*. §13 lists among the portal's
+contents *"a clear statement of what the portal is and is not, **and a route to
+contact the operator**"*.
+
+The choice was captured. `whatsappLink()` was written in WP2, tested, and
+imported by nothing. The onboarding flow tells the operator his choice will
+appear in the portal, and it did not.
+
+The consequence is the one worth stating plainly: the only contact route
+anywhere in this application appeared on the notice pages for suspended, closed
+and archived accounts — added in the "address on a notice" package a few
+sections up. An investor with a live invitation in front of them, looking at
+their own figures and a deadline, had nowhere to go. Contact details appeared
+precisely when the portal had stopped being useful.
+
+**Built.**
+
+- **`src/lib/portal/operator-contact.ts`** — which route appears and what it
+  links to. Pure, with no database import and no field on its input through
+  which an account could arrive.
+- **`PortalView.operatorContact`**, from the operator's row and
+  `default_sender_email`.
+- **The portal renders it** directly beneath the statement of what the portal
+  is and is not, which is where §13 lists the two together.
+- **A payment-details warning** beneath the route.
+
+**Decisions.**
+
+- ***One route, not a list.*** `contact.ts` offers two addresses on a notice
+  because the whole subject of a notice is that the first may not be answered.
+  This is a working portal, and two ways to reach the same person is a question
+  about which one is real.
+- ***Email-only still produces a route.*** §2.1's third option removes the phone
+  line *from the email template*; §13 asks for a route unconditionally. Reading
+  "email only" as "no contact route" would satisfy neither.
+- ***A number that does not look dialable falls back to the address.*** A `tel:`
+  or `wa.me` link that does nothing is worse than an email address, because it
+  looks like it worked. `isPlausibleContactNumber` already existed as the
+  onboarding gate; this is the same check applied at the point of rendering,
+  because a row can predate a gate.
+- ***A stale number is ignored when the method is email-only.*** Switching to
+  email-only nulls the value, but a row that kept it should not resurrect a
+  number the operator chose to stop giving out.
+- ***The number is displayed as typed and linked as `wa.me` wants it.***
+  Two different things: an investor reads a number with spaces, and `wa.me`
+  takes digits only.
+- ***Nothing configured renders nothing.*** The same rule as `contact.ts`. A
+  contact section naming no route is worse than no section.
+- ***The copy names nobody and promises no reply time.*** The route makes the
+  name unnecessary, and a hard-coded first name goes wrong quietly on the day
+  somebody else is answering. "We reply within two days" is a commitment this
+  application cannot keep on anybody's behalf.
+- ***It points at the questions section first.*** The Q&A thread reaches the
+  operator *and* keeps the question on the investor's record, which is usually
+  the better place for it. The direct route is offered as the alternative rather
+  than as the default, so the record stays complete by preference.
+- ***A payment-details warning sits under it.*** §15.1's posture, applied where
+  an investor is being handed a phone number on a page about their money. A
+  private message channel is exactly where a request to change bank details
+  would arrive, and this is the only place in the portal that opens one.
+- ***The WhatsApp link opens in a new tab with `noopener noreferrer`.*** It is
+  the only outbound link on an investor-facing page.
+
+**Deviations.** None. §2.1 and §13 both asked for this.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here touches an amount.
+2. *A send path bypassing a gate?* No. Nothing sends; a `tel:`, `mailto:` or
+   `wa.me` link is the reader's own device.
+3. *One recipient or the whole batch?* Not applicable.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No, and this is the rule that shaped
+   the input type: `operatorContact` takes a method, a number and an address,
+   all of them operator configuration. A test reads the interface out of the
+   source and asserts it has no field naming an account, an investor, an offer
+   or a recipient — so this cannot leak, as a fact about the type rather than a
+   promise about the caller.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched. The route renders inside the block an investor sees
+   when they can see their record; a suspended reader gets the notice contacts,
+   which is the separate path §4.2 asks for.
+8. *Does any log line contain a token, a body or a key?* Nothing is logged.
+9. *Indexable routes?* No route added. The portal is `noindex` as it was.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2246, up from 2230) and `pnpm build`
+are green.
+
+**Uncertain.**
+
+- *Nothing verifies the number is answered.* Same shape as the notice addresses:
+  the application can say a route is configured, not that anybody is on the end
+  of it. There is no health finding for a missing one either — an operator who
+  chose email-only has a route, so "no number" is not a fault, and the address
+  falling back silently means the absent case looks identical to the chosen one
+  from the report's side.
+- *`default_sender_phone` is not consulted.* The operator's own
+  `users.contact_value` is the authority, and the service-level default phone is
+  only a fallback for the email template's `sender_phone`. Whether a configured
+  service phone should stand in when the operator has chosen email-only is a
+  question about whose number that is, and it was left alone.
+- *§13.1's "more prominent once an investor reaches Commitment agreed" is still
+  not implemented.* The tiles render identically at every stage. Unchanged by
+  this package and still open.
