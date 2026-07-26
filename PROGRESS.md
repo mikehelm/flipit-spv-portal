@@ -5083,3 +5083,78 @@ are green. `pnpm verify:viewport` is 242 of 242 with the console listened to;
 - *The password-reset journey is still not built.* Carried forward from the last
   entry; still the largest named gap, and still blocked on the question of
   whether a signed-out "forgotten password" form should exist at all.
+
+## Two headers, tested by disobeying them
+
+The previous entry's Uncertain list named the gap precisely: the console was
+listened to on thirty-one screens *and on no interaction*, and the two choices
+the Content-Security-Policy notes single out as the ones most likely to be
+silently wrong — `camera=(self)` rather than `camera=()`, and `blob:` in
+`media-src` — are only exercised when somebody presses something.
+
+**Built.** A section in `verify:viewport` that exercises both inside a real page
+served by this application, with its real headers: `getUserMedia` is called, and
+a `<video>` is pointed at an object URL.
+
+**Decisions.**
+
+- ***The claims are exercised at the document level, not through the recorder
+  component.*** Permissions-Policy and CSP are properties of a document, so a
+  call made anywhere in the page proves the header exactly as the recorder
+  would. The first attempt drove the recorder's own buttons and failed at
+  once — the card renders only for an onboarded operator with a media store
+  configured, and standing that up is a fixture this script does not have. The
+  narrower check is honest about what it proves; the docstring says which half
+  is still untested rather than implying the recorder has been driven.
+- ***`--use-fake-ui-for-media-stream` was removed, and this is the finding worth
+  keeping.*** The section was written with it, and it passed. Then
+  `camera=(self)` was changed to `camera=()`, the app was rebuilt, and the
+  section **still reported the camera as permitted** — the flag auto-accepts
+  everything, including a request the header has already refused, so
+  `getUserMedia` resolved and only a console line gave it away. A check that
+  passes on a broken header is worse than no check, because it is cited as
+  evidence. Without the flag, the same experiment fails with
+  `NotAllowedError: Permission denied`. Playwright's context permission is kept:
+  that grants what a *person* grants, which is the part a policy is not.
+- ***The blob assertion does not trust the media element's own error.*** A
+  four-byte WebM earns `MEDIA_ERR_SRC_NOT_SUPPORTED` honestly, and a CSP refusal
+  produces the identical code — so the element cannot distinguish them and the
+  first version of that check passed with `blob:` removed from `media-src`. It
+  now depends on the absence of a `media-src` violation, which is the only
+  signal that actually differs.
+- ***Every check was proved by breaking the thing it watches.*** `camera=()`
+  built and run: two checks fail. `media-src 'self'` built and run: two checks
+  fail. Both restored, `git status` clean on `next.config.ts`, full run green.
+  A verification script that has never been seen to fail is a decoration.
+
+**Deviations.** None. `next.config.ts` is byte-identical to before this session.
+
+**Checklist.** 1–12: untouched. This adds no application code and no route; it
+is one section of a verification script. 8 is worth a word: the console watcher
+records whatever the page printed, truncated to 240 characters and printed only
+on failure. Nothing in this application writes a credential to a browser
+console, and the two policy checks print an error name and a directive.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2400) and `pnpm build` are green.
+`pnpm verify:viewport` is 246 of 246; `pnpm verify:account-access` is 42 of 42.
+
+**Uncertain.**
+
+- ***The recorder component itself is still driven by nobody.*** Arm, start,
+  stop, review, discard, upload — the state machine in `recorder.tsx` — has
+  never been exercised. It needs `MEDIA_STORE` set and an onboarded operator,
+  which is a fixture worth building: it is also the only path in the application
+  that produces a file from a browser rather than accepting one.
+- *The image upload preview and the email template preview are still
+  unexercised,* and both are named in the CSP notes alongside the recorder.
+  Both are reached by pressing something.
+- *`script-src 'unsafe-inline'` is unchanged,* and the nonce is still the fix.
+- *Nothing checks the headers on a served response as part of `pnpm test`.* The
+  policy is asserted at source level in the unit suite and exercised in a browser
+  here; between them sits `verify:deployment`, which still has no served-response
+  check of its own.
+- *The password-reset journey is still not built.* Carried forward twice now.
+  The design question — whether a signed-out "forgotten password" form should
+  exist at all, against the sign-in page's own recorded argument that it should
+  not — is the thing to settle first, and it is a decision for Michael rather
+  than a thing to build over him.

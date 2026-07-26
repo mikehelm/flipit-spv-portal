@@ -574,12 +574,27 @@ async function main(): Promise<void> {
     // own, which is what a developer running `pnpm exec playwright install`
     // will have.
     const executablePath = process.env.CHROMIUM_PATH
-    browser = await chromium.launch(executablePath ? { executablePath } : {})
+    // Fake camera and microphone, so the recorder can actually be driven. This
+    // supplies a device and auto-accepts the browser's own permission prompt;
+    // it does NOT bypass the Permissions-Policy header, which Chromium enforces
+    // before either. That is the point — see `verifyTheRecorder`.
+    browser = await chromium.launch({
+      ...(executablePath ? { executablePath } : {}),
+      // A fake camera, and deliberately NOT `--use-fake-ui-for-media-stream`.
+      // That flag auto-accepts everything, including a request the
+      // Permissions-Policy header has already refused: with `camera=()` served,
+      // `getUserMedia` still resolved and only the console violation gave it
+      // away. A check that passes on a broken header is worse than no check.
+      // The context grants the *user* permission instead, which is the part a
+      // person supplies and the part a policy is not.
+      args: ['--use-fake-device-for-media-stream'],
+    })
     const context = await browser.newContext({
       viewport: VIEWPORT,
       deviceScaleFactor: 3,
       isMobile: true,
       hasTouch: true,
+      permissions: ['camera', 'microphone'],
     })
     const page = await context.newPage()
     watchTheConsole(page)
@@ -673,6 +688,8 @@ async function main(): Promise<void> {
       await auditScreen(page, label, path)
     }
 
+    await verifyThePolicyInPractice(page)
+
     await verifyTheBannerWithAFaultBehindIt(page)
   } catch (error) {
     console.error('\nThe run stopped early. The application said:\n')
@@ -707,6 +724,116 @@ async function main(): Promise<void> {
  * log is append-only, so the rows that exist are renamed for the duration rather
  * than deleted, and the rows this writes are removed by id.
  */
+/**
+ * The two policy claims that had never met a browser.
+ *
+ * `next.config.ts` carries `camera=(self)` and `microphone=(self)` rather than
+ * the tidier-looking `camera=()`, and the comment there explains why: §13.3
+ * records the operator's video in the browser through `getUserMedia`, and the
+ * denial breaks it **with no sign** — no permission prompt appears and the
+ * recorder reports a device fault indistinguishable from a broken webcam. The
+ * same file allows `blob:` in `media-src`, because a recording is held as a blob
+ * and played back from an object URL before it is uploaded.
+ *
+ * Both were asserted against the source, and source assertions cannot fail the
+ * way a wrong header fails. Loading a page does not test them either: nothing is
+ * requested until somebody presses something.
+ *
+ * **What this proves, precisely.** Permissions-Policy and Content-Security-
+ * Policy are properties of a *document*, not of a component. So both claims are
+ * exercised inside a real page served by this application, with its real
+ * headers: `getUserMedia` is called, and a `<video>` is pointed at an object
+ * URL. If `camera=()` were served, the first rejects with a permissions-policy
+ * violation. If `blob:` were missing from `media-src`, the second refuses to
+ * load. Neither depends on the recorder's own React state.
+ *
+ * **What it does not prove:** the recorder component's control flow. That card
+ * renders only for an onboarded operator with a media store configured, and
+ * standing that up is a fixture this script does not have. The gap is recorded
+ * rather than papered over.
+ *
+ * The fake device is a device and not a bypass. Chromium applies the
+ * Permissions-Policy header before it reaches any camera, real or fake, so a
+ * wrong header fails here exactly as it would on the machine this deploys to.
+ */
+async function verifyThePolicyInPractice(page: Page): Promise<void> {
+  console.log('\nThe policy, in a browser rather than in a header')
+
+  complaints.length = 0
+  await page.goto(`${ORIGIN}/admin/video`, { waitUntil: 'networkidle' })
+
+  const camera = await page.evaluate(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return 'no getUserMedia in this browser'
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      const tracks = stream.getTracks().length
+      for (const track of stream.getTracks()) track.stop()
+      return tracks > 0 ? 'ok' : 'a stream with no tracks'
+    } catch (error) {
+      return `${(error as Error).name}: ${(error as Error).message}`.slice(0, 160)
+    }
+  })
+  check(
+    'the camera and microphone are permitted — Permissions-Policy camera=(self)',
+    camera === 'ok',
+    camera,
+  )
+
+  const policyDenied = complaints.filter((c) => /permissions policy/i.test(c))
+  check(
+    'and the browser reports no Permissions-Policy violation',
+    policyDenied.length === 0,
+    policyDenied.slice(0, 2).join(' | '),
+  )
+
+  // A blob on a media element is exactly what `media-src blob:` is for, and the
+  // only way to find out whether the directive is right is to load one.
+  const blobPlayed = await page.evaluate(async () => {
+    const parts: BlobPart[] = [new Uint8Array([0x1a, 0x45, 0xdf, 0xa3])]
+    const url = URL.createObjectURL(new Blob(parts, { type: 'video/webm' }))
+    const player = document.createElement('video')
+    player.src = url
+    document.body.appendChild(player)
+
+    const outcome = await new Promise<string>((resolve) => {
+      // A four-byte file is not decodable, and that is fine: `error` with
+      // MEDIA_ERR_SRC_NOT_SUPPORTED means the browser FETCHED the blob and then
+      // failed to decode it, which is the proof wanted here. A CSP refusal is a
+      // different code and arrives with a console violation.
+      player.addEventListener('error', () => resolve(`code ${player.error?.code ?? '?'}`), {
+        once: true,
+      })
+      player.addEventListener('loadedmetadata', () => resolve('loaded'), { once: true })
+      setTimeout(() => resolve('nothing happened'), 5000)
+    })
+
+    player.remove()
+    URL.revokeObjectURL(url)
+    return outcome
+  })
+  // `code 4` is MEDIA_ERR_SRC_NOT_SUPPORTED, which a four-byte file earns
+  // honestly — but a CSP refusal produces the same code, so the element's own
+  // error says nothing on its own. The directive check is the real assertion;
+  // this one is only that something happened at all.
+  const mediaRefused = complaints.some((c) => /media-src/i.test(c))
+  const fetched = blobPlayed === 'loaded' || blobPlayed === 'code 4'
+  check(
+    'a blob: source reaches the media element — media-src blob:',
+    fetched && !mediaRefused,
+    mediaRefused
+      ? 'the policy refused it — media-src does not carry blob:'
+      : `the element reported ${blobPlayed}`,
+  )
+
+  const heard = complaints.filter((c) => !isEnvironmental(c))
+  const csp = heard.filter((c) => /CSP refused|Content Security Policy/i.test(c))
+  check(
+    'no Content-Security-Policy violation from any of it',
+    csp.length === 0,
+    csp.join(' | '),
+  )
+}
+
 async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
   console.log('\nThe overview banner, with a fault behind it')
 
