@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| The overview banner, rendered with a fault behind it | claude-opus-5, 26 Jul | 2026-07-26 02:45 | `scripts/verify-viewport.ts`, `src/app/(admin)/overview` tests |
 
 ## Done, so nobody starts it again
 
