@@ -69,6 +69,27 @@ describe('environment validation', () => {
   })
 })
 
+describe('the health endpoint secret', () => {
+  it('defaults to empty, which switches the endpoint off', () => {
+    apply({ HEALTH_TOKEN: undefined })
+    expect(env().HEALTH_TOKEN).toBe('')
+  })
+
+  it('accepts a token of at least 32 characters', () => {
+    const token = 'x'.repeat(32)
+    apply({ HEALTH_TOKEN: token })
+    expect(env().HEALTH_TOKEN).toBe(token)
+  })
+
+  it('refuses to start on a short one', () => {
+    // There is nothing rate-limiting an unauthenticated health check, so the
+    // length is the whole defence. A deployment that sets a weak one should
+    // find out at boot rather than never.
+    apply({ HEALTH_TOKEN: 'short' })
+    expect(() => env()).toThrow(/HEALTH_TOKEN/)
+  })
+})
+
 describe('production deployment guard (BUILD_SPEC §18.1, AC44)', () => {
   it('recognises the production deployment', () => {
     apply({

@@ -50,6 +50,28 @@ const schema = z.object({
   /** Auth.js session secret. */
   AUTH_SECRET: z.string().min(16, 'AUTH_SECRET must be at least 16 characters'),
 
+  /**
+   * The shared secret an external uptime monitor presents to `/api/health`.
+   *
+   * Empty is the default and means the endpoint does not exist — every request
+   * to it, with or without a header, gets the same 404 as any invented path.
+   * That is the conservative state: a deployment that has not deliberately
+   * turned this on is not quietly answering questions about itself.
+   *
+   * When set it must be long. A short shared secret on an unauthenticated
+   * internet endpoint is a guessable one, and there is nothing rate-limiting a
+   * health check — so the length is the whole defence. Generate one with
+   * `openssl rand -base64 32`.
+   *
+   * Never logged, never rendered, never exported.
+   */
+  HEALTH_TOKEN: z
+    .string()
+    .default('')
+    .refine((v) => v === '' || v.length >= 32, {
+      message: 'HEALTH_TOKEN must be empty or at least 32 characters',
+    }),
+
   // No OAuth configuration. Owner and operator sign in with an email and
   // password held in this application's own database (BUILD_SPEC §2.2).
 

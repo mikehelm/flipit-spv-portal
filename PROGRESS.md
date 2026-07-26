@@ -3398,3 +3398,123 @@ It was wrong last time, so it is not being made again.
   asserting the induced faults cover every rule in `unattendedFindings` would,
   but it would have to enumerate the rules, which is the same list written twice.
 - *Nothing still tells anybody without somebody looking.* Unchanged.
+
+## The signal that survives the machine — `GET /api/health`
+
+Every previous section on this subject ends in the same sentence, verbatim:
+*nothing still tells anybody without somebody looking.* It has been the last
+line of the health work three times now, and each time the answer was another
+surface — a command, a page, a banner — that still needs either a person opening
+a screen or a scheduler already running on the box.
+
+That is the hole. `pnpm check:health` runs on the machine it is watching. A
+machine that has stopped, a container that never came back after a deploy, a
+timer that was never installed — all three produce no output, and no output is
+exactly what a quiet healthy night produces. Nothing inside a system can report
+that system being absent.
+
+**Built.**
+
+- **`GET /api/health`.** The same findings, from the same rules, reduced to a
+  status word, a timestamp, four counts and the *areas* that are not fine.
+  **200** when nothing needs a person, **503** when something does, and an
+  external uptime monitor already knows how to page somebody on a 503.
+- **`HEALTH_TOKEN`**, presented in an `x-health-token` header. Empty by default,
+  and empty means the endpoint does not exist: no token, wrong token and
+  unconfigured deployment all get the same empty 404, byte for byte. At least 32
+  characters or the application refuses to start.
+- **`src/lib/health/signal.ts`** — the reduction, pure, and the constant-time
+  token comparison. Nothing in it reads a database or a request.
+- **The endpoint checked over real HTTP under `/SPV`** in
+  `pnpm verify:deployment`, including that the *unprefixed* address does not
+  answer.
+- **The health page names it**, in the card that already explained the command.
+- **`DEPLOYMENT.md` §9.1** and `.env.example`.
+
+**Decisions.**
+
+- ***A poll, not a push.*** A health emailer would be a second unattended sender
+  in an application where §6.5 makes the reminder job deliberately the only one,
+  and every constraint on that job load-bearing. It would also be the one sender
+  that has to work when mail is the thing that broke. A monitor polling from
+  outside needs no sender here at all, and it is somebody else's infrastructure
+  staying up — which is the whole point.
+- ***`attention` is 200.*** Those findings are decisions somebody made: a
+  non-active service mode, a testing deployment correctly refusing to send. The
+  command exits 0 on them for the same reason. A monitor that goes red through a
+  deliberate read-only week gets muted, and a muted monitor is worse than none
+  because somebody believes it is watching.
+- ***`unavailable` is its own word rather than folded into `wrong`.*** `wrong`
+  is a claim about the system made after looking at it. Saying it when nothing
+  could be looked at would be the exact lie the report exists to prevent. Both
+  are 503; only one of them is honest about what is known.
+- ***Areas, counts and nothing else.*** The same judgement `describeAreas` made
+  for the overview banner, and for a stronger reason: this body lands in a
+  third-party monitoring service's alert history and on a lock screen, which is
+  looser than a session. The signal is built field by field rather than by
+  spreading a `Finding`, so a field added there later cannot arrive here by
+  inheritance.
+- ***Off unless configured, and indistinguishable from absent.*** The token is
+  checked before the request is otherwise read and before any connection is
+  opened, so an unconfigured deployment costs a scanner what an invented path
+  costs it and teaches it the same nothing.
+- ***A header, not a query parameter.*** A query string is written to every
+  access log between the monitor and here, and a token in a log file is the
+  credential rule broken by a different route.
+- ***The error object is not logged when the report throws.*** A Postgres
+  failure carries the connection string and a connection string carries a
+  password. That it threw is the whole of what a log needs.
+
+**Deviations.** None. This is not a work package in `CODEX_TASKS.md`; it closes
+the standing uncertainty left by §8's health work.
+
+**Checklist.**
+
+1. *Money as a `number`?* No — nothing here touches an amount, and the payload
+   is asserted to contain none.
+2. *A send path bypassing a gate?* No. The endpoint has one handler and it is
+   `GET`; a test asserts there is no other, and that the module imports neither
+   `@/db` nor `@/lib/audit`.
+3. *One recipient or the whole batch?* Not applicable.
+4. *Can an operator record an approval?* Untouched — this reports and never acts.
+5. *Does anything reveal another investor?* No. The body is asserted against a
+   report deliberately stuffed with an id and an address to carry neither, in the
+   unit test, the route test and against a running server.
+6. *Tokens?* The shared secret is compared over SHA-256 digests in constant
+   time, is never echoed into a body or a header, and a length mismatch does not
+   throw — catching that throw would itself be a branch whose timing reveals the
+   length.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No, and the one place
+   it could — the catch around `buildHealthReport` — deliberately drops the error
+   object, with a test asserting a Postgres URL with a password in it does not
+   reach `console.error`.
+9. *Indexable routes?* No. The route sets `X-Robots-Tag: noindex` itself, on the
+   404 as well as the 200, `next.config.ts`'s catch-all sets it again, and
+   `verify:deployment` reads it off a served response. The sitemap check that
+   already asserted no api path still passes.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched. The endpoint is deliberately *not* gated on the
+    production deployment — a testing deployment is exactly one whose health
+    somebody wants watched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2035, up from 1985) and `pnpm build`
+are green. `pnpm verify:deployment` is 75 of 75, up from 67.
+
+**Uncertain.**
+
+- *Nothing in the application checks that a monitor is actually pointed at it.*
+  The endpoint can be configured and never polled, and that state is
+  indistinguishable from a working one from in here — the same shape of problem
+  the media check had before it started writing a line the report could read.
+  Closing it would mean recording the time of the last authenticated request and
+  making a stale one a finding, which is a write on a read-only path and wants
+  its own decision.
+- *The 503 is the only alerting contract.* A monitoring service that only
+  watches for a timeout, and treats any HTTP answer as up, would see a green
+  tick over a 503. Most check the status code by default; none of them is
+  checked from here.
+- *There is no rate limit in front of it.* The defence is the token's length
+  and that a wrong one costs a hash and no connection. A deployment behind a
+  proxy that can rate-limit should, and the runbook does not say so.

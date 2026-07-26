@@ -140,12 +140,22 @@ export default async function HealthPage() {
           </section>
         ) : null}
 
-        <Card title="The same report, from a terminal">
+        <Card title="The same report, where nobody has to be looking">
           <p className="text-sm leading-relaxed text-dim">
             <code className="text-silver2">pnpm check:health</code> prints exactly what is on
             this page and exits non-zero when something needs a person, so a scheduler can
             notice at three in the morning rather than waiting for somebody to open this. The
             cron line is in the deployment runbook.
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-dim">
+            That command runs on this machine, though, so it falls silent in two situations
+            that look identical from here: a quiet night, and a machine that stopped. So the
+            same findings are also answered over the web, at{' '}
+            <code className="text-silver2">/api/health</code>, to a request carrying a secret
+            set in the deployment. An outside monitoring service polls that and raises somebody
+            when the answer stops being a 200. It carries counts and area names only — never a
+            name, an address or a figure — and it sends nothing itself. The runbook has the
+            setup.
           </p>
           <p className="mt-3 text-sm leading-relaxed text-dim">
             Read at {report.at.toISOString().slice(0, 16).replace('T', ' ')} UTC. This page is

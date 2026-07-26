@@ -341,6 +341,33 @@ pnpm verify:health
 
 Thirty-one checks, and it puts everything back afterwards.
 
+### The one that works when the machine has stopped
+
+There is a gap in everything above, and it is worth being plain about it. That command runs on the same machine as the application. If that machine is down, if the container never came back after a deploy, if the timer was never installed in the first place — the command produces nothing. And nothing is exactly what a perfectly quiet, perfectly healthy morning also produces. Nobody can tell those two apart from inside.
+
+So the same report is now also answerable over the web, at an address something outside can ask:
+
+```
+GET  https://your-deployment/api/health
+     x-health-token: <the secret you set>
+```
+
+Put a long random value in `HEALTH_TOKEN` (`openssl rand -base64 32` gives you one), then sign up for any uptime monitoring service — there are free ones — and point it at that address with that header. From then on:
+
+- **Everything fine** — it answers normally and the monitor shows green.
+- **Something needs you** — it answers with a failure code, and the monitor texts or emails *you*. Not the application: the monitoring service. That distinction matters, and it is the next paragraph.
+- **The whole thing is down** — the monitor gets no answer at all and raises you the same way. This is the case nothing else in the system can see.
+
+**The application still sends nothing.** Reminders to investors remain the only thing here that ever sends an email without somebody pressing a button, and that stays true. The alert comes from the monitoring service, on its own machine, which is the entire reason it survives this one stopping.
+
+**What it says is deliberately thin.** A status word, when it looked, four counts, and the *areas* that are not fine — "Reminders", "Mail", "Compliance". No names, no addresses, no amounts, no sentences. That reply ends up in a monitoring company's alert history and on your phone's lock screen, which is a much looser place than a page you have to sign in to see. To find out what is actually wrong, open **System health** in the application, which is where the detail has always been.
+
+**Without the secret, the address does not exist.** Wrong secret, no secret, or a deployment where you never set one — all three get the same empty "not found" that any made-up address gets. Nobody scanning the internet learns that this endpoint is here, let alone anything about the round.
+
+**One thing to get right.** While the application is served under `mikehelm.com/SPV`, the address to monitor is `mikehelm.com/SPV/api/health` — with the `/SPV`. Pointed at the address without it, a monitor sits happily on a "not found" forever and shows you a green tick over a dead application. `pnpm verify:deployment` now checks both, against a real running server, for exactly that reason.
+
+**It also goes red when it deliberately cannot answer.** If the database is unreachable the reply says so in those words — "unavailable" rather than "wrong" — because "wrong" is a judgement made after looking at something, and claiming it when nothing could be looked at is the one kind of lie this whole report exists to prevent.
+
 ---
 
 ## Updates

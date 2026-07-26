@@ -60,6 +60,8 @@ const BASE_PATH = '/SPV'
 const PORT = 3230
 const HOST = `http://127.0.0.1:${PORT}`
 const ORIGIN = `${HOST}${BASE_PATH}`
+/** A fixture secret for the health endpoint, for the life of one server. */
+const HEALTH_TOKEN = `${PREFIX}-health-token-not-a-real-secret-0000000000`
 
 let passed = 0
 let failed = 0
@@ -237,6 +239,10 @@ async function main(): Promise<void> {
   const deploymentEnv = {
     BASE_PATH,
     APP_URL: ORIGIN,
+    // Switches the health endpoint on for this run. Long enough to satisfy the
+    // boot check, and obviously a fixture — it exists for the length of one
+    // server and is never written anywhere.
+    HEALTH_TOKEN,
     // The testing deployment is by definition not the production one, and the
     // send guard has to say so. This is the value §18.1 compares against.
     PRODUCTION_APP_URL: 'https://spv.flipit.com',
@@ -552,6 +558,67 @@ async function main(): Promise<void> {
         await store.remove(document.storageKey)
       }
     }
+
+    /**
+     * The health endpoint, over real HTTP, under the prefix.
+     *
+     * `route.test.ts` proves the handler. What only a running server can show
+     * is the part somebody has to type into a monitoring service: the URL. A
+     * monitor pointed at `https://host/api/health` on a deployment served from
+     * `/SPV` polls a 404 forever and shows a green tick over a dead
+     * application — which is the exact failure this endpoint exists to close,
+     * reintroduced by the prefix. So the prefixed address is asked, and the
+     * unprefixed one is asked too, and the second must not answer.
+     */
+    console.log('\nThe health endpoint — §6.5')
+    const healthy = await fetch(`${ORIGIN}/api/health`, {
+      headers: { 'x-health-token': HEALTH_TOKEN },
+    })
+    check(
+      `${BASE_PATH}/api/health answers with the token`,
+      healthy.status === 200 || healthy.status === 503,
+      String(healthy.status),
+    )
+
+    const signal = (await healthy.json()) as {
+      status: string
+      at: string | null
+      counts: Record<string, number>
+      areas: { area: string; severity: string }[]
+    }
+    const serialised = JSON.stringify(signal)
+    check(
+      'the status word is one of the four',
+      ['ok', 'attention', 'wrong', 'unavailable'].includes(signal.status),
+      signal.status,
+    )
+    check(
+      'the code and the word agree',
+      (healthy.status === 503) === (signal.status === 'wrong' || signal.status === 'unavailable'),
+      `${healthy.status} / ${signal.status}`,
+    )
+    check(
+      'the body carries no address, no id and no sentence',
+      !/[\w.+-]+@[\w-]+\.[\w.-]+/.test(serialised) &&
+        !/[0-9a-f]{8}-[0-9a-f]{4}/.test(serialised) &&
+        Object.keys(signal).sort().join(',') === 'areas,at,counts,status',
+      serialised,
+    )
+    check(
+      'it is noindex and not cached',
+      healthy.headers.get('x-robots-tag')?.includes('noindex') === true &&
+        healthy.headers.get('cache-control')?.includes('no-store') === true,
+      `${healthy.headers.get('x-robots-tag')} / ${healthy.headers.get('cache-control')}`,
+    )
+
+    const unauthenticated = await fetch(`${ORIGIN}/api/health`)
+    check('and without the token it is not found', unauthenticated.status === 404)
+    check('with an empty body', (await unauthenticated.text()) === '')
+
+    check(
+      'the unprefixed address does not answer — a monitor pointed there would show a green tick forever',
+      (await status('/api/health')) === 404,
+    )
 
     console.log('\nThe base-URL guard — §18.1, AC44')
     const { evaluateSendGuard } = await import('@/lib/email/transport/guard')

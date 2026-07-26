@@ -52,6 +52,7 @@ starts with a half-configured base URL is a portal issuing dead links.
 | `OPERATOR_EMAILS` | the operator address | the same |
 | `RESTORE_DATABASE_URL` | unset | unset except during a restore |
 | `MEDIA_STORE` | `filesystem` or empty | `object-store` — see §1.1 |
+| `HEALTH_TOKEN` | optional | `openssl rand -base64 32` — see §9.1 |
 
 **`ENCRYPTION_KEY` is not portable between the two.** It encrypts the stored
 SMTP app password and the OpenAI key. Moving the database without moving the key
@@ -425,6 +426,52 @@ credential needs somebody who knows what has been happening.
 **It names no email address**, including the sending account's own, which the
 mail connection's summary does name. This report is appended to a log file by a
 scheduler, and a log file is the least protected place in a deployment.
+
+### 9.1 The same report, to a machine that is not this machine
+
+```
+GET https://spv.flipit.com/api/health
+     x-health-token: <HEALTH_TOKEN>
+```
+
+Set `HEALTH_TOKEN` to something from `openssl rand -base64 32`, point an uptime
+monitor at that URL with that header, and the monitor pages somebody. **This is
+the only signal in the system that survives the machine stopping.** `pnpm
+check:health` runs on the box it is watching: if that box is down, or the
+scheduler was never installed, or the container was never restarted after a
+failed deploy, the command produces nothing at all — and nothing is exactly what
+a healthy quiet morning also produces. An outside poller can tell those apart.
+
+- **200** — nothing needs a person. Also 200 for the findings that are decisions
+  somebody made, for the same reason the command exits 0 on them: a monitor that
+  goes red for a deliberate read-only week is a monitor that gets muted, and a
+  muted monitor is worse than none, because somebody believes it is watching.
+- **503** — something needs a person, or the report itself could not be built.
+  The body's `status` says which: `wrong` is a judgement made after looking,
+  `unavailable` means nothing could be looked at.
+- **404, with an empty body** — no token, the wrong token, or `HEALTH_TOKEN`
+  unset. All three are the same response byte for byte. A deployment that has
+  not turned this on does not have this endpoint.
+
+The body carries a status word, a timestamp, four counts and the *areas* that
+are not fine — `Reminders`, `Mail`, `Compliance`, and the rest of the fixed
+handful. No headline, no detail, no remedy, no id, no address. It ends up in a
+monitoring service's alert history and on somebody's lock screen, which is a
+looser place than a session-protected page, so it is sized to that. To find out
+*what* is wrong, open **System health** in the application.
+
+**Nothing here sends.** A push would mean a second unattended sender in an
+application where the reminder job is deliberately the only one. A monitor
+already knows how to page a person, and it is somebody else's infrastructure
+staying up.
+
+**Under a path prefix the address is `https://host/SPV/api/health`.** A monitor
+pointed at the unprefixed one polls a 404 forever and shows a green tick over a
+dead application. `pnpm verify:deployment` asks both, against a running server,
+for exactly this reason.
+
+The header is a header and not a query parameter, because a query string is
+written to every access log between the monitor and here.
 
 ### The same report, in the application
 
