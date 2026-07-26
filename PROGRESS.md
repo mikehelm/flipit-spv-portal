@@ -2788,3 +2788,104 @@ is the item the last several Uncertain notes have been carrying.
   lines are written; a `media:check` that starts failing weekly would land in a
   log nobody reads, exactly like the reminder job did before this. Folding its
   result into the health report is the obvious next step and it is small.
+
+## The health report where the operator will see it, and a backup signal
+
+The previous section built `pnpm check:health` and put it under Uncertain that
+"nothing tells anybody the check went red". That is the smaller half of the
+problem. The larger half is that the report only existed as a command, and the
+person who would have to act on almost everything in it — a stopped scheduler, a
+stuck reminder, a mail credential that expired — does not have a terminal and
+would not be reading a log file if he did.
+
+So the same report, from the same rules, on the screen he already opens.
+
+**Built.**
+
+- **`/health`, "System health"** in the admin navigation, for the owner and the
+  operator both. Findings sorted with anything that needs a person at the top,
+  then the notes, then what was checked and found fine. Read-only: no form, no
+  action, no button. Every finding names the page that fixes the thing.
+- **A backup signal.** `pnpm backup` now writes `backup.completed` to the audit
+  log on a successful dump, and the report says when the last one was.
+- **Eleven source-level tests on the page** — guarded before it reads anything,
+  `noindex`, `force-dynamic`, no writes, no sends, no second set of rules — and
+  five more on the backup rule.
+- **`/health` added to `pnpm verify:viewport`**, which is 135 checks and passes:
+  375px, no overflow, 44px tap targets, AA contrast.
+
+**Decisions.**
+
+- ***Both the command and the page, not one of them.*** They answer different
+  questions. The command is what notices at three in the morning and exits
+  non-zero; the page is what somebody sees at the moment they might do something
+  about it. Neither substitutes for the other, and they share every rule, so
+  there is no second implementation to drift.
+- ***The operator sees it, not only the owner.*** Almost everything on it is the
+  operator's to act on. Hiding it from him would be hiding it from the only
+  person likely to look.
+- ***The page has no buttons, deliberately.*** The obvious next step from "this
+  reminder is stuck, reschedule it" is a reschedule button right there. That
+  would be a second path into an action with a different set of checks in front
+  of it, which is how the two eventually disagree. There is a test pinning it,
+  because the rule is much easier to keep than to recover.
+- ***`force-dynamic`.*** A cached health page is a page that tells you everything
+  is fine because it was, an hour ago.
+- ***A missing backup record is never a fault.*** This can only say when `pnpm
+  backup` last ran here. A deployment snapshotted by its host is backed up
+  perfectly well and has nothing to record, and a report that called that a fault
+  would be wrong every day until somebody switched it off. It says what it knows
+  and names the limit of it — which is the more conservative option and the more
+  useful one.
+- ***Two days before a stale backup is mentioned***, and still only as a note. A
+  nightly regime gets one missed night in silence.
+- ***`pnpm backup` now exits explicitly.*** Recording the dump opens a connection
+  pool, which holds the event loop open — the command did its work and then
+  appeared to hang, which on a cron is indistinguishable from a backup that never
+  finished. Found by running it.
+
+**Deviations.** None.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. The page renders findings, which carry counts and
+   no figures, and there is a test asserting no amount or percentage appears.
+2. *A send path bypassing a gate?* Nothing sends. Tested at the source level on
+   the page and on both health modules.
+3. *One recipient or the whole batch?* Not applicable.
+4. *Can an operator record an approval?* No, and the compliance finding says so
+   in its remedy rather than sending him at a wall.
+5. *Does anything reveal another investor?* No investor-facing surface changed.
+   `/health` is behind `requireOnboardedAdmin()`, and the findings name reminder
+   ids and counts — no name, no address.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The backup audit
+   entry carries the file's base name and its size — not the directory, which is
+   a fact about the machine, and not the connection string.
+9. *Indexable routes?* `/health` sets `index: false`, and the existing test that
+   enumerates every page and asserts exactly two opt into indexing still passes.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched, and reported on.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (1942, up from 1926) and `pnpm build`
+are green. `pnpm verify:health` is 21 of 21 and `pnpm verify:viewport` is 135 of
+135 with the new page in it.
+
+**Uncertain.**
+
+- *Still nothing tells anybody the check went red.* Unchanged, and now with one
+  more place it could be noticed from. Wiring the non-zero exit to an email is a
+  decision about who gets woken up, and adding a second unattended sender to this
+  application is not a decision to make quietly.
+- *The page is not linked from the overview.* It is in the navigation, which is
+  enough to find but not enough to notice. A single line on the overview saying
+  "two things need you" would be the thing that actually catches an eye, and it
+  is small.
+- *`media:check` still reports into a log of its own.* Folding its result into
+  the health report would mean one thing to watch rather than three. It needs the
+  media check to become importable rather than a script with a `main()`.
+- *`pnpm verify:restore` was re-run after the backup script changed* and is 14 of
+  14. Recorded here because "the change is additive so it should be unaffected"
+  is exactly the phrase that precedes finding out otherwise.

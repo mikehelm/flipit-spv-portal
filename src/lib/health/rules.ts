@@ -76,7 +76,20 @@ export interface HealthFacts {
     deadlineReached: number
     awaitingResponse: number
   } | null
+  /** When `pnpm backup` last recorded a successful dump. Null when never. */
+  lastBackupAt: Date | null
 }
+
+/** The audit action `pnpm backup` writes. The only record that one happened. */
+export const BACKUP_COMPLETED_ACTION = 'backup.completed'
+
+/**
+ * How old a backup may be before it is worth mentioning.
+ *
+ * Not a fault at any age — see `backupFindings`. Two days allows a nightly
+ * regime one missed night without saying anything.
+ */
+export const BACKUP_STALE_DAYS = 2
 
 /**
  * How long after a run before its absence is a fault.
@@ -105,9 +118,18 @@ function hoursBetween(from: Date, to: Date): number {
 
 function describeAge(from: Date, to: Date): string {
   const hours = hoursBetween(from, to)
-  if (hours < 1) return `${Math.max(0, Math.round(hours * 60))} minutes ago`
-  if (hours < 48) return `${Math.round(hours)} hours ago`
-  return `${Math.round(hours / 24)} days ago`
+  if (hours < 1) {
+    const minutes = Math.round(hours * 60)
+    // "0 minutes ago" is what a rounded number gives you and it reads as a bug.
+    if (minutes < 1) return 'just now'
+    return `${minutes} minute${minutes === 1 ? '' : 's'} ago`
+  }
+  if (hours < 48) {
+    const rounded = Math.round(hours)
+    return `${rounded} hour${rounded === 1 ? '' : 's'} ago`
+  }
+  const days = Math.round(hours / 24)
+  return `${days} day${days === 1 ? '' : 's'} ago`
 }
 
 /**
@@ -391,6 +413,68 @@ export function roundFindings(facts: HealthFacts): Finding[] {
   ]
 }
 
+/**
+ * When the database was last backed up.
+ *
+ * Never a fault, at any age, and that is a deliberate limit on what this report
+ * is entitled to conclude. `pnpm backup` records a line when it runs, so this
+ * can only ever say when *that command* last ran here. A deployment whose
+ * backups are the host's volume snapshots is backed up perfectly well and has
+ * nothing to record, and a report that called that a fault would be wrong every
+ * single day until somebody switched it off.
+ *
+ * So it says what it knows and names the limit of it.
+ */
+export function backupFindings(facts: HealthFacts): Finding[] {
+  if (facts.lastBackupAt === null) {
+    return [
+      {
+        area: 'Backups',
+        severity: 'ATTENTION',
+        headline: 'This application has no record of a backup.',
+        detail:
+          '`pnpm backup` writes a line to the audit log each time it runs, and there is none. ' +
+          'That means the command has not been run here — not that nothing is backed up. If ' +
+          'the deployment is snapshotted by its host, this is expected and there is nothing ' +
+          'to see.',
+        remedy:
+          'If backups are meant to come from `pnpm backup`, put it on a schedule and test a ' +
+          'restore with `pnpm verify:restore`. If they come from somewhere else, this line ' +
+          'will keep saying this.',
+      },
+    ]
+  }
+
+  const days = hoursBetween(facts.lastBackupAt, facts.now) / 24
+  if (days <= BACKUP_STALE_DAYS) {
+    return [
+      {
+        area: 'Backups',
+        severity: 'OK',
+        headline: `Last backup ${describeAge(facts.lastBackupAt, facts.now)}.`,
+        detail: 'Recorded by `pnpm backup`.',
+        remedy: 'Nothing to do.',
+      },
+    ]
+  }
+
+  return [
+    {
+      area: 'Backups',
+      severity: 'ATTENTION',
+      headline: `The last recorded backup was ${describeAge(facts.lastBackupAt, facts.now)}.`,
+      detail:
+        'Something has been running `pnpm backup` and appears to have stopped. This is not ' +
+        'called a fault because a backup regime that moved elsewhere looks identical from ' +
+        'here — but one that stopped by accident looks identical too, and only somebody who ' +
+        'knows which can tell them apart.',
+      remedy:
+        'Check whatever runs the backup. `pnpm verify:restore` proves a backup can actually ' +
+        'be restored, which is the half that goes untested.',
+    },
+  ]
+}
+
 /** Every rule, in the order they are printed. */
 export function buildFindings(facts: HealthFacts): Finding[] {
   return [
@@ -401,5 +485,6 @@ export function buildFindings(facts: HealthFacts): Finding[] {
     ...serviceModeFindings(facts),
     ...deploymentFindings(facts),
     ...roundFindings(facts),
+    ...backupFindings(facts),
   ]
 }

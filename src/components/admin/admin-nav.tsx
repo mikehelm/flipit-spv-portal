@@ -40,6 +40,11 @@ const ITEMS: NavItem[] = [
   { href: '/admin/onboarding', label: 'Setup', roles: ['OPERATOR'] },
   { href: '/admin/invites', label: 'Operator access', roles: ['OWNER'] },
   { href: '/audit', label: 'Audit log', roles: ['OWNER'] },
+  // Both roles. The operator is the person who would have to act on almost
+  // everything this page reports — a stopped scheduler, a stuck reminder, a mail
+  // credential that expired — so hiding it from him would be hiding it from the
+  // only person likely to look.
+  { href: '/health', label: 'System health', roles: ['OWNER', 'OPERATOR'] },
   { href: '/admin/roadmap', label: 'Portal tiles', roles: ['OWNER'] },
   // §13.2 names both roles for the media library. §13.3's video is the
   // operator's own — the owner sees this entry so he can watch the preview,

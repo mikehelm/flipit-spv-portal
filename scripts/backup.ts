@@ -30,7 +30,9 @@
 import 'dotenv/config'
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
+import { audit, systemActor } from '@/lib/audit'
+import { BACKUP_COMPLETED_ACTION } from '@/lib/health/rules'
 
 export const BACKUP_DIR = 'backups'
 
@@ -123,8 +125,24 @@ async function main(): Promise<void> {
   if (action === undefined || action === 'dump') {
     const file = join(BACKUP_DIR, backupFileName(new Date()))
     await dumpTo(file, databaseUrl)
+    const size = statSync(file).size
     console.log(`Backed up ${redactUrl(databaseUrl)}`)
-    console.log(`  → ${file} (${statSync(file).size} bytes)`)
+    console.log(`  → ${file} (${size} bytes)`)
+
+    // Record that it happened, so `pnpm check:health` can say when the last one
+    // was. A backup regime that stopped in March is exactly the shape of quiet
+    // failure that report exists for, and until now nothing anywhere held the
+    // date. The size and the file name go in; the connection string does not,
+    // and neither does the directory, because a path is a fact about the
+    // machine rather than about the backup.
+    await audit({
+      actor: systemActor,
+      entityType: 'database',
+      entityId: null,
+      action: BACKUP_COMPLETED_ACTION,
+      metadata: { file: basename(file), sizeBytes: size },
+    })
+
     console.log('\nRestore it with:  pnpm backup restore ' + file)
     return
   }
@@ -161,8 +179,14 @@ async function main(): Promise<void> {
 // Only run when invoked directly, so the functions above can be imported by
 // the verification script without triggering a dump.
 if (process.argv[1]?.endsWith('backup.ts')) {
-  main().catch((error) => {
-    console.error(error instanceof Error ? error.message : error)
-    process.exitCode = 1
-  })
+  main()
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : error)
+      process.exitCode = 1
+    })
+    // Explicit, since the dump now records itself in the audit log and that
+    // opens a connection pool which holds the event loop open. Without this the
+    // command finishes its work and then appears to hang, which on a cron is
+    // indistinguishable from a backup that never completed.
+    .finally(() => process.exit(process.exitCode ?? 0))
 }

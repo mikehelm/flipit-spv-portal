@@ -419,6 +419,21 @@ credential needs somebody who knows what has been happening.
 mail connection's summary does name. This report is appended to a log file by a
 scheduler, and a log file is the least protected place in a deployment.
 
+### The same report, in the application
+
+**System health** in the admin navigation renders exactly the same findings from
+exactly the same rules, for the owner and the operator both. The command is what
+notices at three in the morning; the page is what the operator sees when he opens
+the application, which is the only moment at which anybody is going to act on it.
+
+The page is read-only. Every finding names the page that fixes the thing, and
+none of them does it for you.
+
+**Backups.** `pnpm backup` now writes a line to the audit log when a dump
+succeeds, and the report says when the last one was. It can only ever speak for
+that command: a deployment whose backups are the host's volume snapshots has
+nothing to record here, and the report says so rather than calling it a fault.
+
 ```
 pnpm verify:health
 ```

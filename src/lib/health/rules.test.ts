@@ -2,8 +2,10 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  BACKUP_STALE_DAYS,
   CLAIM_STUCK_HOURS,
   RUN_OVERDUE_HOURS,
+  backupFindings,
   buildFindings,
   complianceFindings,
   deploymentFindings,
@@ -48,6 +50,7 @@ function healthy(overrides: Partial<HealthFacts> = {}): HealthFacts {
       stuck: [],
     },
     round: { open: true, deadlineReached: 0, awaitingResponse: 3 },
+    lastBackupAt: hoursAgo(20),
     ...overrides,
   }
 }
@@ -326,6 +329,45 @@ describe('deadlines that have passed', () => {
       round: { open: false, deadlineReached: 9, awaitingResponse: 9 },
     })
     expect(findings).toHaveLength(0)
+  })
+})
+
+describe('when the database was last backed up', () => {
+  it('is never a fault, at any age', () => {
+    // This can only say when `pnpm backup` last ran here. A deployment
+    // snapshotted by its host is backed up perfectly well and has nothing to
+    // record, and a report that called that a fault would be wrong every day
+    // until somebody switched it off.
+    for (const lastBackupAt of [null, hoursAgo(24 * 400)]) {
+      const findings = backupFindings({ ...healthy(), lastBackupAt })
+      expect(worstOf(findings)).toBe('ATTENTION')
+    }
+  })
+
+  it('says what it actually knows when there is no record', () => {
+    const finding = backupFindings({ ...healthy(), lastBackupAt: null })[0]!
+    expect(finding.detail).toMatch(/not that nothing is backed up/i)
+    expect(finding.detail).toMatch(/snapshot/i)
+  })
+
+  it('is quiet about a recent one, without being silent', () => {
+    const findings = backupFindings({ ...healthy(), lastBackupAt: hoursAgo(10) })
+    expect(findings[0]?.severity).toBe('OK')
+    expect(findings[0]?.headline).toMatch(/last backup/i)
+  })
+
+  it('notices one that stopped', () => {
+    const findings = backupFindings({
+      ...healthy(),
+      lastBackupAt: hoursAgo(24 * (BACKUP_STALE_DAYS + 5)),
+    })
+    expect(findings[0]?.severity).toBe('ATTENTION')
+    expect(findings[0]?.headline).toMatch(/days ago/)
+  })
+
+  it('points at the half of backups that goes untested', () => {
+    const finding = backupFindings({ ...healthy(), lastBackupAt: hoursAgo(24 * 30) })[0]!
+    expect(finding.remedy).toMatch(/verify:restore/)
   })
 })
 

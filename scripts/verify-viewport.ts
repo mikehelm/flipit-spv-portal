@@ -543,6 +543,7 @@ async function main(): Promise<void> {
       ['portal roadmap', '/admin/roadmap'],
       ['operator access', '/admin/invites'],
       ['audit log', '/audit'],
+      ['system health', '/health'],
       ['two-factor', '/admin/security'],
       ['portal tiles', '/admin/roadmap'],
       ['media library', '/admin/media'],

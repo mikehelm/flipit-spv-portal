@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| The health report where the operator will see it, and a backup signal | 26 Jul session (cloud) | 2026-07-26 01:42 | `src/app/(admin)/health/**` (new), the admin nav, `src/lib/health/rules.ts`, `scripts/backup.ts` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -106,10 +106,13 @@ service mode, the base-URL guard and passed deadlines. It exits non-zero only fo
 things that need a person; a non-active service mode and a testing deployment are
 notes. It never acts and it names no email address, not even the sending
 account's. `pnpm verify:health` is 21 checks that spawn the real command against
-a database put into each bad state in turn.
+a database put into each bad state in turn. **It is also a page** — "System
+health" in the admin navigation, same rules, read-only, for both roles — and
+`pnpm backup` now records itself so the report can say when the last one was.
 
 The largest left is installing the three cron lines in `DEPLOYMENT.md` §8, and
 the open question — sharpened by corrections — of whether issuing a document
 should notify the investor at all. Neither is a package. After that: nothing
-tells anybody when `check:health` goes red, and folding `media:check`'s result
-into the same report would mean one thing to watch rather than three.
+tells anybody when `check:health` goes red without somebody looking, and folding
+`media:check`'s result into the same report would mean one thing to watch rather
+than three.

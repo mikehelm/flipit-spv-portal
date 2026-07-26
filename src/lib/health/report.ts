@@ -21,6 +21,7 @@ import { env } from '@/lib/env'
 import { currentRound, loadQueue } from '@/lib/reminders/queue'
 import { loadRoundSummary } from '@/lib/rounds/summary'
 import {
+  BACKUP_COMPLETED_ACTION,
   buildFindings,
   RUN_OVERDUE_HOURS,
   worstOf,
@@ -39,11 +40,12 @@ export interface HealthReport {
 /** The audit action a completed run writes. The only record that one happened. */
 const RUN_COMPLETED_ACTION = 'reminder.run_completed'
 
-async function lastRunCompletedAt(): Promise<Date | null> {
+/** The most recent time an action was recorded, or null when it never was. */
+async function lastActionAt(action: string): Promise<Date | null> {
   const rows = await db
     .select({ createdAt: auditEvents.createdAt })
     .from(auditEvents)
-    .where(eq(auditEvents.action, RUN_COMPLETED_ACTION))
+    .where(eq(auditEvents.action, action))
     .orderBy(desc(auditEvents.createdAt))
     .limit(1)
 
@@ -135,7 +137,7 @@ export async function gatherFacts(now: Date = new Date()): Promise<HealthFacts> 
     reminders: {
       roundOpen: round !== undefined && round !== null,
       scheduleEnabled: schedule?.enabled ?? false,
-      lastRunCompletedAt: await lastRunCompletedAt(),
+      lastRunCompletedAt: await lastActionAt(RUN_COMPLETED_ACTION),
       dueNow: counts.dueNow,
       overdue: counts.overdue,
       stuck: await stuckClaims(),
@@ -147,6 +149,7 @@ export async function gatherFacts(now: Date = new Date()): Promise<HealthFacts> 
           awaitingResponse: summary.counts.notResponded,
         }
       : null,
+    lastBackupAt: await lastActionAt(BACKUP_COMPLETED_ACTION),
   }
 }
 

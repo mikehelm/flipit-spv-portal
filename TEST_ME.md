@@ -313,6 +313,12 @@ It goes red for a short list of things that genuinely need you: no reminder run 
 
 **It names no email address**, not even the account mail goes out from, because it is designed to be run by a timer and appended to a log file, and a log file on a server is the least protected place there is.
 
+**And it is a page, too.** Open **System health** in the menu. It is the same report, worked out fresh every time you load it, sorted so anything that needs you is at the top — and it is the version that matters, because you are far more likely to open this application than a terminal. Nothing on it is a button. Every line tells you which page fixes the thing and leaves the decision with you.
+
+Worth noticing on a fresh setup: it lists what it checked *and found fine* rather than showing you an empty page. A page that goes blank when all is well looks exactly like a page that failed to look.
+
+**Backups get a line too.** Run `pnpm backup` and reload the page — it now says when the last one was. It can only speak for that command, so if your backups come from somewhere else (a snapshot of the whole server, say), it will keep saying it has no record, and it says so in those words rather than pretending that is a problem.
+
 To see it proved against a database deliberately put into each bad state — no run ever recorded, a scheduler that stopped, a reminder abandoned half sent:
 
 ```bash
