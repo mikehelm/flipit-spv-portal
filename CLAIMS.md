@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| Streaming an image and a document, not only the video | 26 Jul session D | 2026-07-26 00:52 | `src/app/media/[storageKey]/route.ts`, `src/app/portal/document/[documentId]/route.ts`, `src/app/(admin)/investors/[offerId]/document/[documentId]/route.ts` |
 
 ## Done, so nobody starts it again
 
