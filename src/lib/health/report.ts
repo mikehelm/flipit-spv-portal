@@ -232,14 +232,27 @@ export async function gatherUnattendedFacts(
 }
 
 /**
- * What the overview banner needs: how many things need a person, and nothing
- * else. Zero is the answer on a healthy system and the banner shows nothing.
+ * What the overview banner needs: how many things need a person, and roughly
+ * what they are about. Zero is the answer on a healthy system and the banner
+ * shows nothing.
+ *
+ * `areas` rather than headlines, deliberately. A headline on the overview would
+ * be a second place the same sentence is written, and the two would drift; the
+ * area is enough to tell somebody whether to stop what they are doing, and the
+ * page one click away says exactly what and what to do. It is also the part
+ * that cannot leak anything — an area is one of a fixed handful of words.
  */
 export async function readUnattendedAlert(
   now: Date = new Date(),
-): Promise<{ needsAPerson: number }> {
-  const findings = unattendedFindings(await gatherUnattendedFacts(now))
-  return { needsAPerson: findings.filter((row) => row.severity === 'WRONG').length }
+): Promise<{ needsAPerson: number; areas: string[] }> {
+  const findings = unattendedFindings(await gatherUnattendedFacts(now)).filter(
+    (row) => row.severity === 'WRONG',
+  )
+
+  return {
+    needsAPerson: findings.length,
+    areas: [...new Set(findings.map((row) => row.area))],
+  }
 }
 
 export async function buildHealthReport(now: Date = new Date()): Promise<HealthReport> {

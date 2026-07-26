@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| The overview banner, rendered with a fault behind it | claude-opus-5, 26 Jul | 2026-07-26 02:45 | `scripts/verify-viewport.ts`, `src/app/(admin)/overview` tests |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -120,6 +120,13 @@ System health page read it — including saying so when nothing has ever run it,
 which is not the same answer as clean. The report never reconciles: that costs a
 round trip per stored file and has no place in a page render. `pnpm verify:health`
 is 31 checks and `pnpm verify:media` 54.
+
+**The overview banner has been rendered with a fault behind it**, as of 26 July,
+and it found two: the banner was still naming the two rules it had when it was
+written, and it disagreed with the health page whenever no media store was
+configured — which is the default this repository runs in. Both fixed.
+`pnpm verify:viewport` is 155 checks and includes the fault branch of the
+overview and the health page at 375px, put back afterwards.
 
 The largest left is installing the three cron lines in `DEPLOYMENT.md` §8, and
 the open question — sharpened by corrections — of whether issuing a document

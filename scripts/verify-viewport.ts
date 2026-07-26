@@ -36,10 +36,11 @@
 
 import 'dotenv/config'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { eq, like } from 'drizzle-orm'
+import { eq, inArray, like } from 'drizzle-orm'
 import { chromium, type Browser, type Page } from 'playwright'
 import { db } from '@/db'
 import {
+  auditEvents,
   investorAccounts,
   investorSessions,
   offers,
@@ -552,6 +553,8 @@ async function main(): Promise<void> {
     ] as const) {
       await auditScreen(page, label, path)
     }
+
+    await verifyTheBannerWithAFaultBehindIt(page)
   } catch (error) {
     console.error('\nThe run stopped early. The application said:\n')
     console.error(serverOutput().split('\n').slice(-30).join('\n'))
@@ -564,6 +567,167 @@ async function main(): Promise<void> {
 
   console.log(`\n${passed} passed, ${failed} failed\n`)
   if (failed > 0) process.exitCode = 1
+}
+
+/**
+ * The overview banner, with something actually wrong behind it.
+ *
+ * Everything above this renders against a healthy database, which is correct
+ * for every screen in the list and leaves exactly one rendering unexercised —
+ * and it is the one that matters most. The banner appears only when something
+ * needs a person, so the branch that has never been drawn in a browser is the
+ * branch that gets drawn on the worst morning. Its markup is the same `Notice`
+ * used elsewhere, which made this unlikely rather than unknown, and unlikely is
+ * not the same thing.
+ *
+ * Two faults, because the banner's sentence is built from the findings and a
+ * single finding would not exercise the joining. Both are induced in the audit
+ * log and both are put back: the log is append-only, so the rows that exist are
+ * renamed for the duration rather than deleted, and the row this writes is
+ * removed by id.
+ */
+async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
+  console.log('\nThe overview banner, with a fault behind it')
+
+  const HIDDEN = 'reminder.run_completed__hidden_by_viewport'
+  const existing = await db
+    .select({ id: auditEvents.id })
+    .from(auditEvents)
+    .where(eq(auditEvents.action, 'reminder.run_completed'))
+
+  const HIDDEN_MEDIA = 'media.checked__hidden_by_viewport'
+  const existingMedia = await db
+    .select({ id: auditEvents.id })
+    .from(auditEvents)
+    .where(eq(auditEvents.action, 'media.checked'))
+
+  let written: string | undefined
+
+  try {
+    if (existing.length > 0) {
+      await db
+        .update(auditEvents)
+        .set({ action: HIDDEN })
+        .where(
+          inArray(
+            auditEvents.id,
+            existing.map((row) => row.id),
+          ),
+        )
+    }
+
+    if (existingMedia.length > 0) {
+      await db
+        .update(auditEvents)
+        .set({ action: HIDDEN_MEDIA })
+        .where(
+          inArray(
+            auditEvents.id,
+            existingMedia.map((row) => row.id),
+          ),
+        )
+    }
+
+    const [row] = await db
+      .insert(auditEvents)
+      .values({
+        actorLabel: 'verify-viewport',
+        entityType: 'media',
+        entityId: null,
+        action: 'media.checked',
+        metadata: {
+          storeConfigured: true,
+          checked: 3,
+          missing: 2,
+          wrongSize: 0,
+          unreadable: 0,
+          orphans: 1,
+          listed: true,
+          truncated: false,
+          problems: 3,
+        },
+      })
+      .returning({ id: auditEvents.id })
+    written = row?.id
+
+    // The whole point: the same measurements as every other screen, on the
+    // branch that only exists when something is wrong.
+    await auditScreen(page, 'overview, with a fault', '/admin')
+
+    const text = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+
+    check(
+      'the banner is on the screen at all',
+      /things need you/.test(text),
+      text.slice(0, 160),
+    )
+
+    // The banner itself, not the page. The page legitimately greets whoever is
+    // signed in by their own address, which is their own address on their own
+    // screen; the banner is the thing that must carry nobody's.
+    const banner = (
+      await page.locator('p', { hasText: /things need you/ }).first().innerText()
+    ).replace(/\s+/g, ' ')
+
+    check(
+      'and it names what they are about, from the findings rather than from prose',
+      /the scheduled run/.test(banner) && /stored files/.test(banner),
+      banner,
+    )
+    check(
+      'and it sends the reader to the page that says which',
+      (await page.locator('a[href$="/health"]').count()) > 0,
+    )
+    check(
+      'and it names no email address',
+      !/[\w.+-]+@[\w-]+\.[\w.]{2,}/.test(banner),
+      banner.match(/[\w.+-]+@[\w-]+\.[\w.]{2,}/)?.[0],
+    )
+    check(
+      'and no investor',
+      !banner.includes('Verify Investor') && !banner.includes(PREFIX),
+    )
+
+    // And the page it points at, on the branch that has a "Needs you" section.
+    await auditScreen(page, 'system health, with a fault', '/health')
+    const health = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+    check('the health page leads with what needs a person', /Needs you/.test(health))
+    check(
+      'and says the same things the banner did',
+      /No reminder run has ever completed/.test(health) &&
+        /The last media check found 3 problems/.test(health),
+    )
+  } finally {
+    if (written) await db.delete(auditEvents).where(eq(auditEvents.id, written))
+    if (existing.length > 0) {
+      await db
+        .update(auditEvents)
+        .set({ action: 'reminder.run_completed' })
+        .where(eq(auditEvents.action, HIDDEN))
+    }
+    if (existingMedia.length > 0) {
+      await db
+        .update(auditEvents)
+        .set({ action: 'media.checked' })
+        .where(eq(auditEvents.action, HIDDEN_MEDIA))
+    }
+  }
+
+  // Put back, and gone again — which is the other half of the claim. A banner
+  // that is always there would have passed every check above.
+  await page.goto(`${ORIGIN}/admin`, { waitUntil: 'networkidle' })
+  const healthy = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+  check('and it is gone once the fault is', !/things need you/.test(healthy))
+  check(
+    'while the way through to the health page is not',
+    (await page.locator('a[href$="/health"]').count()) > 0,
+  )
+
+  const leftRenamed = await db
+    .select({ id: auditEvents.id })
+    .from(auditEvents)
+    .where(inArray(auditEvents.action, [HIDDEN, HIDDEN_MEDIA]))
+  check('no audit entry is left renamed', leftRenamed.length === 0)
 }
 
 main()

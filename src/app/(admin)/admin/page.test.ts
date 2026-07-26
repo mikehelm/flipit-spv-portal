@@ -46,6 +46,16 @@ describe('the banner', () => {
     expect(body).not.toContain('recipientEmail')
     expect(body).not.toContain('investorAccounts')
   })
+
+  it('says what the findings are about, rather than a sentence typed here', () => {
+    // It used to name the two rules of the day in prose — "the scheduled
+    // reminder job, or a reminder a run took and never finished sending" —
+    // which went silently false the moment a third rule joined the banner. A
+    // hardcoded sentence has nothing to check it against.
+    const body = code()
+    expect(body).toContain('describeAreas(alert.areas)')
+    expect(body).not.toMatch(/scheduled reminder job, or a reminder/)
+  })
 })
 
 describe('what it costs', () => {

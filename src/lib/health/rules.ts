@@ -234,6 +234,35 @@ export function withoutAddresses(text: string): string {
   return text.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[the connected address]')
 }
 
+/**
+ * The areas of a set of findings, as a phrase somebody can read.
+ *
+ * The overview banner says how many things need a person and what they are
+ * about, and it used to say what they were about in a sentence typed into the
+ * page: *"the scheduled reminder job, or a reminder a run took and never
+ * finished sending"*. That was true of the two rules the banner had at the time
+ * and became false the moment a third was added, silently, because a hardcoded
+ * sentence has nothing to check it against. This derives the phrase from the
+ * findings, so a rule that starts appearing on the banner starts being named by
+ * it.
+ *
+ * Areas, not headlines. A headline on the overview would be the same sentence
+ * written in two places and the two would drift — and an area is one of a fixed
+ * handful of words, so there is nothing in it that could be about a person.
+ */
+export function describeAreas(areas: readonly string[]): string {
+  const phrases = areas.map((area) => {
+    const lowered = area.charAt(0).toLowerCase() + area.slice(1)
+    // "the scheduled run" reads; "scheduled run" does not. "Reminders" and
+    // "stored files" are plurals and take no article.
+    return lowered === 'scheduled run' ? 'the scheduled run' : lowered
+  })
+
+  if (phrases.length === 0) return 'something this screen does not show'
+  if (phrases.length === 1) return phrases[0]!
+  return `${phrases.slice(0, -1).join(', ')} and ${phrases[phrases.length - 1]}`
+}
+
 /** The worst of a set of findings — what the exit code is decided from. */
 export function worstOf(findings: Finding[]): Severity {
   if (findings.some((finding) => finding.severity === 'WRONG')) return 'WRONG'
@@ -651,40 +680,52 @@ export function mediaProblemFindings(facts: UnattendedFacts): Finding[] {
 export function storageFindings(facts: HealthFacts): Finding[] {
   const { storage, lastMediaCheck: last } = facts
 
+  // First, unconditionally, because the overview banner emits exactly this and
+  // the banner must never say something the page does not. The configuration
+  // branches below are additions to it, not alternatives — a store switched off
+  // after a check found two files missing does not make those files found.
+  const problems = mediaProblemFindings(facts)
+
   if (!storage.configured) {
-    if (storage.recordsNamingAFile === 0) {
+    if (storage.recordsNamingAFile > 0) {
       return [
+        ...problems,
         {
           area: 'Stored files',
-          severity: 'OK',
-          headline: 'No media store is configured, and nothing needs one.',
+          severity: 'WRONG',
+          headline: `${storage.recordsNamingAFile} record${storage.recordsNamingAFile === 1 ? '' : 's'} name a stored file and there is nowhere to read one from.`,
           detail:
-            'A deployment with no media store is complete: the portal, the invitation and the ' +
-            'participation certificate all work with an empty media library, and an upload is ' +
-            'refused with a message saying what to set.',
-          remedy: 'Nothing to do.',
+            'MEDIA_STORE is empty, so every image, video and document package in the database ' +
+            'points at a file this deployment cannot reach. Nothing has been lost — the objects ' +
+            'are wherever they were put — but nothing will load until the application is told ' +
+            'where that is.',
+          remedy:
+            'Set MEDIA_STORE back to what this deployment was configured with, and its store ' +
+            'settings with it. Then `pnpm media:check` will say whether the files are still ' +
+            'there.',
         },
       ]
     }
 
+    // Nothing needs a store — but a previous run may still have found something
+    // that nobody has dealt with, and "nothing needs one" alongside "two files
+    // are missing" would be a report arguing with itself.
+    if (problems.length > 0) return problems
+
     return [
       {
         area: 'Stored files',
-        severity: 'WRONG',
-        headline: `${storage.recordsNamingAFile} record${storage.recordsNamingAFile === 1 ? '' : 's'} name a stored file and there is nowhere to read one from.`,
+        severity: 'OK',
+        headline: 'No media store is configured, and nothing needs one.',
         detail:
-          'MEDIA_STORE is empty, so every image, video and document package in the database ' +
-          'points at a file this deployment cannot reach. Nothing has been lost — the objects ' +
-          'are wherever they were put — but nothing will load until the application is told ' +
-          'where that is.',
-        remedy:
-          'Set MEDIA_STORE back to what this deployment was configured with, and its store ' +
-          'settings with it. Then `pnpm media:check` will say whether the files are still there.',
+          'A deployment with no media store is complete: the portal, the invitation and the ' +
+          'participation certificate all work with an empty media library, and an upload is ' +
+          'refused with a message saying what to set.',
+        remedy: 'Nothing to do.',
       },
     ]
   }
 
-  const problems = mediaProblemFindings(facts)
   if (problems.length > 0) return problems
 
   if (last === null || !last.storeConfigured) {

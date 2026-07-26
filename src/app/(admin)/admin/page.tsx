@@ -8,6 +8,7 @@ import { isSendingAccountConfigured, readServiceConfig } from '@/lib/auth/servic
 import { maskConfigured } from '@/lib/crypto'
 import { describeMailConnection } from '@/lib/email/transport'
 import { readUnattendedAlert } from '@/lib/health/report'
+import { describeAreas } from '@/lib/health/rules'
 
 // The mail connection is read live on every load; a cached "verified" panel is
 // worse than no panel.
@@ -61,7 +62,7 @@ export default async function AdminHomePage() {
             {alert.needsAPerson === 1
               ? 'One thing needs you, and nothing else on this screen would tell you about it: '
               : `${alert.needsAPerson} things need you, and nothing else on this screen would tell you about them: `}
-            the scheduled reminder job, or a reminder a run took and never finished sending.{' '}
+            {describeAreas(alert.areas)}.{' '}
             <Link href="/health" className="font-semibold text-orange">
               System health
             </Link>{' '}

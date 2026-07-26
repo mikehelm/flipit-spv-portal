@@ -3108,3 +3108,112 @@ are green. `pnpm verify:health` is 31 of 31, `pnpm verify:media` 54 of 54, and
   "records added since the last check" clause counts a correction as an
   addition. Harmless, and worth knowing before somebody reads that number as a
   count of documents.
+
+## The banner, rendered with a fault behind it — and the disagreement it found
+
+Two sections have now ended with the same note: *the banner has never been seen
+in a browser with a fault behind it. The viewport run exercises the healthy
+branch, because the database it runs against is healthy — which means the one
+rendering that matters most is the one nobody has looked at. Its markup is the
+same `Notice` used elsewhere, so this is unlikely rather than unknown, and
+unlikely is not the same thing.*
+
+It was not unlikely. Rendering it found two faults, and the second is the reason
+this was worth doing.
+
+**Built.**
+
+- **`pnpm verify:viewport` now renders the fault branch.** Two faults are induced
+  in the audit log — the completed reminder runs hidden, and a `media.checked`
+  line saying three things were wrong — and the overview and the health page are
+  measured at 375px with the banner on screen, exactly as every other screen is.
+  Then it is all put back and the overview is loaded again, because *"the banner
+  is gone when the fault is"* is the other half of the claim and a banner that
+  was always there would have passed every check above it.
+- **The banner names what its findings are about**, derived from them.
+  `readUnattendedAlert` returns the distinct areas and `describeAreas` turns them
+  into a phrase.
+- **`storageFindings` no longer loses a recorded problem when the store is
+  switched off.**
+- **A matrix subset test** — 96 combinations of store configuration, last media
+  check, last run and stuck claims — asserting the banner is a strict subset of
+  the page in every one.
+
+**What rendering it found.**
+
+1. ***The banner was still describing the two rules it had when it was written.***
+   Its sentence was typed into the page: *"the scheduled reminder job, or a
+   reminder a run took and never finished sending"*. Adding the media check to
+   the subset in the previous section made that silently false — the banner
+   would appear because a document was missing and then tell the reader to go and
+   look at the reminder job. A hardcoded sentence has nothing to check it
+   against, so it is now derived from the findings, and the page test asserts the
+   old prose is gone rather than merely that new prose is present.
+2. ***The banner and the health page disagreed.*** With no media store configured
+   — which is this repository's own default, and the state every developer runs
+   in — the banner reported *"the last media check found 3 problems"* and the
+   page said *"No media store is configured, and nothing needs one."* The page's
+   rule read the configuration first and returned early; the banner's rule read
+   the last check's verdict and knew nothing about configuration. The strict
+   subset test passed throughout, because its one arrangement of facts had a
+   store configured.
+
+**Decisions.**
+
+- ***Switching the store off does not find a missing file.*** `storageFindings`
+  now emits `mediaProblemFindings` unconditionally and treats the configuration
+  findings as additions to it. The one place it does not add is where the two
+  would argue: with no store, no records needing one, and a recorded problem, the
+  problem is reported and *"nothing needs one"* is not, because a report that says
+  both is a report nobody trusts.
+- ***The subset test is a matrix, not an example.*** One arrangement of facts
+  proved a property that did not hold. The invariant is over all facts, so the
+  test is too — every combination of the four storage states, four media
+  verdicts, three run ages and two claim states.
+- ***The browser check reads the banner, not the page, for an address.*** The
+  overview greets whoever is signed in by their own address when they have no
+  name set, which is their own address on their own screen. Scoping the
+  assertion to the banner keeps it about the thing that must carry nobody's.
+- ***Both faults are induced in the audit log and both are put back.*** Same
+  rename-and-restore treatment `verify:health` uses, with the check afterwards
+  that nothing is left renamed. The log is append-only; a verification script is
+  not an exception to that.
+
+**Deviations.** None.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Counts of findings.
+2. *A send path bypassing a gate?* Nothing added sends.
+3. *One recipient or the whole batch?* Not applicable.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No, and this is now checked in a
+   browser rather than in the source: the rendered banner is asserted to contain
+   no email address, no investor name and nothing under the fixture prefix.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* Nothing new is logged.
+9. *Indexable routes?* No route added.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (1985, up from 1979) and `pnpm build`
+are green. `pnpm verify:viewport` is 155 of 155, up from 135, and
+`pnpm verify:health` is 31 of 31.
+
+**Uncertain.**
+
+- *The viewport run needs a Chromium.* This container's is at a build the pinned
+  Playwright does not expect, so it was run with `CHROMIUM_PATH` pointing at the
+  installed one — an escape hatch the script already had. Nothing was installed
+  and nothing was pinned differently; worth knowing before somebody reads a
+  failure to launch as a failure of the application.
+- *Only two of the three banner rules have been rendered.* The stuck-claim
+  finding is on the banner and was not one of the two faults induced, because
+  arranging one needs an offer and a reminder row rather than an audit entry. Its
+  markup is the same `Notice` with the same wrapping, which is the argument that
+  was wrong last time.
+- *Nothing still tells anybody without somebody looking.* Unchanged. The
+  non-zero exit from `pnpm check:health` remains the only machine-readable
+  signal, and nothing acts on it.

@@ -10,6 +10,7 @@ import {
   storageFindings,
   buildFindings,
   complianceFindings,
+  describeAreas,
   deploymentFindings,
   mailFindings,
   roundFindings,
@@ -217,15 +218,82 @@ describe('the cheap subset the overview banner is built from', () => {
     expect(unattendedFindings(healthy()).filter((row) => row.severity === 'WRONG')).toHaveLength(0)
   })
 
-  it('is still a strict subset when the media check is the thing that is wrong', () => {
-    // The banner and the page must not describe the same fault differently.
-    const facts = withMediaCheck({ missing: 2, orphans: 1, problems: 3 })
-    const full = buildFindings(facts)
-    for (const finding of unattendedFindings(facts)) {
-      expect(
-        full.some((row) => row.headline === finding.headline && row.severity === finding.severity),
-        finding.headline,
-      ).toBe(true)
+  it('describes what the banner is about from the findings, not from prose', () => {
+    expect(describeAreas(['Scheduled run'])).toBe('the scheduled run')
+    expect(describeAreas(['Scheduled run', 'Reminders'])).toBe('the scheduled run and reminders')
+    expect(describeAreas(['Scheduled run', 'Reminders', 'Stored files'])).toBe(
+      'the scheduled run, reminders and stored files',
+    )
+  })
+
+  it('describes every area a banner finding can carry', () => {
+    // The banner used to name its two rules in a sentence typed into the page,
+    // and a third rule joined without the sentence changing. This is the check
+    // that a fourth cannot: every area the subset can produce must come back as
+    // a readable phrase rather than a bare capitalised label.
+    const facts = {
+      ...withMediaCheck({ missing: 1, problems: 1 }),
+      reminders: {
+        ...healthy().reminders,
+        lastRunCompletedAt: null,
+        stuck: [{ id: 'rem_1', claimedAt: hoursAgo(9) }],
+      },
+    }
+    const areas = [...new Set(unattendedFindings(facts).map((row) => row.area))]
+    expect(areas.length).toBeGreaterThanOrEqual(3)
+    for (const area of areas) {
+      expect(describeAreas([area])).toBe(describeAreas([area]).toLowerCase())
+    }
+  })
+
+  it('never returns an empty phrase, because the banner puts a full stop after it', () => {
+    expect(describeAreas([])).not.toBe('')
+  })
+
+  it('is still a strict subset across every shape of fact, not just the healthy one', () => {
+    // A matrix rather than one arrangement, and it is here because one
+    // arrangement was not enough. The banner's media rule reads the last
+    // check's verdict; the page's read the store's *configuration* first and
+    // returned early, so on a deployment with no store configured the banner
+    // reported two missing files and the page said everything was fine. The
+    // browser run found it. This is where it should have been found.
+    const variations: HealthFacts[] = []
+    for (const storage of [
+      { configured: true, recordsNamingAFile: 4 },
+      { configured: true, recordsNamingAFile: 0 },
+      { configured: false, recordsNamingAFile: 0 },
+      { configured: false, recordsNamingAFile: 3 },
+    ]) {
+      for (const media of [
+        null,
+        { ...healthy().lastMediaCheck!, problems: 0 },
+        { ...healthy().lastMediaCheck!, missing: 2, orphans: 1, problems: 3 },
+        { ...healthy().lastMediaCheck!, storeConfigured: false, problems: 2 },
+      ]) {
+        for (const lastRunCompletedAt of [null, hoursAgo(0.2), hoursAgo(RUN_OVERDUE_HOURS + 2)]) {
+          for (const stuck of [[], [{ id: 'rem_1', claimedAt: hoursAgo(9) }]]) {
+            const base = healthy()
+            variations.push({
+              ...base,
+              storage,
+              lastMediaCheck: media,
+              reminders: { ...base.reminders, lastRunCompletedAt, stuck },
+            })
+          }
+        }
+      }
+    }
+
+    for (const facts of variations) {
+      const full = buildFindings(facts)
+      for (const finding of unattendedFindings(facts)) {
+        expect(
+          full.some(
+            (row) => row.headline === finding.headline && row.severity === finding.severity,
+          ),
+          `${finding.headline} — store ${JSON.stringify(facts.storage)}, check ${JSON.stringify(facts.lastMediaCheck?.problems ?? null)}`,
+        ).toBe(true)
+      }
     }
   })
 })
@@ -544,6 +612,28 @@ describe('stored files against the records that name them', () => {
     expect(finding.severity).toBe('WRONG')
     expect(finding.headline).toMatch(/6 records name a stored file/)
     expect(finding.remedy).toMatch(/MEDIA_STORE/)
+  })
+
+  it('does not lose a recorded problem when the store is switched off', () => {
+    // Turning `MEDIA_STORE` off does not find two missing files. The page used
+    // to return the configuration answer and stop, which meant the banner said
+    // something the page did not.
+    const findings = storageFindings({
+      ...withMediaCheck({ missing: 2, problems: 2 }),
+      storage: { configured: false, recordsNamingAFile: 0 },
+    })
+    expect(findings).toHaveLength(1)
+    expect(findings[0]?.severity).toBe('WRONG')
+    expect(findings[0]?.headline).toMatch(/2 problems/)
+  })
+
+  it('reports both when there is nowhere to read from and a check found things', () => {
+    const findings = storageFindings({
+      ...withMediaCheck({ missing: 2, problems: 2 }),
+      storage: { configured: false, recordsNamingAFile: 3 },
+    })
+    expect(findings).toHaveLength(2)
+    expect(findings.every((row) => row.severity === 'WRONG')).toBe(true)
   })
 
   it('treats no store and nothing needing one as the supported state it is', () => {
