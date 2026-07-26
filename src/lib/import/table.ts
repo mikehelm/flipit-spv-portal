@@ -11,6 +11,7 @@
  */
 
 import * as XLSX from 'xlsx'
+import { MAX_FILE_BYTES, importTooLargeMessage } from './limits'
 
 export interface SheetTable {
   /** Column headers, in file order, de-duplicated and never empty. */
@@ -33,7 +34,13 @@ export type TableReadResult =
   | { ok: false; message: string }
 
 export const MAX_ROWS = 5000
-export const MAX_FILE_BYTES = 5 * 1024 * 1024
+
+/**
+ * Re-exported from `limits.ts`, which the wizard imports without dragging the
+ * spreadsheet reader into the browser. Kept here so every existing caller of
+ * `table.ts` still finds it where it was.
+ */
+export { MAX_FILE_BYTES }
 
 // ---------------------------------------------------------------------------
 // Delimited text
@@ -272,7 +279,8 @@ export function readTable(
 ): TableReadResult {
   if (bytes.byteLength === 0) return { ok: false, message: 'The file is empty.' }
   if (bytes.byteLength > MAX_FILE_BYTES) {
-    return { ok: false, message: 'That file is larger than 5 MB. Check it is the right file.' }
+    // The same sentence the wizard shows when it refuses one before posting.
+    return { ok: false, message: importTooLargeMessage(bytes.byteLength) }
   }
 
   const extension = filename.toLowerCase().split('.').pop() ?? ''

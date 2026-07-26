@@ -240,6 +240,7 @@ export function DocumentsPanel({
                           submitLabel="Upload the correction"
                           tone="quiet"
                           hidden={{ documentId: current.id }}
+                          fileKind="document"
                         >
                           <Field
                             label="Title"
@@ -302,6 +303,7 @@ export function DocumentsPanel({
                   submitLabel="Upload"
                   tone="quiet"
                   hidden={{ offerId: offer.offerId }}
+                  fileKind="document"
                 >
                   <Field label="Title" name={`title-${offer.offerId}`}>
                     <TextInput

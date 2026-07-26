@@ -1004,6 +1004,23 @@ It had been like that since documents were built. Nothing caught it because noth
 
 There are now proper pages for both: **type any address that does not exist** and you get a Flipit page that says there is nothing there, does not tell you whether it is because the page is missing or because you are not allowed, and points you at the verification page. That last part matters — the moment a page fails is the moment somebody looks hardest at what they are looking at, and an unrecognisable failure on a page about somebody's investment is the worst possible time to look like anybody else's website.
 
+### And then the same thing was true one size up
+
+The paragraph above was written after fixing the 1 MB limit. It described the fix as done. **It was done for files up to 24 MB, and silent above that** — and nobody had tried, because nobody had tried anything over 1 MB either.
+
+The numbers, in order: an image may be **5 MB**, a spreadsheet **5 MB**, a PDF **20 MB**. The framework will accept a request of up to **24 MB**, which is what the last fix raised it to. Your file picker will hand the browser a **200 MB** file without comment. So everything between 24 MB and whatever is on your disk went straight back to doing nothing at all — no message, form untouched, exactly the behaviour that had just been fixed one band lower.
+
+**Two things have now happened.** The first is that all three screens check the size *in the browser, before sending anything*, and say the same sentence the server would have said. The second is that this is now driven by a real browser with real files, which is how the gap was found: `pnpm verify:uploads` chooses a 3 MB PDF, a 20 MB PDF, a 21 MB PDF and a 30 MB PDF in turn, and checks both what you are told and whether anything was actually sent.
+
+**Try it yourself, on any investor's *Documents* panel:**
+
+- **A PDF of a few megabytes.** Uploads, arrives *not issued*, and the card shows its size. This is the thing that was impossible before either fix.
+- **A PDF of about 19 MB.** Also uploads. This is the one that matters most, because 20 MB is the number printed on the screen, and until now that was a promise the application could not keep.
+- **A PDF over 20 MB.** *"That file is 21 MB and the limit for a document is 20 MB. Nothing was stored."* — and it is refused **instantly**, because your browser checked before uploading. You do not sit and watch a progress bar for a file that was never going to be accepted.
+- **A PDF of 50 or 100 MB, if you have one.** Exactly the same sentence. That is the point: there is no size at which the screen goes quiet.
+
+The same is true of **Admin → Media** and of the **import** screen. And the server has not become more trusting: it still reads every byte that reaches it and still refuses on its own account. The browser check saves you the wait and gives you the sentence; it is not what makes the limit true.
+
 ---
 
 ## Things worth knowing

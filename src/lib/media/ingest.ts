@@ -20,19 +20,26 @@
 import {
   DOCUMENT_FORMATS,
   IMAGE_FORMATS,
-  MAX_DOCUMENT_BYTES,
-  MAX_IMAGE_BYTES,
-  MAX_VIDEO_BYTES,
+  KIND_ARTICLE,
   REFUSED_FORMATS,
   VIDEO_FORMATS,
+  maxBytesFor,
   sniffFormat,
+  tooLargeMessage,
   type AcceptedFormat,
   type RefusedFormat,
+  type UploadKind,
 } from './formats'
 import { stripMetadata } from './strip'
 import { mediaStore, newStorageKey, MEDIA_STORE_UNCONFIGURED } from './store'
 
-export type UploadKind = 'image' | 'video' | 'document'
+/**
+ * Both live in `formats.ts` now, because a client component needs them and
+ * cannot import this module. Re-exported so every existing caller — and there
+ * are many — keeps working, and so that `maxBytesFor` still reads as belonging
+ * to ingest, which is the module that applies it to real bytes.
+ */
+export { maxBytesFor, type UploadKind }
 
 export type IngestRefusalReason =
   | 'EMPTY_FILE'
@@ -63,18 +70,6 @@ const ACCEPTED_BY_KIND: Readonly<Record<UploadKind, readonly string[]>> = {
   document: DOCUMENT_FORMATS,
 }
 
-const LIMIT_BY_KIND: Readonly<Record<UploadKind, number>> = {
-  image: MAX_IMAGE_BYTES,
-  video: MAX_VIDEO_BYTES,
-  document: MAX_DOCUMENT_BYTES,
-}
-
-const KIND_ARTICLE: Readonly<Record<UploadKind, string>> = {
-  image: 'an image',
-  video: 'a video',
-  document: 'a document',
-}
-
 /**
  * The prefix on a storage key, so that a key says what kind of thing it names
  * without anybody having to look the row up. A document is `doc_`.
@@ -83,14 +78,6 @@ const KEY_PREFIX: Readonly<Record<UploadKind, 'img' | 'vid' | 'doc'>> = {
   image: 'img',
   video: 'vid',
   document: 'doc',
-}
-
-export function maxBytesFor(kind: UploadKind): number {
-  return LIMIT_BY_KIND[kind]
-}
-
-function megabytes(bytes: number): string {
-  return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`
 }
 
 function refuse(reason: IngestRefusalReason, message: string): IngestRefusal {
@@ -119,13 +106,9 @@ export function inspect(
     return refuse('EMPTY_FILE', 'That file is empty. Nothing was stored.')
   }
 
-  const limit = maxBytesFor(kind)
-  if (bytes.length > limit) {
-    return refuse(
-      'TOO_LARGE',
-      `That file is ${megabytes(bytes.length)} and the limit for ${KIND_ARTICLE[kind]} is ` +
-        `${megabytes(limit)}. Nothing was stored.`,
-    )
+  if (bytes.length > maxBytesFor(kind)) {
+    // The same function the browser calls. See `tooLargeMessage`.
+    return refuse('TOO_LARGE', tooLargeMessage(kind, bytes.length))
   }
 
   const sniffed = sniffFormat(bytes)

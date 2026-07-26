@@ -34,6 +34,7 @@
     "check:health": "tsx scripts/check-health.ts",
     "verify:health": "tsx scripts/verify-health.ts",
     "verify:documents": "tsx scripts/verify-documents.ts",
+    "verify:uploads": "tsx scripts/verify-uploads.ts",
     "verify:lifecycle": "tsx scripts/verify-lifecycle.ts",
     "verify:roadmap": "tsx scripts/verify-roadmap.ts",
     "verify:email-change": "tsx scripts/verify-email-change.ts",

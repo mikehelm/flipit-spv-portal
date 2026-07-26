@@ -89,7 +89,7 @@ export default async function MediaLibraryPage() {
             </Card>
 
             <Card title="Add an image">
-              <ActionForm action={uploadMediaAction} submitLabel="Upload it">
+              <ActionForm action={uploadMediaAction} submitLabel="Upload it" fileKind="image">
                 <Field
                   label="Name"
                   name="name"

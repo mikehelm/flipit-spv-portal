@@ -23,6 +23,7 @@ import {
   TARGET_FIELDS,
   type TargetField,
 } from '@/lib/import/fields'
+import { MAX_FILE_BYTES, importTooLargeMessage } from '@/lib/import/limits'
 import type { ColumnAnswer, ColumnQuestion } from '@/lib/import/mapping'
 import type {
   ActionFailure,
@@ -49,6 +50,28 @@ export function ImportWizard() {
 
   const currentFile = () => fileRef.current?.files?.[0] ?? null
 
+  /**
+   * The chosen file, or nothing — having said why.
+   *
+   * All three steps post the file again, so all three go through here. The size
+   * is checked **before** the body is built, because a body over the server
+   * action limit in `next.config.ts` never reaches the action: the action's own
+   * refusal is never written, the promise rejects, and the wizard loses every
+   * step the operator has taken instead of saying "that file is too big".
+   *
+   * `readTable` and the action's schema both check the same number against the
+   * bytes. This is the courtesy; those are the control.
+   */
+  const fileToPost = (): File | null => {
+    const file = currentFile()
+    if (!file) return null
+    if (file.size > MAX_FILE_BYTES) {
+      setError(importTooLargeMessage(file.size))
+      return null
+    }
+    return file
+  }
+
   const mappingPayload = useMemo(
     () =>
       JSON.stringify({
@@ -65,12 +88,13 @@ export function ImportWizard() {
   }, [])
 
   const upload = (sheet?: string) => {
-    const file = currentFile()
-    if (!file) {
+    if (!currentFile()) {
       setError('Choose a .csv or .xlsx file first.')
       return
     }
     setError(null)
+    const file = fileToPost()
+    if (!file) return
     const form = new FormData()
     form.set('file', file)
     if (sheet) form.set('sheetName', sheet)
@@ -94,13 +118,14 @@ export function ImportWizard() {
   }
 
   const check = () => {
-    const file = currentFile()
-    if (!file || !analysis) {
+    if (!currentFile() || !analysis) {
       setError('The file is no longer available. Choose it again.')
       setStep('upload')
       return
     }
     setError(null)
+    const file = fileToPost()
+    if (!file) return
     const form = new FormData()
     form.set('file', file)
     if (analysis.sheetName) form.set('sheetName', analysis.sheetName)
@@ -122,9 +147,10 @@ export function ImportWizard() {
   }
 
   const doImport = () => {
-    const file = currentFile()
-    if (!file || !analysis || !preview?.canImport) return
+    if (!currentFile() || !analysis || !preview?.canImport) return
     setError(null)
+    const file = fileToPost()
+    if (!file) return
     const form = new FormData()
     form.set('file', file)
     if (analysis.sheetName) form.set('sheetName', analysis.sheetName)
@@ -198,8 +224,8 @@ export function ImportWizard() {
           </button>
         </div>
         <p className="mt-2 text-xs leading-relaxed text-dim">
-          .csv, .xlsx or .xls, up to 5 MB. Extra columns are fine and the order does
-          not matter.
+          .csv, .xlsx or .xls, up to {MAX_FILE_BYTES / (1024 * 1024)} MB. Extra columns are
+          fine and the order does not matter.
         </p>
         {analysis && analysis.sheetNames.length > 1 && (
           <div className="mt-3">

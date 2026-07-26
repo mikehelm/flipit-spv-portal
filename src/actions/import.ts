@@ -66,6 +66,7 @@ import type {
   ConfirmResult,
   PreviewResult,
 } from '@/lib/import/results'
+import { MAX_FILE_BYTES, importTooLargeMessage } from '@/lib/import/limits'
 import { readTable, type SheetTable } from '@/lib/import/table'
 import { formatMoney, formatPercentage } from '@/lib/money'
 import { validateImport } from '@/lib/import/validate'
@@ -80,7 +81,13 @@ import { eq } from 'drizzle-orm'
 const fileSchema = z
   .instanceof(File)
   .refine((file) => file.size > 0, 'The file is empty.')
-  .refine((file) => file.size <= 5 * 1024 * 1024, 'That file is larger than 5 MB.')
+  // The limit and the sentence both come from `limits.ts`. This used to hold
+  // its own copy of the number and its own wording, so the same file was
+  // refused in two different sentences depending on which check caught it
+  // first.
+  .refine((file) => file.size <= MAX_FILE_BYTES, {
+    error: (issue) => importTooLargeMessage((issue.input as File).size),
+  })
   .refine((file) => file.name.length <= 255, 'That filename is implausibly long.')
 
 const answerSchema = z.object({

@@ -5847,3 +5847,187 @@ already promised, and neither raises anything above what `ingest` enforces.
   asked what an attacker could do with them.*
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
+
+## The limit above the limit, and the silence nobody had reached
+
+The previous entry's first Uncertain item asked for one thing:
+
+> *"The document upload has still never actually been driven with a real PDF over
+> 1 MB. The limit was proved on the image path, which shares the mechanism but
+> not the screen. The documents panel is the more consequential of the two — it
+> is where a securities document is issued — and the fix is believed rather than
+> seen there. That is the next thing to do."*
+
+It has been done, in a browser, with real files. And doing it found that the
+previous fix was complete for a band and silent above it.
+
+**The three numbers.** `MAX_IMAGE_BYTES` is 5 MB, `MAX_FILE_BYTES` (import) is
+5 MB, `MAX_DOCUMENT_BYTES` is 20 MB. `serverActions.bodySizeLimit` is 24 MB — the
+value the previous entry raised it to, deliberately above all three. **A file
+picker hands the browser whatever is on the disk.** So for every size between
+24 MB and the size of the largest file on the operator's machine, the body was
+rejected by the framework before the action ran, the action's careful refusal was
+never written, `useActionState` received no new state, and *the form sat there as
+though the button had not been pressed* — the exact defect the previous entry
+fixed, for the range of sizes no limit in the application could reach.
+
+Raising `bodySizeLimit` again is not the answer, and this is the reason it is
+worth writing down: **there is no value that closes this.** Whatever the body
+limit is, a picker can exceed it, and the band above it is silent. The refusal
+has to be said by the side that knows the file's size before the body exists,
+which is the browser.
+
+**Built.**
+
+- ***One sentence, on both sides of the wire.*** `tooLargeMessage(kind, bytes)`
+  moved into `media/formats.ts` — a module a client component can import, which
+  `ingest.ts` is not — along with `UploadKind`, `maxBytesFor` and `megabytes`.
+  `inspect` now returns that function's result rather than building its own
+  string, and a unit test asserts the two are identical for the same size. The
+  browser and the server do not merely agree; there is one sentence.
+- ***`ActionForm` takes a `fileKind`.*** On submit it reads every file input in
+  the form, and over the limit it calls `preventDefault` — which is what stops
+  React posting the body — and renders `tooLargeMessage` in the same place, in
+  the same words and with the same `role="alert"` the action's own refusals use.
+  Wired to all three forms that carry a file input: the documents upload, the
+  correction upload, and the media library.
+- ***The import wizard has the same guard,*** written by hand because it posts to
+  its actions directly rather than through `ActionForm`. All three of its steps
+  post the file again, so all three go through one `fileToPost()`.
+- ***`import/limits.ts`.*** The import limit was written down three times — the
+  reader, the action's Zod schema, and the wizard's own prose — in three
+  different sentences for the same refusal. It is now one constant and one
+  sentence, and the wizard's prose is computed from the constant.
+- ***`scripts/verify-uploads.ts`, and `pnpm verify:uploads`.*** 55 checks. Four
+  sizes on each of the three screens, in a real browser, with fixtures built
+  in-page by `DataTransfer`.
+
+**What it proves that nothing proved before.**
+
+- **A 3 MB PDF through the documents panel** — the queue's actual item. Accepted,
+  arrives not issued, recorded at its full size, and **the bytes on disk are
+  compared with the bytes that were chosen**, rebuilt independently in Node. A
+  legal instrument is not rewritten, and that is now checked at 3 MB rather than
+  at 90 bytes.
+- **20 MB less one byte, accepted.** The largest file the panel promises. This is
+  the check the previous entry's fix actually rests on and the one that had never
+  been run anywhere: under the default body limit, a body this size never reached
+  the action, so *"PDF only, up to 20 MB"* was a promise the application could
+  not keep. Byte-for-byte compared as well.
+- **21 MB and 30 MB, refused, with nothing posted** — asserted by counting the
+  browser's own POSTs, because the claim is that the body was never built.
+- **The operator can recover.** A smaller file chosen after a refusal uploads:
+  the guard is not sticky, which is the failure mode of a form that latches an
+  error.
+- **The server log contains no `Body exceeded` line for the whole run**, no
+  password, no uploaded content, and no unhandled rejection.
+- **No Content-Security-Policy violation on any of the three screens**, and the
+  import wizard survives a refusal without being sent to the error page.
+
+**Decisions.**
+
+- ***The browser guard uses the application's limit, not the framework's.*** This
+  changed the shape of the run and is the entry's one real judgement. Guarding
+  at 24 MB would have left the server to refuse a 21 MB document — correctly,
+  and after the operator had waited for 21 MB to upload. Guarding at 20 MB
+  refuses it instantly and the file never leaves the machine. The conservative
+  reading of a spec that is silent: refuse earlier, transfer less, and say the
+  same sentence either way. Two checks that had been written expecting a POST
+  were rewritten to assert the opposite, which is how this was discovered.
+- ***Which means the server's own size refusal is no longer reachable from these
+  three screens,*** and that is a real cost, recorded here rather than worked
+  around. It is held instead by `inspect` in `file-limits.test.ts`, which asserts
+  the exact message for an over-limit buffer, and by `pnpm verify:documents`,
+  which calls `ingest` against a real store. The guard was **not** given an
+  override or a bypass to make a test reach past it; a switch that turns off a
+  refusal is worth less than the check it would have enabled.
+- ***The guard is in `ActionForm` rather than in a file-input component.*** The
+  thing that has to be stopped is the *submission*, and only the form element
+  can stop it. A clever input that emptied itself would have produced *"Choose a
+  PDF first"* — a true sentence about the wrong problem.
+- ***A refusal from the browser looks exactly like a refusal from the server.***
+  Same place, same words, same `role`. An operator has one question — was my file
+  accepted — and does not need to learn that the answer arrives from two
+  directions. The only addition is *"It was not sent"*, which is the one fact the
+  server's version cannot claim.
+- ***`file-limits.test.ts` fails if a form with a file input has no
+  `fileKind`.*** It walks to each `type="file"` in the tree and looks backwards
+  for the form it sits in. Crude, and it reports a shape it cannot read rather
+  than skipping it — a source-scanning test that silently matches nothing is the
+  usual way this kind of check dies.
+- ***"Enforces" contains "force".*** `boundary.test.ts` refuses that substring
+  anywhere in `ingest.ts`, so that a parameter named `force` can never be added
+  to the one function every byte passes through. A comment tripped it. The
+  comment was reworded; the test was not touched. Worth recording because the
+  instinct is to relax the pattern, and the pattern is right to be that blunt.
+- ***The oversized fixtures are built in the page,*** following the recorder's
+  precedent, and assembled in 1 MB chunks. Pushing 30 MB from Node over CDP
+  proves nothing the in-page version does not.
+
+**Deviations.** None. No limit was raised, no gate was touched, and the server
+still reads every byte that reaches it.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing in this entry touches an amount. The sizes
+   are byte counts, which are counts and not money.
+2. *A send path bypassing a gate?* No. Nothing here sends, and the mail
+   connection gate is untouched.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched. Worth one line, though: the
+   documents panel is operator-reachable and this entry made its upload work at
+   sizes it did not before — uploading a document is not issuing one, and issuing
+   is still the separate, confirmed, dated act it was.
+5. *Does anything reveal another investor?* No. Every refusal names the file's
+   size and the limit, and nothing else. It does not name the offer, the account,
+   the round or the store, and a refusal on Rosalind's row is the same sentence
+   as a refusal on anybody's.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No — and this is the
+   entry that could most easily have broken it, since it is about file contents.
+   The run asserts the server output has no password, no run of the padding
+   character, and no `Body exceeded` line. Audit metadata still records
+   `sizeBytes` and the title, never bytes.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched. The import guard refuses a file
+    before it is read; it does not touch what is read from one.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2430, up from 2419) and `pnpm build`
+are green. `pnpm verify:uploads` is 55 of 55, twice; `pnpm verify:documents`
+48 of 48; `pnpm verify:viewport` 332 of 332; `pnpm verify:deployment` 97 of 97.
+
+**Uncertain.**
+
+- ***The video route is the one upload path still guarded only at 64 MB, and its
+  own limit is the largest in the application.*** The recorder has had a
+  client-side guard since it was written — it is where the pattern came from —
+  but `MAX_VIDEO_BYTES` is 64 MB and `proxyClientMaxBodySize` is 68, so the band
+  between them is four megabytes wide and the recorder's guard is the only thing
+  in it. A 66 MB upload has never been driven. Narrow, and the one remaining
+  place where the same class of silence could live.
+- ***Nothing measures how long a 20 MB upload takes,*** and now that one
+  demonstrably works, that is a fair question rather than a hypothetical. It
+  buffers the whole body before the action runs. On this container it completed
+  inside the run's timeout and nobody looked at the number.
+- ***The 21 MB and 30 MB refusals were never seen by the server,*** which is the
+  point, but it means the *server's* refusal of an over-limit document has still
+  only ever been observed from a unit test and from `verify:documents` calling
+  `ingest` directly. If a future change removed `fileKind` from a form, the
+  server would catch the file and the operator would be told — and no browser
+  check would notice the change, only `file-limits.test.ts` would.
+- *Replacing a **published** video, and removing one altogether, are still not
+  driven.* The second deletes bytes. Carried forward for a fourth entry, and it
+  is now the oldest item on this list.
+- *The image upload preview and the email template preview are still
+  unexercised.*
+- *The error page has never been rendered by a real error.* Reaching it
+  deliberately needs a fault that can be induced and undone.
+- *Nothing measures bundle size, and nothing measures what the middleware
+  costs.*
+- *`img-src data:`, `media-src blob:` and `worker-src blob:` have never been
+  asked what an attacker could do with them.*
+- *The password-reset journey is still not built,* and belongs in
+  OPEN_DECISIONS.md as a question for Michael.

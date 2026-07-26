@@ -115,6 +115,61 @@ export const MAX_VIDEO_BYTES = 64 * 1024 * 1024
  */
 export const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024
 
+/**
+ * What kind of thing is being uploaded. Declared here rather than in
+ * `ingest.ts` because a browser needs it too.
+ *
+ * `ingest.ts` re-exports it, so nothing that imported it from there had to
+ * change. The reason it moved is the reason `tooLargeMessage` exists below: a
+ * client component cannot import `ingest.ts` — that module reaches the
+ * filesystem and the database — and a limit only the server knows about is a
+ * limit the browser silently exceeds.
+ */
+export type UploadKind = 'image' | 'video' | 'document'
+
+const LIMIT_BY_KIND: Readonly<Record<UploadKind, number>> = {
+  image: MAX_IMAGE_BYTES,
+  video: MAX_VIDEO_BYTES,
+  document: MAX_DOCUMENT_BYTES,
+}
+
+/** "an image", "a video", "a document" — for a refusal written as a sentence. */
+export const KIND_ARTICLE: Readonly<Record<UploadKind, string>> = {
+  image: 'an image',
+  video: 'a video',
+  document: 'a document',
+}
+
+export function maxBytesFor(kind: UploadKind): number {
+  return LIMIT_BY_KIND[kind]
+}
+
+/** One decimal place, so a 1.5 MB file is not reported as 2 MB. */
+export function megabytes(bytes: number): string {
+  return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`
+}
+
+/**
+ * The sentence a person reads when their file is too big — **one sentence, used
+ * on both sides of the wire.**
+ *
+ * `inspect` refuses an oversized file on the server and returns this. A file
+ * input refuses one in the browser and shows this. They are the same function
+ * because they have to be the same words: a browser-side guard that phrases the
+ * refusal differently teaches the operator there are two different problems,
+ * when there is one file and one limit.
+ *
+ * It names both numbers — the file's size and the limit — because a message
+ * naming only the limit leaves somebody guessing whether the file they chose is
+ * the one that was too big.
+ */
+export function tooLargeMessage(kind: UploadKind, bytes: number): string {
+  return (
+    `That file is ${megabytes(bytes)} and the limit for ${KIND_ARTICLE[kind]} is ` +
+    `${megabytes(maxBytesFor(kind))}. Nothing was stored.`
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Sniffing
 // ---------------------------------------------------------------------------

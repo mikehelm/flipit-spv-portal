@@ -1,7 +1,8 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { useFormStatus } from 'react-dom'
+import { maxBytesFor, tooLargeMessage, type UploadKind } from '@/lib/media/formats'
 import { idleState, type ActionState } from './action-state'
 
 /**
@@ -44,6 +45,7 @@ export function ActionForm({
   tone = 'primary',
   children,
   hidden,
+  fileKind,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   submitLabel: string
@@ -51,14 +53,66 @@ export function ActionForm({
   children?: React.ReactNode
   /** Fixed values the action needs, e.g. a record id. */
   hidden?: Record<string, string>
+  /**
+   * Set on any form carrying a file input, and it is not optional in practice —
+   * `file-limits.test.ts` fails the build if a form with an `input type="file"`
+   * leaves it out.
+   *
+   * **Why a form needs to know.** A server action's request body has a limit of
+   * its own, above every limit in `formats.ts` but below what a person can
+   * choose from a file picker (`next.config.ts` explains the three numbers).
+   * A body over it never reaches the action, so the action's careful refusal is
+   * never written: Next answers 500, `useActionState` has no new state to
+   * render, and the form sits there looking as though the button was not
+   * pressed. That is what a 30 MB PDF did on the documents panel — the panel
+   * where a securities document is issued — and doing nothing visible is the
+   * worst of the available behaviours.
+   *
+   * So the size is checked here, before the body is built, and the refusal is
+   * `tooLargeMessage` — the same sentence the server would have used. Anything
+   * within the limit still posts and is still judged by `ingest`, which reads
+   * the bytes. This guard reads a number the browser reported and is therefore
+   * a courtesy, exactly like `hidden`: it makes a refusal legible, it does not
+   * make one trustworthy.
+   */
+  fileKind?: UploadKind
 }) {
   const [state, formAction] = useActionState(action, idleState)
+  const [tooLarge, setTooLarge] = useState<string | null>(null)
 
   const fieldErrors =
     state.status === 'error' && state.fieldErrors ? Object.entries(state.fieldErrors) : []
 
+  /**
+   * Runs before the action. Returning early with `preventDefault` is what stops
+   * React from posting the body.
+   *
+   * Every file input in the form, not the first: the documents panel renders a
+   * form per card, and a future one may take two files.
+   */
+  function guardTheFiles(event: React.FormEvent<HTMLFormElement>): void {
+    if (!fileKind) return
+
+    const limit = maxBytesFor(fileKind)
+    const inputs = Array.from(
+      event.currentTarget.querySelectorAll<HTMLInputElement>('input[type="file"]'),
+    )
+
+    for (const input of inputs) {
+      for (const file of Array.from(input.files ?? [])) {
+        if (file.size > limit) {
+          event.preventDefault()
+          setTooLarge(tooLargeMessage(fileKind, file.size))
+          return
+        }
+      }
+    }
+
+    setTooLarge(null)
+  }
+
   return (
-    <form action={formAction} noValidate>
+    <form action={formAction} onSubmit={guardTheFiles} noValidate>
       {hidden
         ? Object.entries(hidden).map(([name, value]) => (
             <input key={name} type="hidden" name={name} value={value} />
@@ -71,7 +125,23 @@ export function ActionForm({
         <SubmitButton label={submitLabel} tone={tone} />
       </div>
 
-      {state.status === 'error' ? (
+      {/*
+        The file was refused here rather than by the action, and it is rendered
+        in the same place, in the same words and with the same `role="alert"`.
+        An operator has one question — was my file accepted — and does not need
+        to learn that the answer arrives from two directions.
+      */}
+      {tooLarge !== null ? (
+        <div
+          role="alert"
+          className="mt-4 border-l-2 border-warn pl-3 text-sm leading-relaxed text-warn"
+        >
+          <p>{tooLarge}</p>
+          <p className="mt-2 text-xs text-warn">
+            It was not sent. Choose a smaller file and press the button again.
+          </p>
+        </div>
+      ) : state.status === 'error' ? (
         <div
           role="alert"
           className="mt-4 border-l-2 border-warn pl-3 text-sm leading-relaxed text-warn"
@@ -87,7 +157,7 @@ export function ActionForm({
         </div>
       ) : null}
 
-      {state.status === 'ok' ? (
+      {tooLarge === null && state.status === 'ok' ? (
         <div
           role="status"
           className="mt-4 border-l-2 border-ok pl-3 text-sm leading-relaxed text-ok"
