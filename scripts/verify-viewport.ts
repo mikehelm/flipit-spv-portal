@@ -27,11 +27,22 @@
  *      the tokens are sound; this proves the tokens are what actually landed,
  *      including anywhere a class was mistyped and silently produced nothing.
  *   5. **The skip link reaches the main landmark** from the keyboard.
+ *   6. **Nothing the browser complains about**, and no Content-Security-Policy
+ *      violation. Added later than the rest, and it found one on its first run.
+ *      The policy in `next.config.ts` had been verified by fetching the headers
+ *      and reading them, which proves a header is *sent* and says nothing about
+ *      what it *blocks*. A CSP that refuses something returns no error status,
+ *      changes no markup and leaves the page looking right with one thing on it
+ *      silently not working. `curl` cannot hear that; a browser can, and one was
+ *      already open here.
  *
  * It creates its own data under an obvious prefix and deletes it at the end.
  * Run it against a development database only, with the app built:
  *
  *   pnpm build && pnpm tsx scripts/verify-viewport.ts
+ *
+ * `CHROMIUM_PATH` points it at a browser already on the machine, for an image or
+ * a container whose Chromium does not match Playwright's pinned build.
  */
 
 import 'dotenv/config'
@@ -243,11 +254,94 @@ function cssColourToHex(value: string): string | null {
   )
 }
 
+/**
+ * Everything the browser complained about on the screen being audited.
+ *
+ * Filled by listeners attached once in `watchTheConsole`, and emptied before
+ * each navigation. A Content-Security-Policy violation arrives twice and both
+ * are kept: Chromium logs "Refused to …" as a console error, and the document
+ * fires a `securitypolicyviolation` event naming the directive. The second is
+ * the useful one, because it says *which* rule refused rather than leaving
+ * somebody to read the policy and guess.
+ */
+const complaints: string[] = []
+
+/**
+ * Listen for what `curl` cannot hear.
+ *
+ * The policy in `next.config.ts` was added and checked by fetching headers and
+ * reading them. That proves the header is *sent* and proves nothing about what
+ * it *blocks*. A CSP that refuses something the application needs returns no
+ * error status, fails no header check and changes no markup — the page renders
+ * and one thing on it silently stops working. That failure mode is named in the
+ * policy's own notes and could not be tested from there: `camera=(self)` rather
+ * than `camera=()` is in that file precisely because the tidy-looking denial
+ * breaks the video recorder with no visible sign.
+ *
+ * The screens are already being opened here. They may as well be listened to.
+ */
+function watchTheConsole(page: Page): void {
+  page.on('console', (message) => {
+    if (message.type() !== 'error') return
+    complaints.push(`console: ${message.text().slice(0, 240)}`)
+  })
+
+  page.on('pageerror', (error) => {
+    complaints.push(`uncaught: ${error.message.slice(0, 240)}`)
+  })
+
+  // Named directives, from the document itself. `addInitScript` runs before any
+  // page script on every navigation, so a violation during hydration is caught
+  // as well as one from a later interaction.
+  void page.addInitScript(() => {
+    document.addEventListener('securitypolicyviolation', (event) => {
+      const violation = event as SecurityPolicyViolationEvent
+      console.error(
+        `CSP refused ${violation.violatedDirective}: ${violation.blockedURI || 'inline'}`,
+      )
+    })
+  })
+}
+
+/**
+ * Complaints that belong to the environment rather than to the application.
+ *
+ * Deliberately short. A list like this is how a real fault gets ignored, so
+ * each entry has to be something that cannot be the application's doing.
+ */
+function isEnvironmental(complaint: string): boolean {
+  return (
+    // No favicon is served, and the browser says so on every page.
+    /favicon\.ico/.test(complaint) ||
+    // Chromium's own devtools probe, absent in this build.
+    /\.well-known\/appspecific/.test(complaint)
+  )
+}
+
 async function auditScreen(page: Page, label: string, path: string): Promise<void> {
+  complaints.length = 0
+
   const response = await page.goto(`${ORIGIN}${path}`, { waitUntil: 'networkidle' })
   const status = response?.status() ?? 0
   check(`${label}: loads (${status})`, status < 400, `${path} returned ${status}`)
   if (status >= 400) return
+
+  const heard = complaints.filter((c) => !isEnvironmental(c))
+  const csp = heard.filter((c) => /CSP refused|Content Security Policy/i.test(c))
+
+  check(
+    `${label}: no Content-Security-Policy violation`,
+    csp.length === 0,
+    csp.slice(0, 3).join(' | '),
+  )
+  check(
+    `${label}: the browser complains about nothing else`,
+    heard.length === csp.length,
+    heard
+      .filter((c) => !csp.includes(c))
+      .slice(0, 3)
+      .join(' | '),
+  )
 
   const result = await measure(page)
 
@@ -488,11 +582,13 @@ async function main(): Promise<void> {
       hasTouch: true,
     })
     const page = await context.newPage()
+    watchTheConsole(page)
 
     console.log('Public screens')
     for (const [label, path] of [
       ['landing', '/'],
       ['verification', '/verify'],
+      ['privacy', '/privacy'],
       ['admin sign-in', '/signin'],
       ['portal sign-in', '/portal/signin'],
       ['link not valid', '/portal/link-not-valid'],
@@ -564,6 +660,15 @@ async function main(): Promise<void> {
       ['media library', '/admin/media'],
       ['personal video', '/admin/video'],
       ['settings', '/admin/settings'],
+      ['acknowledgement wording', '/admin/acknowledgements'],
+      // The last two are not in the navigation's main run and were audited by
+      // nobody. `/admin/password` renders in the `(account)` shell — a second
+      // shell, added when the password page had to leave the admin one to stop
+      // it redirecting to itself, and never measured at 375px until now. A
+      // second shell is exactly the kind of thing that is excellent on a laptop
+      // and broken on a phone, because nobody looks at it twice.
+      ['password', '/admin/password'],
+      ['refused', '/admin/no-access'],
     ] as const) {
       await auditScreen(page, label, path)
     }

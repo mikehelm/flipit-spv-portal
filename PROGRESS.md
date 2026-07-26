@@ -4917,3 +4917,169 @@ real Chromium.
   actions are open to them and the second-factor form was already role-agnostic,
   but the full journey — enrol as a viewer, sign out, sign in, pass the code —
   has not been walked. `verify:2fa` covers it for an operator only.
+
+## What `curl` could not hear
+
+The last entry's own Uncertain list said the most valuable next item was not a
+feature: *"nothing else in this application has been opened in a browser."* And
+the handover brief had asked for the same thing in stronger terms — **DRIVE A
+REAL BROWSER**, watch the console, because the cloud session that wrote the
+Content-Security-Policy could only `curl` it.
+
+`verify:viewport` exists and drives Chromium, and could not run here: Playwright
+1.62 pins Chromium build 1234 and this sandbox has 1194. It already honoured
+`CHROMIUM_PATH`, which nobody had noticed. With that set it ran, and passed
+158 of 158 — the mobile-layout work was sound, it had simply never been proved
+anywhere but Michael's Mac.
+
+Then two things were added to it, and each found something on its first run.
+
+**One: the screens nobody audited.** The list did not include `/admin/password`,
+`/admin/no-access`, `/admin/acknowledgements` or `/privacy`. The first two are
+the pages the last entry moved and rewrote, and one of them had the two smallest
+tap targets in the application — the "Back to the overview" and "Your
+two-factor" links at 20px against WCAG 2.5.5's 44. The refusal page is now the
+page a read-only administrator actually meets, so those are the links they reach
+for on a phone.
+
+**Two: the console.** `auditScreen` now listens to `console`, to `pageerror`,
+and to `securitypolicyviolation` — the last through an init script, so a
+violation during hydration is caught as well as one from an interaction. The
+directive name comes from the event rather than from Chromium's prose, because
+"Refused to evaluate a string as JavaScript" does not say which rule refused.
+
+It failed on `/updates`:
+
+```
+FAIL  updates: no Content-Security-Policy violation
+      console: CSP refused script-src: eval
+```
+
+The chunk it named contains this:
+
+```js
+if (b.jitless || navigator?.userAgent?.includes("Cloudflare")) return !1
+try { return Function(""), !0 } catch (e) { return !1 }
+```
+
+That is zod, deciding whether it may compile its validators with `new Function`.
+The policy refuses it, zod catches the throw and carries on interpreted, and
+**nothing breaks**. The page renders, every test passes, and every visit reports
+a `script-src eval` violation into a console nobody reads. Zod's own source
+carries a comment naming this exact situation.
+
+Zod was in the browser at all because `updates/parts.tsx` — a client component —
+imported one *string* from `lib/updates/audience.ts`, which also holds a schema.
+The whole module went with it.
+
+That module's neighbour, `lib/updates/copy.ts`, exists because of the same
+mistake made once before with a louder symptom: a client component imported one
+string from a module that imports the database, and the postgres driver went
+into the browser bundle. Its header says so. The second string was three lines
+below the first and went the other way.
+
+**Built.**
+
+- `verify:viewport` listens to the browser: no console error, no page error, no
+  CSP violation, on all thirty-one screens.
+- Four screens added to it, `/admin/password` and `/admin/no-access` among them.
+- The two 20px links on the refusal page are 44px tap targets.
+- `NON_ADDRESSABLE_NOTE` moved to `copy.ts`, so no client component reaches zod.
+- `client-boundary.test.ts` — 13 tests. For every `'use client'` file, walk its
+  transitive runtime imports and fail if any reaches `postgres`, `drizzle-orm`,
+  `@/db`, `zod` or `nodemailer`.
+
+**Decisions.**
+
+- ***The cause was fixed, not the symptom.*** Two wrong answers were available.
+  Adding `'unsafe-eval'` would undo most of a policy whose notes say *"never, in
+  any build"* and which has a test asserting the string never appears. Adding
+  `script-src eval` to the environmental-noise allowlist would have silenced the
+  detector on the exact class of violation it exists to catch — the *next* one
+  would have been invisible. Removing zod from the bundle costs nothing and
+  makes the bundle smaller.
+- ***`z.config({ jitless: true })` was considered and not used.*** It is zod's
+  own switch for this and it would have worked. It was rejected because it is
+  global per runtime: setting it would silently turn off zod's compiled
+  validators for any future client-side validation, and nobody would connect the
+  cost to the line that caused it. The recorded remedy, if a client component
+  ever legitimately needs zod, is that switch — in a browser-only module, never
+  on the server.
+- ***The boundary walk stops at a `'use server'` module, and that is the whole
+  design of the check.*** A client component importing a server action does not
+  bundle it; Next replaces the import with a remote call. The first version
+  descended into actions and flagged nine screens for reaching the postgres
+  driver through `audit.ts`, which is exactly the false alarm that gets a check
+  like this deleted.
+- ***`import type` is skipped, `import { type X, y }` is not.*** The first is
+  erased by the compiler and reaches no bundle; the second still loads the
+  module.
+- ***The environmental allowlist has two entries and a comment saying why it is
+  short*** — the missing favicon and Chromium's devtools probe. Both are things
+  the application cannot cause.
+- ***`verify-account-access` falls back to a discovered Chromium.*** Explicit
+  `CHROMIUM_PATH` first, then Playwright's own build, then `/opt/pw-browsers`,
+  `/usr/bin/chromium`, `/usr/bin/google-chrome`. It never downloads. Without it
+  no browser check runs anywhere but one laptop, which is how `verify:viewport`
+  came to be unrun for a fortnight.
+
+**Deviations.** None. `next.config.ts` is untouched: no directive was added,
+relaxed, or given an exception.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. One string constant moved between two modules.
+2. *A send path bypassing a gate?* No. Nothing here touches the transport, the
+   send guard or the preflight.
+3. *One recipient or the whole batch?* Untouched — and `parts.tsx`, which this
+   edits, is the file that renders the per-recipient Send buttons. The change is
+   to one import line and one hint string; no control changed.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No. Confirmed in a browser: the
+   fault-banner checks assert it names no email address and no investor.
+6. *Tokens?* Untouched.
+7. *Suspension?* `NON_ADDRESSABLE_NOTE` is the sentence saying suspended and
+   archived accounts are never addressable. It moved file; the wording is
+   character-identical and the rule that enforces it is in `audience.ts` still.
+8. *Does any log line contain a token, a body or a key?* No. The console watcher
+   truncates at 240 characters and prints only on failure — worth noting, since
+   a console capture is a new thing that could print anything the page printed.
+   Nothing in this application logs a credential to the browser console.
+9. *Indexable routes?* `/privacy` was added to the audit and is one of the two
+   deliberately indexable pages. Nothing changed about which.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2400, up from 2387) and `pnpm build`
+are green. `pnpm verify:viewport` is 242 of 242 with the console listened to;
+`pnpm verify:account-access` is 42 of 42.
+
+**Uncertain.**
+
+- ***The console is listened to on thirty-one screens and not on any
+  interaction.*** Every check here is "load the page and listen". The surfaces
+  the CSP notes single out as the ones to watch — the video recorder calling
+  `getUserMedia`, an image upload preview, the email template preview — are
+  reached by *pressing something*, and nothing presses. `camera=(self)` versus
+  `camera=()` is still unproven in a browser, and it is the choice most likely
+  to be silently wrong.
+- *`/admin/onboarding` is still audited by nobody.* `verify:viewport` signs in as
+  the owner, and that page is operator-only. It needs a second sign-in.
+- *Only the four screens named above were added.* The interior portal pages —
+  a document view, a certificate, a video page — are reached through generated
+  links rather than by path, and were not swept.
+- *The CSP still carries `script-src 'unsafe-inline'`.* Unchanged from the entry
+  that added it, and the nonce is still the fix. What is new is that a violation
+  now surfaces loudly, so the work of removing it can be checked as it goes.
+- *`client-boundary.test.ts` resolves imports by hand.* It reads `@/` and
+  relative specifiers and tries five extensions. It does not understand
+  re-exports through a barrel that renames, and it would miss a dynamic
+  `import()`. It is a smoke alarm, not a bundler.
+- *Nothing measures bundle size.* The zod removal makes the updates chunk
+  smaller and nobody knows by how much, because there is no baseline. A recorded
+  size per route would turn the next accident of this kind into a number rather
+  than a console message.
+- *The password-reset journey is still not built.* Carried forward from the last
+  entry; still the largest named gap, and still blocked on the question of
+  whether a signed-out "forgotten password" form should exist at all.

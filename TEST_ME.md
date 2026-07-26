@@ -667,6 +667,14 @@ Issuing an offer does not send anything and does not take anybody off the regist
 
 **This is the part to test on an actual phone**, because it is how most people will see it. Everything below has been checked automatically at 375 pixels — the width of the smaller iPhones — but a machine cannot tell you whether it *feels* right.
 
+```bash
+pnpm build && pnpm verify:viewport
+```
+
+242 checks across every screen, admin and investor, in a real browser. If your machine has a Chromium that Playwright did not install, put its path in `CHROMIUM_PATH` and it will use that rather than asking you to download another.
+
+> **Two things were added to that run and both found something immediately.** The password page and the refusal page had never been measured at all, and the refusal page turned out to have the two smallest tap targets in the application — 20 pixels where 44 is the minimum. And the run now *listens to the browser console*, which nothing had ever done: the security policy added last week was checked by reading the headers it sends, which proves a header is sent and proves nothing about what it blocks. It was blocking something on the Updates screen. Nothing was visibly broken — the page worked, the tests passed — but every visit filed a violation into a console nobody was reading, and standing noise like that is what a real problem hides behind. Fixed at the cause, and the run now fails if it comes back.
+
 Open your own portal link on your phone and look for:
 
 - **Nothing needing to be scrolled sideways.** No figure should ever sit off the edge of the screen. If you find one, that is a bug and worth reporting exactly where.

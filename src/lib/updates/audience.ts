@@ -51,9 +51,17 @@ export const ADDRESSABLE_STATUSES: readonly AccountStatus[] = [
   'CLOSED',
 ] as const
 
-export const NON_ADDRESSABLE_NOTE =
-  'Suspended and archived accounts are never included. Neither has portal access, so an update ' +
-  'addressed to one would be recorded as delivered somewhere nobody can look.'
+// `NON_ADDRESSABLE_NOTE` used to be declared here and now lives in `copy.ts`,
+// for exactly the reason that file's own header gives. It is read by a client
+// component, and importing one string out of this module dragged `zod` into the
+// browser bundle with it.
+//
+// Nothing broke: zod feature-detects `new Function`, the Content-Security-Policy
+// refuses it, and the caught throw sends zod down its interpreted path. But the
+// browser reported a `script-src eval` violation on every visit to `/updates`,
+// and a genuine violation arriving later would have looked like more of the
+// same. Found the first time a real browser was pointed at the page with the
+// console being listened to — `verify:viewport` now does that on every screen.
 
 /**
  * `ALL` means every account that can read the portal, which is the addressable

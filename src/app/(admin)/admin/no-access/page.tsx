@@ -52,11 +52,26 @@ export default async function NoAccessPage() {
             </li>
           ) : null}
         </ul>
-        <p className="mt-4 flex flex-wrap gap-4">
-          <Link href="/admin" className="text-sm font-semibold text-orange">
+        {/*
+          Tap targets, not prose links. WCAG 2.5.5 exempts a link sitting in a
+          sentence, because padding a word until it is 44px tall breaks the line
+          it sits in — but these two are not in a sentence, they are the way off
+          this page, and at 20px they were the smallest thing to hit anywhere in
+          the application. `verify:viewport` found them the first time this page
+          was measured at 375px, which was after it stopped being a page nobody
+          could open.
+        */}
+        <p className="mt-4 flex flex-wrap gap-2">
+          <Link
+            href="/admin"
+            className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-sm font-semibold text-orange transition-colors hover:border-orange"
+          >
             Back to the overview
           </Link>
-          <Link href="/admin/security" className="text-sm font-semibold text-orange">
+          <Link
+            href="/admin/security"
+            className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-sm font-semibold text-orange transition-colors hover:border-orange"
+          >
             Your two-factor
           </Link>
         </p>
