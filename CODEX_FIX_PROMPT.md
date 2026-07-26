@@ -20,6 +20,14 @@ finished and tested. You are fixing how it runs, not what it does.
   Domain:      spv.flipit.ltd
   Tunnel ID:   f0c3ce0c-7ba8-4703-b668-afade3b78b41
 
+DO NOT RUN git pull, git fetch, git checkout OR git merge.
+
+The remote has moved ahead of this working copy. That is expected and it is
+not your problem. Updating the code and repairing how it runs are two
+different jobs, and doing them together means a tunnel that still will not
+start and no way to tell which change caused it. Michael pulls later, on
+purpose, as its own step. Work with exactly what is on disk.
+
 RULES THAT DO NOT BEND
 
 1. NEVER send email. Not a test, not to yourself, not to prove something works.
@@ -368,10 +376,17 @@ DO NOT DO
   - send anything
   - import data or create an investor account
   - change APP_URL
-  - create an account for grahambrain@gmail.com. The app has only OWNER and
-    OPERATOR. OPERATOR can send invitations and mutate records — it is the
-    wrong role and adding him to it would be a security incident, not a
-    shortcut. A read-only role does not exist yet.
+  - add grahambrain@gmail.com to anything.
+
+    STATUS, since earlier notes on this are now out of date: a read-only
+    VIEWER role HAS been built and is on the remote. It is not in this
+    working copy, and you are not pulling it (see the top). Even once it is
+    here, granting it is one line in .env — VIEWER_EMAILS — and that line
+    hands a third party sight of every named investor's financial position.
+    Michael adds it himself, deliberately, not as a deployment step.
+
+    Under no circumstances add him as OPERATOR. That role sends invitations
+    and mutates records.
 
 ═══════════════════════════════════════════════════════════════
 REPORT — paste verbatim, no claims without output
@@ -386,6 +401,7 @@ REPORT — paste verbatim, no claims without output
   5. Task 2: full output of verify:deployment and check:health, and
      confirmation that pnpm build was re-run after.
   6. Task 4: both curl outputs.
+  6b. Confirmation that you ran no git command that changes the working copy.
   7. pmset -g custom, AC Power section. State whether this is a laptop.
   8. crontab -l, and confirmation nothing pre-existing was removed.
   9. Task 7: both outputs, and which backup destination Mike chose.
