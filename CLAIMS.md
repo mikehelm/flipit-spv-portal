@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| The third banner rule, rendered | claude-opus-5, 26 Jul | 2026-07-26 03:25 | `scripts/verify-viewport.ts` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -125,8 +125,9 @@ is 31 checks and `pnpm verify:media` 54.
 and it found two: the banner was still naming the two rules it had when it was
 written, and it disagreed with the health page whenever no media store was
 configured — which is the default this repository runs in. Both fixed.
-`pnpm verify:viewport` is 155 checks and includes the fault branch of the
-overview and the health page at 375px, put back afterwards.
+`pnpm verify:viewport` is 158 checks and includes the fault branch of the
+overview and the health page at 375px — all three of the banner's rules, put
+back afterwards.
 
 **The memory claim is measured**, as of 26 July. `pnpm verify:memory` serves a
 96 MB object through the real route from the real built server and samples the

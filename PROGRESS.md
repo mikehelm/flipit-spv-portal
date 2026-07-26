@@ -3329,3 +3329,72 @@ empty.
   `DEPLOYMENT.md` §9 at the point where somebody is already building.
 - *`verify:memory` is not in `pnpm check`.* Same reason: `check` is
   typecheck, lint, test and build, and none of those starts a server.
+
+## The third banner rule, rendered
+
+The previous section left this: *Only two of the three banner rules have been
+rendered. The stuck-claim finding is on the banner and was not one of the two
+faults induced, because arranging one needs an offer and a reminder row rather
+than an audit entry. Its markup is the same `Notice` with the same wrapping,
+which is the argument that was wrong last time.*
+
+It was wrong last time, so it is not being made again.
+
+**Built.**
+
+- **A stuck reminder is now one of the faults** the viewport run induces: the
+  seeded investor's offer gets a queued reminder claimed five hours ago, which
+  is past `CLAIM_STUCK_HOURS` and is what a run killed between taking a reminder
+  and sending it leaves behind.
+- **The banner is asserted to name all three areas**, and to join them into a
+  sentence rather than listing labels.
+- **The health page is asserted to name the reminder by its id**, which the
+  banner deliberately does not.
+- **`cleanUp` deletes reminders before offers**, so a run that dies anywhere
+  does not leave a row a foreign key will not let go of.
+
+**Decisions.**
+
+- ***All three rules, in one render, rather than three renders.*** The banner's
+  sentence is built by joining its findings, so the arrangement that matters is
+  the one with more than two in it — a serial comma and an "and" are the part
+  that has no test anywhere else.
+- ***The banner names areas and the page names the reminder.*** Asserted on both
+  sides, because it is the split the whole two-surface design rests on: the
+  banner is a line on a screen somebody else might be looking over, and the page
+  is where the identifier belongs.
+- ***The reminder is removed in its own `finally`, and `cleanUp` is hardened
+  anyway.*** The first is the intended path; the second is what stops a run that
+  died elsewhere from leaving the next run unable to delete its own fixtures.
+
+**Deviations.** None.
+
+**Checklist.**
+
+1. *Money as a `number`?* No — the seeded offer's amounts are strings, as they
+   already were.
+2. *A send path bypassing a gate?* No. The reminder row is inserted directly and
+   is never run; nothing sends.
+3. *One recipient or the whole batch?* Not applicable.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No, and the rendered banner is
+   asserted to carry no address, no investor name and nothing under the fixture
+   prefix.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No.
+9. *Indexable routes?* No route added.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (1985) and `pnpm build` are green.
+`pnpm verify:viewport` is 158 of 158, up from 155.
+
+**Uncertain.**
+
+- *Every rule the banner can carry has now been rendered.* If a fourth is added,
+  this is the place that has to grow with it — and nothing enforces that. A test
+  asserting the induced faults cover every rule in `unattendedFindings` would,
+  but it would have to enumerate the rules, which is the same list written twice.
+- *Nothing still tells anybody without somebody looking.* Unchanged.

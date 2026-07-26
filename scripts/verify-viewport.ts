@@ -46,6 +46,7 @@ import {
   offers,
   portalTokens,
   recipients,
+  reminderEvents,
   rounds,
   users,
 } from '@/db/schema'
@@ -308,6 +309,19 @@ async function cleanUp(): Promise<void> {
   for (const account of accounts) {
     await db.delete(portalTokens).where(eq(portalTokens.accountId, account.id))
     await db.delete(investorSessions).where(eq(investorSessions.accountId, account.id))
+
+    // Reminders first: a queued row references the offer, so deleting the offer
+    // out from under one fails on the foreign key. The fault-branch check
+    // inserts one and removes it in its own `finally`; this is the belt to that
+    // brace, for the run that dies somewhere else entirely.
+    const seeded = await db
+      .select({ id: offers.id })
+      .from(offers)
+      .where(eq(offers.accountId, account.id))
+    for (const offer of seeded) {
+      await db.delete(reminderEvents).where(eq(reminderEvents.offerId, offer.id))
+    }
+
     await db.delete(offers).where(eq(offers.accountId, account.id))
     await db.delete(investorAccounts).where(eq(investorAccounts.id, account.id))
   }
@@ -580,11 +594,13 @@ async function main(): Promise<void> {
  * used elsewhere, which made this unlikely rather than unknown, and unlikely is
  * not the same thing.
  *
- * Two faults, because the banner's sentence is built from the findings and a
- * single finding would not exercise the joining. Both are induced in the audit
- * log and both are put back: the log is append-only, so the rows that exist are
- * renamed for the duration rather than deleted, and the row this writes is
- * removed by id.
+ * All three of the banner's rules, because the banner's sentence is built from
+ * the findings and one finding would not exercise the joining — and because the
+ * last time a rule was left unrendered on the argument that its markup was the
+ * same as its neighbour's, rendering it found two faults. Two faults are induced
+ * in the audit log and one in the reminder queue; all three are put back. The
+ * log is append-only, so the rows that exist are renamed for the duration rather
+ * than deleted, and the rows this writes are removed by id.
  */
 async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
   console.log('\nThe overview banner, with a fault behind it')
@@ -602,6 +618,7 @@ async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
     .where(eq(auditEvents.action, 'media.checked'))
 
   let written: string | undefined
+  let claimed: string | undefined
 
   try {
     if (existing.length > 0) {
@@ -650,6 +667,31 @@ async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
       .returning({ id: auditEvents.id })
     written = row?.id
 
+    // The third rule: a reminder a run took and never finished with. It needs a
+    // row rather than an audit entry, which is why it was left out the first
+    // time — and leaving a rule unrendered because arranging it is fiddly is
+    // exactly how the other two got through.
+    const [offer] = await db
+      .select({ id: offers.id })
+      .from(offers)
+      .innerJoin(investorAccounts, eq(offers.accountId, investorAccounts.id))
+      .where(like(investorAccounts.email, `${PREFIX}%`))
+      .limit(1)
+
+    if (offer) {
+      const [stuck] = await db
+        .insert(reminderEvents)
+        .values({
+          offerId: offer.id,
+          scheduledFor: new Date(Date.now() - 6 * 60 * 60 * 1000),
+          sequence: 1,
+          claimedAt: new Date(Date.now() - 5 * 60 * 60 * 1000),
+        })
+        .returning({ id: reminderEvents.id })
+      claimed = stuck?.id
+    }
+    check('a reminder could be left mid-send for the banner to find', claimed !== undefined)
+
     // The whole point: the same measurements as every other screen, on the
     // branch that only exists when something is wrong.
     await auditScreen(page, 'overview, with a fault', '/admin')
@@ -670,8 +712,15 @@ async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
     ).replace(/\s+/g, ' ')
 
     check(
-      'and it names what they are about, from the findings rather than from prose',
-      /the scheduled run/.test(banner) && /stored files/.test(banner),
+      'and it names all three of them, from the findings rather than from prose',
+      /the scheduled run/.test(banner) &&
+        /reminders/.test(banner) &&
+        /stored files/.test(banner),
+      banner,
+    )
+    check(
+      'and it joins them into a sentence rather than listing labels',
+      /, .* and /.test(banner),
       banner,
     )
     check(
@@ -695,9 +744,15 @@ async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
     check(
       'and says the same things the banner did',
       /No reminder run has ever completed/.test(health) &&
-        /The last media check found 3 problems/.test(health),
+        /The last media check found 3 problems/.test(health) &&
+        /marked as being sent for over/.test(health),
+    )
+    check(
+      'and names the stuck reminder by its id, which the banner does not',
+      claimed !== undefined && health.includes(claimed),
     )
   } finally {
+    if (claimed) await db.delete(reminderEvents).where(eq(reminderEvents.id, claimed))
     if (written) await db.delete(auditEvents).where(eq(auditEvents.id, written))
     if (existing.length > 0) {
       await db
