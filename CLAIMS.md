@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| `pnpm check:health` — the things nobody is watching | 26 Jul session (cloud) | 2026-07-26 01:32 | `src/lib/health/**` (new), `scripts/check-health.ts` (new), `scripts/verify-health.ts` (new), `package.json`, `DEPLOYMENT.md` |
 
 ## Done, so nobody starts it again
 
