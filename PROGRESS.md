@@ -4564,3 +4564,46 @@ code, so the divergence stays visible.
   privacy copy, and the absent password-reset journey. CSP is deliberately held
   until the login-page work lands, because a strict policy and new visual
   effects will fight.
+
+## The two assertions that could not run on the machine it deploys to
+
+An external review reported 2,283 tests passing and two failing on Michael's
+Mac. Both were the descriptor-leak checks in `streaming.test.ts`, and both failed
+for the same reason: `openDescriptors()` read `/proc/self/fd`, and macOS has no
+`/proc`.
+
+That is worth more than a broken-test note. This application is deployed on that
+Mac. The two assertions that prove a video stream gives its file handle back —
+the failure that replaces the memory one if a handle is left open — were the only
+thing in the suite that could not run where it actually runs.
+
+**Built.** `openDescriptors()` tries `/dev/fd` first, then `/proc/self/fd`.
+
+**Decisions.**
+
+- ***`/dev/fd`, which exists on both.*** On Linux it is a symlink to
+  `/proc/self/fd`, so this is the same measurement rather than a weaker one. No
+  assertion changed, no round count reduced, and the early-cancellation test
+  still waits its 50 ms for Node to close the handle on the stream's own tick.
+- ***It throws rather than skipping when neither path is readable.*** The review
+  asked for portability "without skipping or weakening" and this is the whole of
+  that. A check that quietly becomes a no-op on some platform is worse than no
+  check: the suite still reports green, and the leak it was watching for arrives
+  as a process running out of file handles months later. The error says what the
+  assertion was for and that a platform with no way to count descriptors needs a
+  decision rather than a skip.
+
+**Deviations.** None.
+
+**Checklist.** 1–12: untouched. This is a test-harness change; no application
+code, no gate, no route, no figure, no log line.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (2295) are green here, and the two
+that were failing on macOS now have a path that works there.
+
+**Uncertain.**
+
+- *Not verified on macOS from here.* This environment is Linux, so `/dev/fd` was
+  exercised on the platform that already worked. The claim is that `/dev/fd` is
+  present and lists the calling process's descriptors on macOS; the proof is
+  `pnpm test` on Michael's Mac, and it has not been run.

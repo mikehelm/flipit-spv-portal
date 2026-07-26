@@ -59,9 +59,38 @@ function selectFilesystem(directory: string): MediaStore {
   return mediaStore()!
 }
 
-/** Open descriptors for this process. A leak shows up here and nowhere else. */
+/**
+ * Open descriptors for this process. A leak shows up here and nowhere else.
+ *
+ * `/dev/fd` rather than `/proc/self/fd`, because macOS has no `/proc` and these
+ * two assertions were the only thing in the suite that could not run on the
+ * machine this application is actually deployed on. `/dev/fd` lists the calling
+ * process's own descriptors on both, and on Linux it is a symlink to
+ * `/proc/self/fd` — so this is the same measurement, not a weaker one.
+ *
+ * **It throws rather than skipping if neither exists.** A descriptor leak means
+ * a file handle per view, never given back, until the process runs out — the
+ * failure that replaces the memory one if a stream is not closed. A check that
+ * quietly becomes a no-op on some platform is worse than no check, because the
+ * suite still reports green and nobody looks again.
+ */
 function openDescriptors(): number {
-  return readdirSync('/proc/self/fd').length
+  for (const directory of ['/dev/fd', '/proc/self/fd']) {
+    try {
+      return readdirSync(directory).length
+    } catch {
+      // Try the next one. A missing directory is the only expected failure
+      // here; anything else would also be a reason to move on.
+    }
+  }
+
+  throw new Error(
+    'Cannot count open file descriptors: neither /dev/fd nor /proc/self/fd could ' +
+      'be read. This assertion is the only proof that a stream gives its file ' +
+      'handle back, so it fails rather than passing vacuously. If this platform ' +
+      'genuinely has no way to count descriptors, that needs a decision rather ' +
+      'than a skip.',
+  )
 }
 
 describe('a file is read as it is sent, not read and then sent', () => {
