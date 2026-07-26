@@ -198,6 +198,42 @@ export async function requireReader(): Promise<AdminIdentity> {
 }
 
 /**
+ * Whoever is signed in, on the pages that belong to the **account** rather than
+ * to the role: choosing a password, and being told an area is not yours.
+ *
+ * It is defined by what it cannot do. `requireReader()` sends an account with
+ * no password to `PASSWORD_PATH`; `requireAdmin()` sends a viewer to
+ * `NO_ACCESS_PATH`. Either of those, used on the very page it redirects to, is
+ * an infinite redirect — and both of those loops were live in this application
+ * until this function was written:
+ *
+ *   - **every** administrator redeeming their first setup link, owner included,
+ *     bounced between `/admin/password` and itself and could never choose a
+ *     password in a browser. That is the only path by which a password enters
+ *     this system at all (§2.2, "First run"). The page guarded itself with
+ *     `requireAdmin()` — correctly, on its own terms — and then the admin shell
+ *     it rendered inside called `requireReader()`, which sent it back.
+ *   - a viewer touching any owner-only page bounced between `/admin/no-access`
+ *     and itself, writing an `access.refused` row on every hop: an unbounded
+ *     audit write driven by a single click.
+ *
+ * So this function redirects to `SIGN_IN_PATH` and `SECOND_FACTOR_PATH` and
+ * **nowhere else**, which is the whole of what makes it safe to guard those two
+ * pages with. `redirect-loops.test.ts` proves that over the entire redirect
+ * graph rather than asking anybody to trust this paragraph.
+ *
+ * It grants nothing. It answers "who is this", never "what may they do", and
+ * the surfaces that use it write to the acting account's own row and no other.
+ */
+export async function requireOwnAccount(): Promise<AdminIdentity> {
+  const identity = await currentIdentity()
+  if (identity) return identity
+
+  if (await pendingSecondFactorAdmin()) redirect(SECOND_FACTOR_PATH)
+  redirect(SIGN_IN_PATH)
+}
+
+/**
  * Signed in, and holding a password of their own.
  *
  * An account reached through a one-time setup link has a session but no
@@ -206,8 +242,8 @@ export async function requireReader(): Promise<AdminIdentity> {
  * mean a spent bearer token was the only thing ever standing between a stranger
  * and the investor records. So it goes to one page and no further.
  *
- * The password page itself calls `requireAdmin`, not this, or it would redirect
- * to itself for ever.
+ * The password page itself calls `requireOwnAccount`, not this, or it would
+ * redirect to itself for ever.
  */
 export async function requirePasswordSet(): Promise<ActingAdmin> {
   const admin = await requireAdmin()

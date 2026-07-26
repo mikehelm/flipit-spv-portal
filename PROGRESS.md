@@ -4693,3 +4693,227 @@ on `/verify` and on `/signin`, and the pages still render.
   email template preview. `verify:viewport` drives a real Chromium and would
   catch a console violation if it were taught to look.
 - *`script-src 'unsafe-inline'` remains.* Named above; the nonce is the fix.
+
+## The page a new administrator could never reach
+
+The queue said the next thing was a password-reset journey. Before building one
+it seemed worth watching the existing password journey work. It does not work.
+It has never worked in a browser, and it is the only route by which a password
+enters this application at all.
+
+`pnpm build && pnpm start`, then open a setup link:
+
+```
+setup:            307 -> /admin
+/admin:           307 -> /admin/password
+/admin/password:  307 -> /admin/password
+```
+
+`/admin/password` renders inside the `(admin)` shell. That shell guards itself
+with `requireReader()`, which sends an account with no password to
+`/admin/password` — including a request for `/admin/password`. Chromium gives up
+after twenty hops and shows "too many redirects". **Every** administrator
+redeeming their first setup link met this, the owner included.
+
+It is not a mistake inside a guard. `requireReader()` is right, and the page's
+own `requireAdmin()` was right, and the comment above `requirePasswordSet` even
+says *"the password page itself calls `requireAdmin`, not this, or it would
+redirect to itself for ever"* — the author saw the shape of the hazard and
+missed that the shell above the page does the same thing. The bug lives in a
+pairing, which is the one place no single file can see it.
+
+Looking for a second instance found one immediately.
+
+```
+/compliance:      307 -> /admin/no-access      (signed in as a viewer)
+/admin/no-access: 307 -> /admin/no-access
+```
+
+`/admin/no-access` guarded itself with `requireAdmin()` — the check that refuses
+a viewer *by redirecting to `/admin/no-access`*. The only role that would ever
+be sent to that page was the only role that could not read it. Worse, that
+refusal writes an `access.refused` audit row before redirecting: six requests
+produced fifteen rows, and a viewer clicking one owner-only link would write
+them until the browser gave up. An unbounded write, driven by one click, to the
+table that is supposed to be the reliable account of what happened.
+
+Then a third, with no symptom at all. `pnpm setup-link` for a viewer address:
+
+```
+Error: No user row exists for viewer@example.test
+```
+
+`.env.example` describes `VIEWER_EMAILS` as a one-line grant — *"adding an
+address here grants sight of every named investor's financial position, so it is
+a decision rather than a configuration step"*. The seed built rows for
+`ownerEmails` and `operatorEmails` and not for `viewerEmails`, so an address
+added to it resolved to `VIEWER`, passed `evaluateAllowlist`, reached the
+credential store, found nothing, and was refused with `INVALID_CREDENTIALS` —
+deliberately indistinguishable from a wrong password. The role that the handover
+brief asked to *"scrutinise hardest"* could not sign in, and once it could, it
+could not choose a password, and once it had one, every refusal spun.
+
+**Built.**
+
+- `requireOwnAccount()` — signed in as anybody, no password required, no role
+  required. It redirects to `SIGN_IN_PATH` and `SECOND_FACTOR_PATH` and nowhere
+  else, which is the whole of what makes it safe to guard the two pages that the
+  other guards redirect *to*.
+- `/admin/password` moved to a new `(account)` route group with a minimal shell,
+  so the admin shell is no longer above it.
+- `/admin/no-access` guards with `requireOwnAccount()` and renders for a viewer,
+  naming their role and what read-only covers.
+- `/admin/security` and the four second-factor actions guard with
+  `requireReader()`, so a viewer can enrol two-factor and see recovery codes for
+  their own account.
+- `/admin/password` and its two actions guard with `requireOwnAccount()`, so a
+  viewer can choose and change their own password.
+- The seed creates viewer rows, deduplicated in `resolveRole`'s precedence
+  order, and prints their setup links like any other account.
+- `/admin/password` and `/admin/security` are in the navigation for every role.
+  The password page had no link anywhere; it was reachable only by being sent
+  there.
+- The import page's refusal no longer tells a signed-in viewer to sign in.
+- `redirect-loops.test.ts` — 70 tests, described below.
+- `scripts/verify-account-access.ts` and `pnpm verify:account-access` — 42
+  checks in a real browser.
+
+**Decisions.**
+
+- ***A new route group, rather than teaching the layout which route is below
+  it.*** A server layout in the App Router has no reliable pathname, so every
+  in-shell fix is a guess about a header. Moving the page is exact. It is also
+  the better design on its own terms: the admin shell renders navigation to
+  twenty destinations, and an account with no password is refused all twenty.
+- ***`requireReader()` for the second factor, not a new guard.*** The four
+  enrolment actions read and write `users` at `admin.id` and nothing else, so
+  admitting a viewer grants authority over their own sign-in and over nothing in
+  the application. §2.2 says two-factor is for "both privileged accounts"
+  because there were two accounts when it was written; the *reason* it gives is
+  the value of what a session reaches, and a viewer's session reaches every
+  investor by name and every amount they hold. Widening is the conservative
+  reading of that sentence, not the loose one.
+- ***`requireOwnAccount()` returns `AdminIdentity`, never `ActingAdmin`.*** It
+  cannot be mistaken for permission at the type level, so it cannot drift into
+  the forty call sites that stand in front of mutations.
+- ***The `(account)` shell carries no site footer.*** §13.2 allows the maker's
+  credit on two surfaces and `attribution.test.ts` counts the files that render
+  it. A third would have been arguable — this is the admin surface under another
+  shell — but the screen is where somebody chooses a password, and a credit line
+  is decoration on a security step. The sign-in page has none either.
+- ***The seed deduplicates by first occurrence, in `resolveRole`'s order.***
+  Without it, an address on two lists is written twice and the *last* write
+  sticks, quietly demoting somebody out of their own application — precisely the
+  outcome `roles.ts` reasons its way out of. The seed and the resolver have to
+  agree or seeding becomes a demotion.
+- ***The import page's wording is chosen after the refusal, from an identity
+  read that decides nothing.*** `requireImportActor` answers `NOT_SIGNED_IN` for
+  a stranger, for an administrator with no password, and for a viewer, because
+  `currentAdmin()` is null for all three. Printing its message told a signed-in
+  person to sign in, which reads as breakage rather than as a boundary. The
+  authorization is untouched; only the sentence is picked. `viewer-role.test.ts`
+  asserts the identity never reaches the markup.
+- ***`VIEWER_EMAILS` stays empty and Graham is still added to nothing.*** The
+  role now works; granting it remains Michael's own act, one line in `.env`.
+
+**Deviations.** None. No gate changed. No guard was weakened — `requireAdmin`,
+`requireReader`, `requirePasswordSet`, `requireOwner`, `requireOperator` and
+`requireOnboardedAdmin` are all byte-identical.
+
+**About the test, because the first version of it was wrong.**
+
+The first attempt built one graph of "everywhere a guard can send you" and
+asserted it was acyclic. It reported `/signin → /admin → /signin` as a loop. It
+is not one: `/signin` redirects to `/admin` when you are signed in and `/admin`
+redirects to `/signin` when you are not, and nobody is ever both. A graph that
+unions every state together proves nothing, because the states that create each
+edge are mutually exclusive.
+
+So the property is per-state: **fix an account's state, and following redirects
+from any route must reach a page that renders.** The state does not change while
+a browser chases 307s, which is exactly why a cycle within one state spins for
+ever and a "cycle" across two states does not. Sixty-four states — signed in,
+role including none, password set, second factor pending, onboarded — against
+every page in both groups.
+
+The model of each guard is hand-written, so it is pinned: every destination the
+model produces must appear in the set of `redirect(...)` targets extracted
+mechanically from that guard's own source, and every extracted target must be
+reachable in the model. The model can be wrong about *when*; it cannot be wrong
+about *where*, and where is what makes a loop.
+
+The extraction was wrong too, at first, and instructively. It read only
+`export async function`, so `requireOwner` — one line delegating to the private
+`requireRole` — appeared to redirect nowhere, and the file passed. Not wrong:
+silently blind, which is the failure mode of every analysis like this one.
+
+Both original bugs were reintroduced afterwards to confirm the test fails on
+them. It does, naming the state and the path: *"infinite redirect for {OWNER,
+signed in, no password, 2FA settled, onboarded}: /admin/acknowledgements →
+/admin/password → /admin/password"*.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here touches an amount.
+2. *A send path bypassing a gate?* No. Nothing in this package imports the
+   transport, the send guard or the preflight. §18.1 and §8.1 are untouched.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* No. `/compliance` still calls
+   `requireOwner()`, and a viewer reaching it is refused and logged — now once
+   per attempt rather than once per redirect hop.
+5. *Does anything reveal another investor?* No. Nothing here reads an investor
+   record. The refusal page names only the person reading it.
+6. *Tokens?* The setup link is unchanged — still single-use, still hashed, still
+   minted only on a console. Verified end to end: redeeming it twice fails.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The audit entries
+   in this package carry a role and a path. The verification script prints
+   addresses and never a token or a password.
+9. *Indexable routes?* Unchanged. The new `(account)` layout carries
+   `robots: { index: false, follow: false, nocache: true }` like every other
+   admin surface.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched, and specifically checked: `env.ts` is not
+    modified and `isProductionDeployment` is not read by anything added here.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2387, up from 2312) and `pnpm build`
+are green. `pnpm verify:account-access` is 42 of 42 against a real Postgres and a
+real Chromium.
+
+**Uncertain.**
+
+- ***Nothing else in this application has been opened in a browser.*** That is
+  the finding, not the redirect. Three defects sat behind 2,312 passing tests
+  because no session had ever started the server and asked it for a URL. The
+  same is true of the investor portal, the certificate, the document routes and
+  the template preview. `verify:viewport` exists and drives Chromium, but it
+  cannot run in this environment (see below), so nobody knows whether it passes.
+  **This is the most valuable next item and it is not a feature.**
+- *`pnpm verify:viewport` could not be run here.* Playwright 1.62 pins Chromium
+  build 1234 and this sandbox has 1194, and downloading is blocked. The new
+  script works around it by falling back to a discovered binary and honouring
+  `CHROMIUM_PATH`; `verify-viewport.ts` has no such fallback and still calls
+  `chromium.launch()` bare. Giving it the same fallback is ten minutes and would
+  make the mobile-layout proof runnable in more places than Michael's Mac.
+- *No test observes the loop from outside the model.* The unit test proves a
+  model pinned to the source; the browser script proves the real thing but is
+  not part of `pnpm test` and needs a built app and a database. A regression
+  introduced in a way the model does not capture — middleware, a rewrite, a
+  `basePath` — would pass the suite. `verify:account-access` in CI is the answer
+  and there is no CI.
+- *The password-reset journey is still not built,* which is what this session set
+  out to do. A viewer and an operator can now change a password they know; one
+  they have forgotten is still `pnpm setup-link` on the server console. The
+  design question left open is whether a signed-out "forgotten password" form
+  should exist at all: the sign-in page argues in a comment that it should not,
+  on §15 grounds, and that argument deserves answering rather than overruling.
+  The owner-issues-a-link half of it needs no new surface and would work today.
+- *A viewer with a `VIEWER_EMAILS` entry removed keeps a live session row until
+  it expires.* Access stops immediately — the role is re-resolved from the
+  environment on every request — but the row is not deleted, so `sessions`
+  carries a dead entry for up to twelve hours. Harmless and untidy.
+- *Nothing tested a viewer who has enrolled two-factor.* The enrolment page and
+  actions are open to them and the second-factor form was already role-agnostic,
+  but the full journey — enrol as a viewer, sign out, sign in, pass the code —
+  has not been walked. `verify:2fa` covers it for an operator only.

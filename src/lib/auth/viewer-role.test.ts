@@ -165,19 +165,99 @@ const READABLE = [
   'src/app/(admin)/updates/page.tsx',
 ]
 
+/**
+ * The other reason a surface may be open to a viewer, and it is not §20 scope.
+ *
+ * A password and a second factor belong to the **account**, not to the role.
+ * These files were closed to a viewer by `requireAdmin()`, and the effect was
+ * not caution: the one account whose whole session is sight of every named
+ * investor's financial position was the one account that could not put a second
+ * factor in front of that sight, or even choose the first password it needs to
+ * sign in at all.
+ *
+ * The widening is safe on one condition, so the condition is asserted below
+ * rather than trusted: **each of these touches `users` at the acting account's
+ * own id and no other table.** A file added to this list that writes anywhere
+ * else fails the suite.
+ */
+const OWN_ACCOUNT = [
+  'src/app/(admin)/admin/security/page.tsx',
+  'src/app/(account)/admin/password/page.tsx',
+  'src/actions/second-factor.ts',
+  'src/actions/password.ts',
+]
+
 describe('the pages opened to a viewer', () => {
   it('each ask for a reader, and only these do', () => {
-    const all = walk('src/app/(admin)').concat(walk('src/actions'))
+    const all = walk('src/app/(admin)')
+      .concat(walk('src/app/(account)'))
+      .concat(walk('src/actions'))
     const asking = all.filter((f) => /\brequireReader\b/.test(read(f)))
 
     // The layout is the ninth: the shell must render or a viewer cannot reach
-    // anything. The document route is the tenth and uses currentIdentity.
-    const expected = new Set([...READABLE, 'src/app/(admin)/layout.tsx'])
+    // anything. The document route is the tenth and uses currentIdentity. The
+    // last two are the account's own surfaces, which are not §20 scope at all.
+    const expected = new Set([
+      ...READABLE,
+      'src/app/(admin)/layout.tsx',
+      'src/app/(admin)/admin/security/page.tsx',
+      'src/actions/second-factor.ts',
+    ])
     for (const file of asking) {
       expect(expected.has(file), `${file} opened itself to a viewer`).toBe(true)
     }
     for (const file of READABLE) {
       expect(asking.includes(file), `${file} is no longer open to a viewer`).toBe(true)
+    }
+  })
+})
+
+describe("the account's own surfaces, which a viewer may reach", () => {
+  it('exist, so the list below is not silently empty', () => {
+    for (const file of OWN_ACCOUNT) {
+      expect(read(file).length, file).toBeGreaterThan(0)
+    }
+  })
+
+  it('import no database table but `users`', () => {
+    // The whole justification for admitting a viewer here. A file on this list
+    // that reaches for `offers`, `recipients` or `investorAccounts` is handing
+    // a read-only administrator a lever over records, whatever its guard says.
+    for (const file of OWN_ACCOUNT) {
+      const imported = /from '@\/db\/schema'/.test(read(file))
+        ? (read(file).match(/import \{([^}]*)\} from '@\/db\/schema'/)?.[1] ?? '')
+        : ''
+      const tables = imported
+        .split(',')
+        .map((name) => name.trim())
+        .filter(Boolean)
+      expect(tables, `${file} imports a table other than users`).toEqual(
+        tables.filter((t) => t === 'users'),
+      )
+    }
+  })
+
+  it('write only to the row of whoever is acting', () => {
+    // Every `.where(eq(users.id, X))` must name the acting identity. `pending`
+    // is the half-authenticated identity behind the second-factor form and is
+    // the same person by another name.
+    for (const file of OWN_ACCOUNT) {
+      const targets = [...read(file).matchAll(/eq\(users\.id,\s*([\w.]+)\)/g)].map(
+        (m) => m[1],
+      )
+      for (const target of targets) {
+        expect(['admin.id', 'pending.id', 'identity.id'], `${file} → ${target}`).toContain(
+          target,
+        )
+      }
+    }
+  })
+
+  it('never reach for an acting guard, which would refuse the viewer again', () => {
+    for (const file of OWN_ACCOUNT) {
+      expect(read(file), `${file} still asks an acting question`).not.toMatch(
+        /\brequireAdmin\b|\brequireOwner\b|\brequireOperator\b|\brequireOnboardedAdmin\b/,
+      )
     }
   })
 })
@@ -207,13 +287,20 @@ describe('every server action', () => {
     // requireOwner, requireOperator, requireAdmin — or currentAdmin, all four
     // of which are now closed to a viewer. None may call requireReader or
     // currentIdentity.
-    const actions = walk('src/actions').filter((f) => read(f).includes("'use server'"))
+    const actions = walk('src/actions')
+      .filter((f) => read(f).includes("'use server'"))
+      // The two exceptions, and they are exceptions by proof rather than by
+      // assertion: `OWN_ACCOUNT` above establishes that both touch `users` at
+      // the acting id and nothing else, so admitting a viewer gives them
+      // authority over their own sign-in and over nothing in the application.
+      .filter((f) => !OWN_ACCOUNT.includes(f))
     expect(actions.length).toBeGreaterThan(10)
 
     for (const file of actions) {
       const source = read(file)
       expect(source, `${file} uses a read-only guard`).not.toMatch(/\brequireReader\b/)
       expect(source, `${file} uses currentIdentity`).not.toMatch(/\bcurrentIdentity\b/)
+      expect(source, `${file} uses the account guard`).not.toMatch(/\brequireOwnAccount\b/)
       expect(
         /\brequireOwner\b|\brequireOperator\b|\brequireAdmin\b|\brequireOnboardedAdmin\b|\brequirePasswordSet\b|\bcurrentAdmin\b|\brequireImportActor\b|\breadInvestorAccount\b/.test(source),
         `${file} reaches no guard at all`,
@@ -238,9 +325,31 @@ describe('currentIdentity — the one function that hands back a viewer', () => 
     const callers = all.filter((f) => /\bcurrentIdentity\(/.test(read(f)))
     expect(callers.sort()).toEqual(
       [
+        'src/app/(admin)/import/page.tsx',
         'src/app/(admin)/investors/[offerId]/document/[documentId]/route.ts',
         'src/lib/auth/guards.ts',
       ].sort(),
+    )
+  })
+
+  it('decides nothing on the import page — it only picks a sentence', () => {
+    // The import page is the third caller and the newest, and it is the one
+    // that could go wrong quietly. `requireImportActor` refuses a viewer by
+    // throwing; the identity is read afterwards, inside the catch, purely to
+    // avoid telling somebody who is signed in to sign in. If the identity ever
+    // reaches the render, it has become an authorization input on the page that
+    // creates investor records.
+    const source = read('src/app/(admin)/import/page.tsx')
+
+    const refusalAt = source.indexOf('await requireImportActor()')
+    const identityAt = source.indexOf('await currentIdentity()')
+    expect(refusalAt, 'the import no longer calls its own guard').toBeGreaterThan(-1)
+    expect(identityAt, 'the identity is read before the refusal').toBeGreaterThan(refusalAt)
+
+    const markup = source.slice(source.lastIndexOf('return ('))
+    expect(markup, 'the identity reaches the markup').not.toMatch(/\bidentity\b/)
+    expect(markup, 'the wizard is no longer behind the refusal').toContain(
+      'refusal ?',
     )
   })
 })

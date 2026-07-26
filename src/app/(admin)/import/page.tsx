@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { SectionHeading } from '@/components/admin/ui'
+import { currentIdentity } from '@/lib/auth/guards'
 import { requireImportActor } from '@/lib/import/authz'
 import { ImportWizard } from './import-wizard'
 
@@ -16,6 +17,18 @@ export const dynamic = 'force-dynamic'
  *
  * Authorization happens here AND again inside every action the wizard calls.
  * This check decides what is rendered; it is not what protects the data.
+ *
+ * The refusal is rendered in place rather than redirected, which is right: this
+ * page has a heading worth keeping and a wizard worth withholding. But
+ * `requireImportActor` answers `NOT_SIGNED_IN` for three different people — a
+ * stranger, an administrator who has not chosen a password, and a read-only
+ * administrator — because `currentAdmin()` is deliberately `null` for all
+ * three. Printing its message verbatim told a signed-in viewer to *sign in*,
+ * which reads as the application being broken rather than as a boundary.
+ *
+ * So the wording is chosen here, after the refusal, from an identity read that
+ * decides nothing. The authorization is unchanged and still `requireImportActor`
+ * alone; this only picks the sentence.
  */
 export default async function ImportPage() {
   let refusal: string | null = null
@@ -27,6 +40,16 @@ export default async function ImportPage() {
       error instanceof Error
         ? error.message
         : 'You do not have access to the recipient import.'
+
+    const identity = await currentIdentity()
+    if (identity) {
+      refusal =
+        identity.role === 'VIEWER'
+          ? 'Your account has read-only access. The import creates investor records, ' +
+            'so it is not open to it. The recipients themselves are on the investors ' +
+            'page, where you can read every one of them.'
+          : 'Your account does not have access to the recipient import.'
+    }
   }
 
   // The `(admin)` layout supplies the page frame, the signed-in identity and

@@ -5,12 +5,20 @@ import { z } from 'zod'
 import { actionError, type ActionState } from '@/components/admin/action-state'
 import { audit } from '@/lib/audit'
 import { drizzleCredentialStore } from '@/lib/auth/credential-store'
-import { requireAdmin } from '@/lib/auth/guards'
+import { requireOwnAccount } from '@/lib/auth/guards'
 import { setAdminPassword } from '@/lib/auth/set-password'
 import { destroyAdminSession } from '@/lib/auth/session'
 
 /**
  * Choosing and changing an administrator password. BUILD_SPEC §2.2.
+ *
+ * `requireOwnAccount()`, not `requireAdmin()`, and the difference is a role
+ * rather than a capability. Both actions write to `admin.id` — the acting
+ * account's own credential — and to nothing else, so admitting a read-only
+ * administrator here grants them power over their own sign-in and over nothing
+ * in the application. Refusing them, which is what `requireAdmin()` did, left a
+ * viewer unable to choose the first password their account needs in order to
+ * reach anything at all.
  *
  * The password fields are read straight out of `FormData` and handed to
  * `setAdminPassword`. They are never put in an audit entry, a returned message,
@@ -36,7 +44,7 @@ async function apply(
   formData: FormData,
   expectCurrent: boolean,
 ): Promise<ActionState> {
-  const admin = await requireAdmin()
+  const admin = await requireOwnAccount()
 
   const parsed = schema.safeParse({
     currentPassword: formData.get('currentPassword') ?? undefined,

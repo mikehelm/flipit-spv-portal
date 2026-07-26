@@ -22,14 +22,40 @@ import {
 } from './schema'
 import { env } from '@/lib/env'
 
+/**
+ * The allowlist, made real.
+ *
+ * All three lists, and the third is not a tidy-up. `VIEWER_EMAILS` is
+ * documented in `.env.example` as a one-line grant, and it was not one: this
+ * function created rows for the two privileged lists only, so an address added
+ * to `VIEWER_EMAILS` resolved to the `VIEWER` role, passed the allowlist,
+ * reached the credential store, found no row, and was refused with
+ * `INVALID_CREDENTIALS` — indistinguishable, by design, from a wrong password.
+ * `pnpm setup-link` refused it too, with `No user row exists`. The role was
+ * complete in every other respect and could not sign in at all.
+ *
+ * Rerunning the seed is how the grant takes effect, and that is worth saying
+ * out loud on the console rather than leaving somebody to discover it.
+ */
 async function seedUsers() {
   const config = env()
-  const wanted: Array<{ email: string; role: 'OWNER' | 'OPERATOR' }> = [
+  const wanted: Array<{ email: string; role: 'OWNER' | 'OPERATOR' | 'VIEWER' }> = [
     ...config.ownerEmails.map((email) => ({ email, role: 'OWNER' as const })),
     ...config.operatorEmails.map((email) => ({ email, role: 'OPERATOR' as const })),
+    ...config.viewerEmails.map((email) => ({ email, role: 'VIEWER' as const })),
   ]
 
-  for (const entry of wanted) {
+  // First occurrence wins, and the order above is `resolveRole`'s precedence:
+  // owner over operator over viewer. Without this, an address on two lists
+  // would be written twice and the *last* write would stick, quietly demoting
+  // somebody out of their own application — the exact outcome `roles.ts`
+  // reasons its way out of. The two must agree or a seed becomes a demotion.
+  const seen = new Set<string>()
+  const resolved = wanted.filter((entry) =>
+    seen.has(entry.email) ? false : (seen.add(entry.email), true),
+  )
+
+  for (const entry of resolved) {
     const existing = await db.query.users.findFirst({
       where: eq(users.email, entry.email),
     })

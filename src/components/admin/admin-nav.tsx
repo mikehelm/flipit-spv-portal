@@ -40,7 +40,14 @@ const ITEMS: NavItem[] = [
   // applied without a code change" — and §8.2's fourth clause keeps compliance
   // out of the operator's hands. Owner only, for the reason the approval is.
   { href: '/admin/acknowledgements', label: 'Acknowledgements', roles: ['OWNER'] },
-  { href: '/admin/security', label: 'Two-factor', roles: ['OWNER', 'OPERATOR'] },
+  // Every role, the read-only one included. A second factor is a property of
+  // the account rather than of what the account may do, and a viewer's session
+  // reaches every investor by name and every amount they hold. The password
+  // page is here for the same reason — it was reachable only by redirect
+  // before, so an administrator who simply wanted to change their password had
+  // nowhere to click.
+  { href: '/admin/security', label: 'Two-factor', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
+  { href: '/admin/password', label: 'Password', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
   { href: '/admin/onboarding', label: 'Setup', roles: ['OPERATOR'] },
   { href: '/admin/invites', label: 'Operator access', roles: ['OWNER'] },
   { href: '/audit', label: 'Audit log', roles: ['OWNER'] },

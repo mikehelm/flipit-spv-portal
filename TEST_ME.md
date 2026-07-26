@@ -51,6 +51,18 @@ Open one. It signs you in and immediately asks you to choose a password — and 
 
 Sign back in at `/signin` with the password you chose.
 
+> **This did not work until now, and it is worth knowing why.** Opening the setup link used to send the browser round in a circle: it arrived at the password page, the password page bounced it straight back, and the browser gave up after twenty tries with "too many redirects". It affected every account, yours included, and it stood in front of the only route by which a password ever enters this system.
+>
+> Nothing caught it because the two halves of the mistake were in different files and each was right on its own. It was found by starting the application and opening the link, which nothing had done. There is now a check that opens it in a real browser whenever you ask, and a test that walks the same journey for every kind of account and every state one can be in:
+>
+> ```bash
+> pnpm build && pnpm verify:account-access
+> ```
+>
+> Forty-two checks, about a minute. It puts your password back exactly as it was, and it sends no email.
+
+You can also change your password whenever you like — **Admin → Password**, which is now a link in the navigation rather than somewhere you could only arrive by accident.
+
 **Things worth trying, because they are meant to fail:**
 
 - Open the same setup link a second time. It works once.
@@ -63,6 +75,35 @@ If you need another link later:
 ```bash
 pnpm setup-link serenedavid@gmail.com
 ```
+
+---
+
+## Giving somebody read-only access
+
+There is a third role. It sees every investor by name, all four amounts, the documents, the conversation and the status history — and it can change none of it. It cannot send, approve, advance, answer, publish, import, export, configure or invite, and it cannot open the audit log or the register's order.
+
+Granting it is two steps, and it used to be one step that did nothing:
+
+```bash
+# 1. in .env
+VIEWER_EMAILS="somebody@example.com"
+
+# 2. and then, because the account itself has to exist
+pnpm db:seed
+```
+
+The seed prints a setup link for the new account exactly as it does for yours. Send it to them however you would send anything else.
+
+> **The second step is new.** `.env.example` has always described this as a one-line grant. It was not: the seed created accounts for the owner and operator lists only, so an address added to the viewer list resolved to the role, passed every check, and was then refused at sign-in with the same sentence as a wrong password — because there was no account behind it. The role was finished in every other respect and nobody could use it.
+
+**Worth trying, once somebody is on it:**
+
+- Sign in as them. Every screen carries a line saying the access is read-only and that the sign-in is recorded.
+- Type `/compliance` or `/audit` into the address bar. You get a page that says plainly that the area is not yours, and one line goes into the audit log. **That page used to spin for ever and write a log line on every bounce** — one click could have written thousands.
+- Open **Two-factor** and **Password**. Both are theirs, and both were closed to them until now. An account that can see everyone's financial position ought to be able to put a second factor in front of it.
+- Type `/import`. The page appears with the wizard replaced by a refusal — and the refusal no longer tells somebody who is signed in to sign in.
+
+**Take it away** by removing the address from `VIEWER_EMAILS` and restarting. The role is re-read from the file on every single request, so access stops at once and does not wait for anybody to remember a database row.
 
 ---
 
@@ -815,7 +856,9 @@ There is a second check underneath that one, and `pnpm verify:roadmap` is what e
 
 ## Two-factor
 
-**Admin → Two-factor.** A code from an authenticator app on top of your password, for the owner and the operator. Any standard app works — Google Authenticator, 1Password, Authy, Bitwarden.
+**Admin → Two-factor.** A code from an authenticator app on top of your password. Any standard app works — Google Authenticator, 1Password, Authy, Bitwarden.
+
+Every account has it, read-only ones included. Nothing is blocked for a read-only account by leaving it off — they never send — but their session is sight of every investor's name and every amount, and a password on its own is one stolen thing away from someone else having all of it.
 
 The specification makes this **mandatory before real invitations go out**, so it is not a preference: the application refuses to send a real invitation from the production address until the operator's account has it switched on. Test messages to your own address are unaffected, so you can rehearse everything before turning it on.
 

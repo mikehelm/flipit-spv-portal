@@ -3,7 +3,7 @@ import { changePasswordAction, choosePasswordAction } from '@/actions/password'
 import { ActionForm } from '@/components/admin/action-form'
 import { Card, Field, Notice, SectionHeading, TextInput } from '@/components/admin/ui'
 import { drizzleCredentialStore } from '@/lib/auth/credential-store'
-import { requireAdmin } from '@/lib/auth/guards'
+import { requireOwnAccount } from '@/lib/auth/guards'
 import { MIN_PASSWORD_LENGTH } from '@/lib/auth/password'
 
 export const metadata: Metadata = {
@@ -18,9 +18,22 @@ export const metadata: Metadata = {
  * `requirePasswordSet` in lib/auth/guards.ts. Redeeming the one-time setup link
  * lands here, which is how a password gets into the system at all: it is never
  * read from an environment variable or a configuration file.
+ *
+ * Two things about it are load-bearing and neither shows in the markup.
+ *
+ * **It renders in `(account)`, not in `(admin)`.** The admin shell guards
+ * itself with `requireReader()`, which sends any account without a password to
+ * this exact path — including a request for this path. Rendering inside that
+ * shell was an infinite redirect standing in front of every administrator's
+ * first sign-in, the owner's included.
+ *
+ * **It guards with `requireOwnAccount()`, so a viewer reaches it.** A password
+ * belongs to the account rather than to the role. `requireAdmin()` refuses a
+ * read-only administrator, and a viewer arrives here with no password at all,
+ * so that refusal locked the role out of the application entirely.
  */
 export default async function PasswordPage() {
-  const admin = await requireAdmin()
+  const admin = await requireOwnAccount()
 
   const credential = await drizzleCredentialStore().findByEmail(admin.email)
   const alreadySet = credential?.passwordHash != null

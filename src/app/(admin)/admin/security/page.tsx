@@ -11,7 +11,7 @@ import { ActionForm } from '@/components/admin/action-form'
 import { Card, Field, Notice, Pill, SectionHeading, TextInput } from '@/components/admin/ui'
 import { db } from '@/db'
 import { users } from '@/db/schema'
-import { requireAdmin } from '@/lib/auth/guards'
+import { requireReader } from '@/lib/auth/guards'
 import { ISSUER, RECOVERY_CODE_COUNT } from '@/lib/auth/totp'
 import { decrypt } from '@/lib/crypto'
 import { env } from '@/lib/env'
@@ -34,10 +34,25 @@ export const dynamic = 'force-dynamic'
  * The QR is rendered as a data URL on the server. It is the secret in visual
  * form, so it is never fetched from a URL that could be logged by a proxy, and
  * it exists only between starting enrolment and confirming it.
+ *
+ * **`requireReader()`, so a read-only administrator reaches their own.** This
+ * page called `requireAdmin()`, which refused a viewer — an account that sees
+ * every named investor's financial position could not put a second factor in
+ * front of that sight. §2.2 names two-factor for "both privileged accounts"
+ * because there were two accounts when it was written; the reason it gives is
+ * the value of what a session reaches, and a viewer's session reaches the
+ * records. So the conservative reading widens rather than narrows.
+ *
+ * Nothing here reads or writes anything but `users.id = admin.id`. The four
+ * actions behind the forms guard themselves the same way and write to the same
+ * single row, so a viewer gains authority over their own sign-in and over
+ * nothing else. That is asserted, not merely intended, in
+ * `viewer-role.test.ts`.
  */
 export default async function SecurityPage() {
-  const admin = await requireAdmin()
+  const admin = await requireReader()
   const config = env()
+  const sends = admin.role !== 'VIEWER'
 
   const user = await db.query.users.findFirst({ where: eq(users.id, admin.id) })
 
@@ -63,11 +78,27 @@ export default async function SecurityPage() {
   return (
     <>
       <SectionHeading eyebrow="Your account" title="Two-factor">
-        A code from an authenticator app, in addition to your password. The
-        specification makes this <strong className="text-ftext">mandatory before the
-        production deployment sends anything real</strong>, so it is a release gate rather
-        than a preference — and this application refuses a real send from an account
-        without it.
+        A code from an authenticator app, in addition to your password.{' '}
+        {sends ? (
+          <>
+            The specification makes this{' '}
+            <strong className="text-ftext">
+              mandatory before the production deployment sends anything real
+            </strong>
+            , so it is a release gate rather than a preference — and this application
+            refuses a real send from an account without it.
+          </>
+        ) : (
+          <>
+            Your account sends nothing, so no gate depends on this. It is worth switching
+            on anyway:{' '}
+            <strong className="text-ftext">
+              this session can see every investor by name and every amount they hold
+            </strong>
+            , and a password on its own is one stolen thing away from someone else seeing
+            all of it.
+          </>
+        )}
       </SectionHeading>
 
       <div className="space-y-4">
@@ -86,9 +117,11 @@ export default async function SecurityPage() {
           {!enabled ? (
             <div className="mt-4">
               <Notice tone="warn">
-                {config.isProductionDeployment
-                  ? 'This is the production deployment. Real invitations cannot be sent from this account until two-factor is switched on.'
-                  : 'Real invitations cannot be sent from this account on the production deployment until two-factor is switched on. Test sends to your own address are unaffected.'}
+                {!sends
+                  ? 'Nothing is blocked by this. Read-only accounts never send, so switching two-factor on protects what this account can see rather than what it can do.'
+                  : config.isProductionDeployment
+                    ? 'This is the production deployment. Real invitations cannot be sent from this account until two-factor is switched on.'
+                    : 'Real invitations cannot be sent from this account on the production deployment until two-factor is switched on. Test sends to your own address are unaffected.'}
               </Notice>
             </div>
           ) : null}

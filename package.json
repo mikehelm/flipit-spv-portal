@@ -25,6 +25,7 @@
     "backup": "tsx scripts/backup.ts",
     "verify:restore": "tsx scripts/verify-restore.ts",
     "verify:2fa": "tsx scripts/verify-second-factor.ts",
+    "verify:account-access": "tsx scripts/verify-account-access.ts",
     "verify:media": "tsx scripts/verify-media.ts",
     "verify:memory": "tsx scripts/verify-memory.ts",
     "verify:object-store": "tsx scripts/verify-object-store.ts",

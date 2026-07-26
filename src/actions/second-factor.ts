@@ -8,7 +8,7 @@ import { actionError, actionOk, type ActionState } from '@/components/admin/acti
 import { db } from '@/db'
 import { users } from '@/db/schema'
 import { audit } from '@/lib/audit'
-import { requireAdmin, pendingSecondFactorAdmin } from '@/lib/auth/guards'
+import { requireReader, pendingSecondFactorAdmin } from '@/lib/auth/guards'
 import { verifyPassword } from '@/lib/auth/password'
 import {
   checkRateLimit,
@@ -51,6 +51,24 @@ import { clientIp } from './client-ip'
  * **The second step is rate-limited on the same counters as the first.** A
  * six-digit code is a million possibilities and an unthrottled form would walk
  * it in an afternoon.
+ *
+ * ---
+ *
+ * The four enrolment actions guard with `requireReader()` rather than
+ * `requireAdmin()`, which admits a read-only administrator. That widening is
+ * safe for one reason, and the reason has to stay true, so it is stated rather
+ * than assumed:
+ *
+ *   **every one of them reads and writes `users` at `admin.id` and nothing
+ *   else.** No investor record, no offer, no send, no configuration. The only
+ *   authority a viewer gains here is over their own sign-in.
+ *
+ * Leaving them on `requireAdmin()` was not the neutral choice. It meant the one
+ * account whose session is pure sight — every investor by name, every amount
+ * they hold — was the one account that could not put a second factor in front
+ * of it. `viewer-role.test.ts` asserts this file touches no other table, so an
+ * action added here later that writes somewhere else fails the suite instead of
+ * quietly handing a viewer a lever.
  */
 
 const codeSchema = z.object({ code: z.string().min(1).max(64) })
@@ -169,7 +187,7 @@ export async function startTotpEnrolmentAction(
   _previous: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const admin = await requireAdmin()
+  const admin = await requireReader()
 
   const user = await db.query.users.findFirst({ where: eq(users.id, admin.id) })
   if (user?.totpConfirmedAt) {
@@ -208,7 +226,7 @@ export async function confirmTotpEnrolmentAction(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const admin = await requireAdmin()
+  const admin = await requireReader()
 
   const parsed = codeSchema.safeParse({ code: formData.get('code') })
   if (!parsed.success) return actionError(SECOND_FACTOR_FAILED_MESSAGE)
@@ -283,7 +301,7 @@ export async function disableTotpAction(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const admin = await requireAdmin()
+  const admin = await requireReader()
 
   const password = String(formData.get('password') ?? '')
   const user = await db.query.users.findFirst({ where: eq(users.id, admin.id) })
@@ -339,7 +357,7 @@ export async function regenerateRecoveryCodesAction(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const admin = await requireAdmin()
+  const admin = await requireReader()
 
   const parsed = codeSchema.safeParse({ code: formData.get('code') })
   if (!parsed.success) return actionError(SECOND_FACTOR_FAILED_MESSAGE)
