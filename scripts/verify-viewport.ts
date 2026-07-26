@@ -361,15 +361,30 @@ async function checkNothingInlineStyled(label: string, html: string): Promise<vo
   )
 }
 
-async function auditScreen(page: Page, label: string, path: string): Promise<void> {
+async function auditScreen(
+  page: Page,
+  label: string,
+  path: string,
+  /**
+   * The status this screen is *supposed* to answer with. 404 for the
+   * not-found page, which is a rendered screen like any other and was skipped
+   * by this function for as long as it only accepted a success.
+   */
+  expected = 200,
+): Promise<void> {
   complaints.length = 0
 
   const response = await page.goto(`${ORIGIN}${path}`, { waitUntil: 'networkidle' })
   const status = response?.status() ?? 0
-  check(`${label}: loads (${status})`, status < 400, `${path} returned ${status}`)
-  if (status >= 400) return
+  const acceptable = expected === 200 ? status < 400 : status === expected
+  check(`${label}: loads (${status})`, acceptable, `${path} returned ${status}`)
+  if (!acceptable) return
 
-  const heard = complaints.filter((c) => !isEnvironmental(c))
+  const heard = complaints
+    .filter((c) => !isEnvironmental(c))
+    // A screen whose whole job is to answer 404 makes the browser log the 404.
+    // That is the screen working, not the screen complaining.
+    .filter((c) => expected === 200 || !c.includes(`status of ${expected}`))
   const csp = heard.filter((c) => /CSP refused|Content Security Policy/i.test(c))
 
   check(
@@ -699,7 +714,7 @@ async function main(): Promise<void> {
     await page.waitForURL(/\/admin/, { timeout: 20_000 })
     check('the owner is signed in', page.url().includes('/admin'), page.url())
 
-    for (const [label, path] of [
+    for (const [label, path, status] of [
       ['overview', '/admin'],
       ['review and send', '/recipients'],
       ['investors', '/investors'],
@@ -729,8 +744,13 @@ async function main(): Promise<void> {
       // and broken on a phone, because nobody looks at it twice.
       ['password', '/admin/password'],
       ['refused', '/admin/no-access'],
+      // An address that is not one. It was audited by nobody, and that is how
+      // the framework's built-in 404 — laid out entirely with inline `style`
+      // attributes, every one of them now refused — went on being served
+      // unstyled with nothing to say so.
+      ['not found', '/an-address-that-is-not-one', 404],
     ] as const) {
-      await auditScreen(page, label, path)
+      await auditScreen(page, label, path, status)
     }
 
     await verifyThePolicyInPractice(page)

@@ -671,7 +671,7 @@ Issuing an offer does not send anything and does not take anybody off the regist
 pnpm build && pnpm verify:viewport
 ```
 
-323 checks across every screen, admin and investor, in a real browser. If your machine has a Chromium that Playwright did not install, put its path in `CHROMIUM_PATH` and it will use that rather than asking you to download another.
+332 checks across every screen, admin and investor, in a real browser. If your machine has a Chromium that Playwright did not install, put its path in `CHROMIUM_PATH` and it will use that rather than asking you to download another.
 
 The run also now *uses* the camera, rather than only reading the header that permits it. Two lines in the security policy were written the awkward way on purpose — the camera is allowed for this site rather than blocked outright, because blocking it would break the video recorder with no error message anywhere — and until now the evidence for that was somebody having read the file. The run asks the browser for a camera and plays back a recording, and both were checked by deliberately breaking the policy, rebuilding, and confirming the run went red before putting it back.
 
@@ -725,7 +725,7 @@ pnpm build
 pnpm verify:viewport
 ```
 
-That starts the application, opens a real browser at phone size, signs itself in as both an administrator and an investor, and walks every screen measuring each one — 323 checks. It needs a database and takes a few minutes.
+That starts the application, opens a real browser at phone size, signs itself in as both an administrator and an investor, and walks every screen measuring each one — 332 checks. It needs a database and takes a few minutes.
 
 ## The forty-eight things this was meant to do
 
@@ -987,6 +987,22 @@ Two things worth trying:
 
 - Put `=1+1` in a recipient's internal notes and export to Excel. It comes out neutralised rather than as a live formula. A spreadsheet that runs whatever was typed into a text box is a well-known way to attack the person who opens it.
 - Run a recipient export, then go to settings and try to set the service mode to **disabled**. It now lets you, because §7 requires a completed export within seven days — and the export you just ran is what satisfies it. Before you exported, it would have demanded a written reason.
+
+---
+
+## Two upload limits that did not work, and a page that was never written
+
+**This is worth testing yourself, because it would have bitten you on your first real document.**
+
+The media screen says images can be up to 5 MB. The documents panel says a PDF can be up to 20 MB. Neither was true. Anything over **1 MB** was refused by the framework before the application ever saw it — and the refusal was silent. No message, no error, the form simply sat there as though the button had not been pressed. A 3 MB photograph and a 2 MB PDF both behaved that way.
+
+It had been like that since documents were built. Nothing caught it because nothing had ever uploaded anything bigger than a test fixture of a few hundred bytes. It was found by finally trying it.
+
+**Try it now:** upload an image of about 3 MB on **Admin → Media**. It should upload and tell you how much hidden metadata it removed. Then try one over 5 MB: you should get *"That file is 6 MB and the limit for an image is 5 MB. Nothing was stored."* — the application's own sentence, naming both numbers. That is the difference between a limit and a silence.
+
+**And the error that revealed it revealed something else.** When the upload failed, the page it fell through to was the framework's own plain "404 / something went wrong" screen — black text on white, no Flipit wording, no colour, no link to the verification page. It had also stopped being styled at all, because of the security tightening described earlier.
+
+There are now proper pages for both: **type any address that does not exist** and you get a Flipit page that says there is nothing there, does not tell you whether it is because the page is missing or because you are not allowed, and points you at the verification page. That last part matters — the moment a page fails is the moment somebody looks hardest at what they are looking at, and an unrecognisable failure on a page about somebody's investment is the worst possible time to look like anybody else's website.
 
 ---
 

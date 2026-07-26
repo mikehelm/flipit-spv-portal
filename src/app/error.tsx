@@ -1,0 +1,50 @@
+'use client'
+
+/**
+ * What a reader gets when something went wrong on the server. §15, §15.1.
+ *
+ * Same reason as `not-found.tsx`: Next's built-in error page is laid out with
+ * inline `style` attributes, which `style-src 'self'` refuses, so it arrived
+ * unstyled. And the same argument applies more strongly here — the moment a
+ * page fails is the moment somebody looks hardest at what they are looking at,
+ * and an unbranded black-on-white failure on a securities portal is the worst
+ * possible time to be unrecognisable.
+ *
+ * **It shows no detail, deliberately.** Not the message, not the stack, not the
+ * digest. Next already withholds the message from the client in a production
+ * build; this withholds the digest too, because it is an identifier that means
+ * something to whoever can read the server log and nothing to the reader, and a
+ * page carrying an opaque code invites somebody to send it to a stranger.
+ *
+ * A retry, and nothing else. There is no automatic redirect to sign-in: an
+ * investor whose portal failed to render should not be bounced to a form asking
+ * for their address.
+ */
+export default function ErrorPage({ reset }: { error: Error; reset: () => void }) {
+  return (
+    <main id="main" className="mx-auto w-full max-w-md px-5 py-16 sm:py-24">
+      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-orange">
+        Flipit Global SPV
+      </p>
+      <h1 className="mt-4 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+        Something went wrong at our end
+      </h1>
+      <div className="mt-5 h-[3px] w-12 bg-orange" />
+
+      <p className="mt-6 text-sm leading-relaxed text-dim">
+        Nothing you were doing has been lost, and nothing has been sent anywhere. Try again;
+        if it keeps happening, tell us rather than working around it.
+      </p>
+
+      <p className="mt-8">
+        <button
+          type="button"
+          onClick={reset}
+          className="inline-flex min-h-11 items-center rounded-sm bg-orange px-4 text-sm font-semibold text-ink"
+        >
+          Try again
+        </button>
+      </p>
+    </main>
+  )
+}

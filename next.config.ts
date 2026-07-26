@@ -44,6 +44,41 @@ const nextConfig: NextConfig = {
      * nothing more. `browser-policy.test.ts` fails if the two drift apart.
      */
     proxyClientMaxBodySize: '68mb',
+
+    serverActions: {
+      /**
+       * **The advertised limits were unreachable, and failed in silence.**
+       *
+       * Next caps a Server Action's request body at **1 MB** by default. The
+       * media screen says *"Up to 5 MB"* and the documents panel says *"PDF
+       * only, up to 20 MB"*, and both upload through a Server Action — so
+       * anything over 1 MB was refused by the framework before the
+       * application's own limit was ever consulted.
+       *
+       * The refusal is the bad part. The server logs `Body exceeded 1 MB
+       * limit`, returns a 500, and **the screen says nothing at all**: no
+       * message, no error state, the form simply sits there. A 3 MB image and a
+       * 2 MB PDF both behaved that way. On the documents panel that is a
+       * securities document that appears not to have uploaded for no stated
+       * reason.
+       *
+       * It predates the middleware and had never been found, for the same
+       * reason the 10 MB proxy cap had not: nothing in this repository had ever
+       * posted more than a few kilobytes through either path. It was found by
+       * doing it.
+       *
+       * 24 MB covers the largest of the two — `MAX_DOCUMENT_BYTES` at 20 MB —
+       * with room for the multipart envelope and the action's own arguments,
+       * and stays well under `proxyClientMaxBodySize` so the two cannot
+       * disagree. `ingest` still refuses on the real limit for the real kind of
+       * file, which is where a limit belongs: one message, from the
+       * application, naming the size and the maximum.
+       *
+       * `browser-policy.test.ts` fails if this drops below what the panels
+       * promise.
+       */
+      bodySizeLimit: '24mb',
+    },
   },
 
   /**

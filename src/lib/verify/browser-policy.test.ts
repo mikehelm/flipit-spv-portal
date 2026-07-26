@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { contentSecurityPolicy, generateNonce } from '@/lib/security/csp'
-import { MAX_VIDEO_BYTES } from '@/lib/media/formats'
+import { MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from '@/lib/media/formats'
 
 /**
  * The browser-policy headers. BUILD_SPEC §15, §13.3.
@@ -209,6 +209,23 @@ describe('Content-Security-Policy', () => {
     const configured = /proxyClientMaxBodySize: '(\d+)mb'/.exec(source)?.[1]
     expect(configured, 'no proxyClientMaxBodySize in next.config.ts').toBeDefined()
     expect(Number(configured) * 1024 * 1024).toBeGreaterThan(MAX_VIDEO_BYTES * 1.05)
+  })
+
+  it('lets a Server Action carry what the upload panels promise', () => {
+    // Next caps a Server Action body at 1 MB by default. The media screen says
+    // "Up to 5 MB" and the documents panel says "up to 20 MB", and both upload
+    // through an action — so both limits were unreachable, and the refusal was
+    // a 500 with nothing shown on the screen at all. Found by posting a 3 MB
+    // image and watching the form sit there.
+    const configured = /bodySizeLimit: '(\d+)mb'/.exec(source)?.[1]
+    expect(configured, 'no serverActions.bodySizeLimit in next.config.ts').toBeDefined()
+    const limit = Number(configured) * 1024 * 1024
+    expect(limit).toBeGreaterThan(MAX_DOCUMENT_BYTES)
+    expect(limit).toBeGreaterThan(MAX_IMAGE_BYTES)
+
+    // And under the proxy cap, so the two cannot disagree about the same body.
+    const proxy = Number(/proxyClientMaxBodySize: '(\d+)mb'/.exec(source)?.[1]) * 1024 * 1024
+    expect(limit).toBeLessThan(proxy)
   })
 
   it('discards any Content-Security-Policy that arrived with the request', () => {

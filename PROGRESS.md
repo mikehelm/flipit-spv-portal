@@ -5721,3 +5721,129 @@ and it restores a limit the middleware had lowered rather than raising one.
   asked what an attacker could do with them.*
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
+
+## Two limits nobody could reach, and the page nobody had written
+
+The previous entry's first Uncertain item was that the 10 MB proxy cap had been
+found on the video route only because that was the route being worked on, and
+that *"document upload and image upload post through the same middleware and no
+check has ever sent either of them anything near one."*
+
+They do not go through a route handler. They are **Server Actions**, which have
+a separate limit — and it is **1 MB**.
+
+**The advertised limits were unreachable, and the refusal was silent.** The
+media screen says *"Up to 5 MB"*. The documents panel says *"PDF only, up to
+20 MB"*. A 3 MB image posted through the media form produced `Body exceeded 1 MB
+limit` on the server, a 500 to the browser, and **nothing whatever on the
+screen** — no message, no error state, the form sitting there as though nothing
+had been pressed. On the documents panel that is a securities document that
+appears not to have uploaded, for no stated reason.
+
+This one predates the middleware entirely. It has been true since documents were
+built, and it was invisible for the same reason the 10 MB cap was: nothing in
+this repository had ever posted more than a few kilobytes through either path.
+
+`experimental.serverActions.bodySizeLimit` is `'24mb'` — above
+`MAX_DOCUMENT_BYTES`, above `MAX_IMAGE_BYTES`, and below
+`proxyClientMaxBodySize` so the two cannot disagree about the same body. A unit
+test asserts all three relations. Confirmed by doing it again: 3 MB uploads and
+reports its stripped metadata; 6 MB gets *"That file is 6 MB and the limit for
+an image is 5 MB. Nothing was stored."* — the application's own sentence, naming
+both numbers.
+
+**And the page that error revealed.** The 500 came back carrying a
+Content-Security-Policy violation: `Refused to apply inline style`. Next's
+built-in 404 and error pages are laid out **entirely with inline `style`
+attributes and a bare `<style>` element**, so since `style-src` became `'self'`
+they had been rendering as unstyled black-on-white text. Nothing had noticed,
+because no automated check had ever visited an address that does not exist.
+
+Widening the policy to rescue a page nobody had written would have been the
+wrong way round. §15.1 rests on an investor being able to tell a genuine page
+from a copy, and the framework's default 404 — no wordmark, no colour, no link
+to the verification page — is the least recognisable thing this application
+could show somebody who mistyped a link they were sent about their own money.
+
+**Built.** `not-found.tsx`, `error.tsx` and `global-error.tsx`, in this
+application's own type and colour, and `/an-address-that-is-not-one` added to
+the thirty-one screens `verify:viewport` audits. 332 checks, up from 323.
+
+**Decisions.**
+
+- ***The not-found page names nothing and offers no sign-in.*** No path is
+  echoed back, nothing distinguishes a route that does not exist from one the
+  reader may not have, and there is no password form: an unauthenticated 404
+  that invites a password is a phishing pattern, and this page is reached by
+  people who arrived from an email. It offers the verification page, which is
+  the one thing §15.1 wants reachable by typing.
+- ***The error page shows no detail, including the digest.*** Next already
+  withholds the message in a production build. The digest is withheld too: it
+  means something to whoever can read the server log and nothing to the reader,
+  and a page carrying an opaque code invites somebody to send it to a stranger.
+- ***`global-error.tsx` imports the stylesheet itself.*** It replaces the whole
+  document, so without that import it is the framework's unstyled default again
+  — which is the thing these three files exist to prevent.
+- ***`auditScreen` takes an expected status.*** It returned early on anything
+  400 or above, which is precisely why the not-found screen had never been
+  audited: the one page in the application whose job is to answer 404 was
+  excluded by the function that checks pages. It now accepts 404 for that
+  screen, and filters the browser's own note about the status — the screen
+  working, not the screen complaining.
+- ***The limits are asserted against each other, not written down twice.*** The
+  test reads `MAX_DOCUMENT_BYTES` and `MAX_IMAGE_BYTES` rather than repeating
+  numbers, so raising a panel's promise without raising the body limit fails.
+
+**Deviations.** None. Both configuration lines restore limits the application
+already promised, and neither raises anything above what `ingest` enforces.
+
+**Checklist.**
+
+1. *Money as a `number`?* No.
+2. *A send path bypassing a gate?* No.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* **This is the entry to read for
+   that.** The new not-found page is reachable by anyone, signed in or not, and
+   says nothing about what exists: no path echoed, no distinction between absent
+   and forbidden. The error page names no fault. Both were written to the same
+   rule as `/portal/link-not-valid`, whose own note explains why one message for
+   every failure is the point.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The error page
+   prints nothing at all, deliberately.
+9. *Indexable routes?* Unchanged — `not-found.tsx` carries
+   `robots: { index: false }` and the catch-all header covers it.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2419) and `pnpm build` are green.
+`pnpm verify:viewport` is 332 of 332; `pnpm verify:recorder` 67 of 67;
+`pnpm verify:deployment` 97 of 97.
+
+**Uncertain.**
+
+- ***The document upload has still never actually been driven with a real PDF
+  over 1 MB.*** The limit was proved on the image path, which shares the
+  mechanism but not the screen. The documents panel is the more consequential of
+  the two — it is where a securities document is issued — and the fix is
+  believed rather than seen there. That is the next thing to do.
+- ***The error page has never been rendered by a real error.*** It was found by
+  making a route throw, and that route was deleted. Reaching it deliberately
+  needs a fault that can be induced and undone, which is the same fixture shape
+  the fault-banner section already uses.
+- ***Nothing measures how long an upload takes at the new limits.*** A 20 MB
+  body now buffers before the action runs. On the machine this deploys to that
+  may be fine, and nobody has looked.
+- *Replacing a **published** video, and removing one altogether, are still not
+  driven.* The second deletes bytes.
+- *The image upload preview and the email template preview are still
+  unexercised.*
+- *Nothing measures bundle size, and nothing measures what the middleware
+  costs.*
+- *`img-src data:`, `media-src blob:` and `worker-src blob:` have never been
+  asked what an attacker could do with them.*
+- *The password-reset journey is still not built,* and belongs in
+  OPEN_DECISIONS.md as a question for Michael.
