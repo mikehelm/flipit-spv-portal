@@ -28,6 +28,8 @@
     "verify:media": "tsx scripts/verify-media.ts",
     "verify:object-store": "tsx scripts/verify-object-store.ts",
     "media:check": "tsx scripts/check-media.ts",
+    "check:health": "tsx scripts/check-health.ts",
+    "verify:health": "tsx scripts/verify-health.ts",
     "verify:documents": "tsx scripts/verify-documents.ts",
     "verify:lifecycle": "tsx scripts/verify-lifecycle.ts",
     "verify:roadmap": "tsx scripts/verify-roadmap.ts",

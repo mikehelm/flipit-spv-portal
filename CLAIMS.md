@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| `pnpm check:health` — the things nobody is watching | 26 Jul session (cloud) | 2026-07-26 01:32 | `src/lib/health/**` (new), `scripts/check-health.ts` (new), `scripts/verify-health.ts` (new), `package.json`, `DEPLOYMENT.md` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -99,9 +99,17 @@ including two runs started at the same instant and a separate process refused
 the lock. The §6.6 deadline digest is inside the same lock. The cron line itself
 is written out in `DEPLOYMENT.md` §8 and is installed on no machine.
 
-The largest left are installing that schedule and running the *checks* on one
-too, and the open question — sharpened by corrections — of whether issuing a
-document should notify the investor at all. Neither is a package. Nothing yet
-notices a reminder that has been marked "being sent" for hours because the run
-that took it died; that is the most obvious next thing and it is the same shape
-as `pnpm media:check` — a script that reports and never acts.
+**The health report is done too**, as of 26 July. `pnpm check:health` asks the
+one question no page in the application can answer — is the scheduled job running
+at all — along with stuck claims, the mail connection, template drift, the
+service mode, the base-URL guard and passed deadlines. It exits non-zero only for
+things that need a person; a non-active service mode and a testing deployment are
+notes. It never acts and it names no email address, not even the sending
+account's. `pnpm verify:health` is 21 checks that spawn the real command against
+a database put into each bad state in turn.
+
+The largest left is installing the three cron lines in `DEPLOYMENT.md` §8, and
+the open question — sharpened by corrections — of whether issuing a document
+should notify the investor at all. Neither is a package. After that: nothing
+tells anybody when `check:health` goes red, and folding `media:check`'s result
+into the same report would mean one thing to watch rather than three.

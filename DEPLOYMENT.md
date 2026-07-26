@@ -321,13 +321,19 @@ Worth knowing before you meet one at speed.
 
 ## 8. The schedule
 
-One entry. `pnpm reminders:run` sends the reminders that are due and, on a
-deadline date, the §6.6 digest to the operator. Nothing else in the application
-needs a schedule to be correct.
+Two entries. `pnpm reminders:run` sends the reminders that are due and, on a
+deadline date, the §6.6 digest to the operator. `pnpm check:health` watches it,
+and everything else that can go quietly wrong.
 
 ```cron
 # Reminders and the deadline digest. Hourly, on the hour.
 0 * * * * cd /srv/spv && /usr/bin/pnpm reminders:run >> /var/log/spv/reminders.log 2>&1
+
+# The things nobody is watching. Daily. Exits non-zero when something needs a person.
+15 8 * * * cd /srv/spv && /usr/bin/pnpm check:health >> /var/log/spv/health.log 2>&1
+
+# Every stored file against the row that names it, and back again. Weekly.
+30 8 * * 1 cd /srv/spv && /usr/bin/pnpm media:check >> /var/log/spv/media.log 2>&1
 ```
 
 Hourly rather than daily, and it does not matter if a run is missed. Reminders
@@ -376,3 +382,48 @@ pnpm verify:reminders
 Forty-two checks against a real Postgres, including two runs started at the same
 instant and a genuinely separate process trying to take the lock while this one
 holds it. Run it after any change to the reminder path.
+
+---
+
+## 9. The health report
+
+```
+pnpm check:health
+```
+
+Every quiet failure in this application already has a surface that shows it, and
+every one of those surfaces needs somebody to open it. This is for the case where
+nobody does. It asks, in one pass:
+
+- **Is the scheduled job running at all?** Read from the audit log — when a run
+  last got to the end. This is the finding the report exists for, because nothing
+  else anywhere answers it. A scheduler that was never installed, or that stopped
+  in March, looks from inside the application exactly like a quiet week.
+- **Is a reminder stuck?** Taken by a run that never finished. See the previous
+  section for what to do about one.
+- **Is the mail connection healthy, and is anything waiting on it?**
+- **Is each template still approved, and has it drifted?**
+- **What is the service mode, and does `APP_URL` still permit real sends?**
+- **Have deadlines passed with people still to answer?**
+
+**Exit codes.** Zero when everything is as it should be *or* when the only
+findings are decisions somebody made — a non-active service mode, a testing
+deployment correctly refusing to send. One when something needs a person. That
+split is deliberate: a check that goes red because the round is in read-only mode
+is a check that gets ignored.
+
+**It changes nothing**, ever. Releasing a stuck reminder or replacing a
+credential needs somebody who knows what has been happening.
+
+**It names no email address**, including the sending account's own, which the
+mail connection's summary does name. This report is appended to a log file by a
+scheduler, and a log file is the least protected place in a deployment.
+
+```
+pnpm verify:health
+```
+
+Twenty-one checks that spawn the real command against a database put into each
+bad state in turn — no run ever completed, a scheduler that stopped, a reminder
+abandoned mid-send — and read its actual output and exit code. It puts the
+database back afterwards, including the audit entries it hides while it works.

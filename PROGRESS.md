@@ -2647,3 +2647,144 @@ are green. `pnpm verify:reminders` is 42 of 42, `pnpm verify:lifecycle` 39,
   if they do not. A daily check that looks for stuck claims is the obvious next
   thing, and it is the same shape as the media check — a script that reports and
   never acts.
+
+## The things nobody is watching — `pnpm check:health`
+
+The previous section ended by saying that nothing notices a reminder marked
+"being sent" for six hours, and that the state is visible if the operator opens
+the page and not visible if they do not. That is true of almost everything in
+this application, and it is the sentence this section is about.
+
+Every quiet failure here already has a surface. The reminders page says why a row
+will not send, evaluated at the moment you look. The dashboard carries the mail
+connection and the compliance state permanently. The round page says who has not
+answered. Each of those is well built and each of them requires a person to open
+it.
+
+The failure that survives all of them is the one where nobody does. A scheduler
+that was never installed, or that stopped in March, looks from inside the
+application exactly like a quiet week: the queue fills with rows whose dates have
+passed and nothing anywhere says that the thing which was supposed to act on them
+is not running. There is no page for "is anything running", because the
+application cannot see outside itself. An expired app password looks like nobody
+has sent anything lately. A run killed between taking a reminder and finishing
+with it leaves one row on a page that may not be opened for a fortnight — and
+that failure mode was *introduced by the previous section*, deliberately, as the
+price of a claim that never expires.
+
+So: one command that asks all of those at once, in a shape a scheduler can run
+and a person can read afterwards.
+
+**Built.**
+
+- **`src/lib/health/rules.ts`** — the judgement, and nothing else. It takes facts
+  and returns findings, so every rule is testable with no database, no mail
+  server and no clock. Seven rules: the scheduled run, stuck claims, the mail
+  connection, compliance drift per template, the service mode, the §18.1 base-URL
+  guard, and deadlines that have passed.
+- **`src/lib/health/report.ts`** — the reads, and no judgement. The split means
+  one layer can only be wrong about *what is true* and the other only about *what
+  that means*, and the second is where the interesting mistakes are.
+- **`pnpm check:health`** — prints the report worst-first, exits non-zero only
+  when something needs a person.
+- **`pnpm verify:health`** — 21 checks that spawn the real command against a
+  database put into each bad state in turn, and read its actual output and exit
+  code.
+- **46 unit tests** over the rules, and three more cron lines in `DEPLOYMENT.md`
+  §8 — the health report daily, `media:check` weekly, alongside the hourly
+  reminder job.
+
+**Decisions.**
+
+- ***The primary signal is "when did a run last complete", not "is anything
+  overdue".*** Overdue rows are a symptom with several causes; a run that has not
+  completed in three hours has one. It also means a dead scheduler is reported as
+  a fault *even when nothing is due*, which is the whole point — it will still be
+  dead when something is. The two are reported separately, and the overdue
+  finding is suppressed when the scheduler is the cause, so a dead cron reads as
+  one problem rather than two unrelated ones.
+- ***Three hours before a missing run is a fault.*** Two missed hourly runs and
+  then some. Long enough that a restart, a slow run or a clock skew raises
+  nothing; short enough that a scheduler which died overnight is a fault by
+  breakfast.
+- ***One hour before an in-flight reminder is stuck.*** A run sends one recipient
+  at a time with retries behind each, so a long *run* is normal — but a single
+  message taking over an hour is not, and the run that took it is not coming
+  back.
+- ***A non-active service mode and a non-production `APP_URL` are notes, not
+  faults.*** Both are correct behaviour somewhere. A check that goes red because
+  the round is in read-only mode is a check that gets ignored, and an ignored
+  check is worse than no check. The exit code separates "something needs a
+  person" from "something is worth knowing".
+- ***Severity depends on what is waiting.*** An unhealthy mail connection with
+  nothing due is a note; the same connection with reminders due is a fault. Same
+  for an unapproved reminder template. The state has not changed — its
+  consequences have.
+- ***It never acts.*** No auto-release of a stuck claim, no re-verification of a
+  credential. Deciding a stuck reminder is safe to release needs somebody who
+  knows what has been happening, and doing it automatically would be the claim
+  expiry that the previous section argued against, wearing a different hat.
+- ***It names no email address, including the sending account's own.*** The mail
+  connection's summary names the Gmail address it authenticated as, which is
+  right on the dashboard and wrong here: this is built to be appended to a log
+  file by a scheduler, and a log file is the least protected place in a
+  deployment. Borrowed text is masked at the boundary rather than paraphrased, so
+  the connection's own wording still comes through. It is the operator's own
+  address rather than an investor's, so this is caution rather than a breach —
+  but the reminder job prints no address for exactly this reason and the thing
+  watching it should not be the looser of the two.
+- ***`verify:health` hides the real audit entries rather than deleting them.***
+  The audit log is append-only. To test "no run has ever completed" against a
+  database that has some, the action is renamed for the duration and renamed
+  back, and there is a check at the end that every one returned.
+
+**Deviations.** None. This is not a work package — all twenty are built — and it
+is the item the last several Uncertain notes have been carrying.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. The report carries counts and no figures, and there
+   is a test asserting no amount or percentage appears in any finding. The offer
+   inserted by `verify-health.ts` passes its money as strings.
+2. *A send path bypassing a gate?* Nothing here sends. There is a source-level
+   test asserting `report.ts` and `check-health.ts` contain no `sendOneEmail`,
+   no `sendInvitation` and no `nodemailer`.
+3. *One recipient or the whole batch?* Not applicable; nothing sends.
+4. *Can an operator record an approval?* Untouched — and the compliance finding's
+   remedy says explicitly that only the owner can, so it does not send the
+   operator at a wall.
+5. *Does anything reveal another investor?* No investor-facing surface exists
+   here at all. The report is a command, not a route.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No, and this is the one
+   the package thought hardest about — see the address decision above. Tested
+   twice: in the unit tests over every finding, and in `verify:health` against
+   the real command's real output.
+9. *Indexable routes?* None added. Nothing was added to `src/app` at all.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched, and now reported on: the health check says which
+    URL is configured and whether it permits sending.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (1926, up from 1880) are green.
+`pnpm verify:health` is 21 of 21 and `pnpm verify:reminders` is still 42.
+
+**Uncertain.**
+
+- *Nothing tells anybody the check went red.* It exits non-zero, which is the
+  right shape for a scheduler to notice, but wiring that to an email or a phone
+  is a decision about who gets woken up and when — and adding a second unattended
+  sender to this application is not a decision to make quietly. Where the spec is
+  silent the conservative option wins, so for now it writes to a log.
+- *It does not know when a backup last ran.* That would be a valuable line in
+  this report and `scripts/backup.ts` records nothing to read, so it would need an
+  audit entry first. A backup that stopped in March is exactly the shape of
+  failure this exists for.
+- *The thresholds are hardcoded.* Three hours and one hour are argued for above,
+  and they are right for an hourly job. A deployment that ran the job daily would
+  want different numbers, and would currently have to edit the source.
+- *`media:check` and `verify:*` still are not reported on by anything.* The cron
+  lines are written; a `media:check` that starts failing weekly would land in a
+  log nobody reads, exactly like the reminder job did before this. Folding its
+  result into the health report is the obvious next step and it is small.

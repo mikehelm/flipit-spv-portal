@@ -293,6 +293,36 @@ Forty-two checks, and the last dozen are this.
 
 ---
 
+## Is anything actually running?
+
+Every page in this application shows you what is wrong when you open it. The reminders page says why a row will not send; the dashboard carries the mail connection and the compliance state; the round page says who has not answered. All of that needs somebody to open it.
+
+The failure worth worrying about is the one where nobody does. A scheduled job that was never installed, or that stopped in March, looks from inside the application exactly like a quiet week — the queue sits there full of dates in the past and nothing anywhere says that the thing meant to act on them is not running. An expired mail password looks like nobody has sent anything lately.
+
+So there is one command that asks all of those questions at once:
+
+```bash
+pnpm check:health
+```
+
+Run it now. On a fresh setup it tells you the mail connection is not configured, neither template is approved, and this deployment is not the one allowed to send real invitations — and it says that none of those is a fault, because each is somebody's decision or a correct refusal. It finishes normally.
+
+It goes red for a short list of things that genuinely need you: no reminder run has ever completed, the last one was hours ago, a reminder has been stuck mid-send, or a credential has expired with reminders due. Each one comes with the sentence saying what to do about it.
+
+**It changes nothing.** It is a question asked of the system, and it never acts on the answer — deciding a stuck reminder is safe to release, or that a password should be replaced, needs somebody who knows what has been happening.
+
+**It names no email address**, not even the account mail goes out from, because it is designed to be run by a timer and appended to a log file, and a log file on a server is the least protected place there is.
+
+To see it proved against a database deliberately put into each bad state — no run ever recorded, a scheduler that stopped, a reminder abandoned half sent:
+
+```bash
+pnpm verify:health
+```
+
+Twenty-one checks, and it puts everything back afterwards.
+
+---
+
 ## Updates
 
 Sign in as the operator and open **Updates**. Write one, choose who it goes to, and save it as a draft. Nothing has reached anybody: no portal shows it, no email exists, and the recipient list is empty because the audience is only worked out at the moment you publish.
@@ -554,7 +584,8 @@ Worth trying, because these are all meant to work:
 - **An email when a document is issued or corrected.** Deliberate, but somebody will expect it. Send a message or an update alongside.
 - **A real storage bucket, actually connected.** The code to use one is now written and tested (see "The media library"), but only against a stand-in on the same machine. Pointing it at a real Amazon or Cloudflare bucket and uploading one image is the last step, and it is minutes rather than work.
 - **Anything that deletes a stray file for you.** `pnpm media:check` now finds them — it checks that every record has its file *and* that every stored file has a record — but it only ever reports. Deciding that a file nothing points at is safe to delete is a judgement it does not have the information to make, so it leaves that to you.
-- **The timer that runs the reminder job.** The job itself is finished, and it is now safe to run on one (see "Two runs at once"), but nothing on any machine is running it yet. It is a single line in a cron table and the line is written out in `DEPLOYMENT.md` §8, ready to paste.
+- **The timers themselves.** The reminder job is finished and is now safe to run on one (see "Two runs at once"), the health report is finished and knows how to say when the reminder job has stopped, and nothing on any machine is running either of them yet. Three cron lines, written out in `DEPLOYMENT.md` §8, ready to paste.
+- **Anything that tells you a check went red without you looking.** `pnpm check:health` exits non-zero when something needs you, which is the right shape for a scheduler to notice — but wiring that to an email or a phone is a decision about who gets woken up, and nobody has made it.
 
 ## The round, and closing it
 
