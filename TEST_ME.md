@@ -517,8 +517,7 @@ Worth trying, because these are all meant to work:
 - **A note saying what changed in a correction.** A corrected document is versioned and both versions stay readable, but nothing records what was different — only the description, if somebody writes one.
 - **An email when a document is issued or corrected.** Deliberate, but somebody will expect it. Send a message or an update alongside.
 - **A real storage bucket, actually connected.** The code to use one is now written and tested (see "The media library"), but only against a stand-in on the same machine. Pointing it at a real Amazon or Cloudflare bucket and uploading one image is the last step, and it is minutes rather than work.
-- **A check that a stored file is the size its record says.** Nothing produces a mismatch today, but if one ever happened — a restore that brought the database back without its files — a download would stall rather than fail cleanly.
-- **A tidy-up for stored files whose records are gone.** Harmless, invisible, and storage somebody pays for.
+- **A tidy-up for stored files whose records are gone.** The reverse check — every record has its file — now exists as `pnpm media:check`. Finding files that nothing points at needs the ability to list a whole bucket, which is not built.
 
 ## The round, and closing it
 

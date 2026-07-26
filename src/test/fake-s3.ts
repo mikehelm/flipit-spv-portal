@@ -73,7 +73,7 @@ export class FakeS3 {
     for await (const chunk of request) chunks.push(chunk as Buffer)
     const body = Buffer.concat(chunks)
 
-    const method = request.method as 'PUT' | 'GET' | 'DELETE'
+    const method = request.method as 'PUT' | 'GET' | 'DELETE' | 'HEAD'
     const [, bucket, key] = (request.url ?? '').split('/')
 
     if (bucket !== FAKE_S3_BUCKET) {
@@ -143,6 +143,17 @@ export class FakeS3 {
       }
 
       response.writeHead(200, { 'content-type': stored.contentType }).end(stored.bytes)
+    } else if (method === 'HEAD') {
+      if (!stored) {
+        response.writeHead(404).end('<Error><Code>NoSuchKey</Code></Error>')
+        return
+      }
+      response
+        .writeHead(200, {
+          'content-type': stored.contentType,
+          'content-length': String(stored.bytes.length),
+        })
+        .end()
     } else if (method === 'DELETE') {
       this.objects.delete(key!)
       response.writeHead(204).end()

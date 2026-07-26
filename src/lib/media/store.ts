@@ -70,6 +70,15 @@ export interface MediaStore {
     key: string,
     range?: { start: number; end: number },
   ): Promise<ReadableStream<Uint8Array> | null>
+  /**
+   * How many bytes are actually stored under this key, without reading them.
+   *
+   * Null means the object is not there. This exists for one caller —
+   * `pnpm media:check`, which compares what is in the store against the rows
+   * that name it — and it is on the seam rather than in the script so that the
+   * answer is the store's rather than the filesystem's.
+   */
+  stat(key: string): Promise<{ sizeBytes: number } | null>
   remove(key: string): Promise<void>
 }
 
@@ -195,6 +204,16 @@ class FilesystemMediaStore implements MediaStore {
     return Readable.toWeb(stream) as ReadableStream<Uint8Array>
   }
 
+  async stat(key: string): Promise<{ sizeBytes: number } | null> {
+    const file = this.resolve(key)
+
+    try {
+      return { sizeBytes: (await stat(file)).size }
+    } catch {
+      return null
+    }
+  }
+
   async remove(key: string): Promise<void> {
     const file = this.resolve(key)
 
@@ -275,6 +294,10 @@ class ObjectMediaStore implements MediaStore {
     range?: { start: number; end: number },
   ): Promise<ReadableStream<Uint8Array> | null> {
     return this.client.openObjectStream(this.checked(key), range)
+  }
+
+  async stat(key: string): Promise<{ sizeBytes: number } | null> {
+    return this.client.headObject(this.checked(key))
   }
 
   async remove(key: string): Promise<void> {

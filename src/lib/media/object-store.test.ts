@@ -236,6 +236,36 @@ describe('both stores answer the same questions the same way', () => {
         await expect(store.openStream('../../etc/passwd')).rejects.toThrow(/not a storage key/)
       })
 
+      it('stat reports the size that is actually stored, without reading it', async () => {
+        const store = build()
+        const bytes = new Uint8Array(4321)
+
+        await store.put('img_STATSTATSTATSTATSTATS', bytes, 'image/png')
+
+        expect(await store.stat('img_STATSTATSTATSTATSTATS')).toEqual({ sizeBytes: 4321 })
+      })
+
+      it('stat of something absent is null, not an error', async () => {
+        const store = build()
+        expect(await store.stat('img_NOSTATNOSTATNOSTATNO')).toBeNull()
+      })
+
+      it('stat refuses a key that is not a storage key too', async () => {
+        const store = build()
+        await expect(store.stat('../../etc/passwd')).rejects.toThrow(/not a storage key/)
+      })
+
+      it('stat and a real read agree about the size', async () => {
+        const store = build()
+        const bytes = new Uint8Array(777)
+
+        await store.put('img_AGREEAGREEAGREEAGREEA', bytes, 'image/png')
+
+        const stat = await store.stat('img_AGREEAGREEAGREEAGREEA')
+        const read = await store.get('img_AGREEAGREEAGREEAGREEA')
+        expect(stat!.sizeBytes).toBe(read!.bytes.length)
+      })
+
       it('says where it is writing, and never says it with a credential', () => {
         const store = build()
         const described = store.describe()

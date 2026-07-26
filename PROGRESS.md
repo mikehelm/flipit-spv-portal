@@ -1956,3 +1956,114 @@ byte-identical answers on both stores. `verify:media`, `verify:object-store` and
   than a profile. It is fairly obvious arithmetic — a sixty-megabyte buffer is
   sixty megabytes — but no run of this application has been watched to confirm
   the heap actually drops.
+
+---
+
+## `pnpm media:check` — every stored file, against the row that names it
+
+Not a numbered work package. The safer half of the reconciliation item, and the
+guard for the trade the streaming change made an hour earlier.
+
+Three tables hold a `storage_key` and a `size_bytes`. Nothing in normal
+operation can make them disagree with what is stored — the size is written from
+the ingest result in the same call that writes the bytes — but two things
+outside normal operation can, and both are quiet:
+
+- **A restore that brought the database back without its bucket.** `pnpm backup`
+  covers Postgres; the objects are somebody else's copy. The symptom is a broken
+  image and a document that will not download, discovered one at a time, by
+  whoever happens to click.
+- **A truncated write.** And this one got worse when responses started
+  streaming: `Content-Length` now comes from the row, so a short file makes a
+  browser wait for bytes that are never coming rather than failing cleanly. That
+  was written into the Uncertain list for the streaming change; this is the
+  guard it asked for.
+
+**Built.**
+
+- **`MediaStore.stat(key)`** on the seam — `fs.stat` on the filesystem, a `HEAD`
+  request on the object store, so checking a sixty-megabyte video costs a round
+  trip rather than a download.
+- **`S3ObjectClient.headObject`**, and `HEAD` added to the signed method union.
+  SigV4 signs it exactly as a GET.
+- **`scripts/check-media.ts`**, run as `pnpm media:check`.
+- **`DEPLOYMENT.md` §1.1 and §5** — the restore step now names it.
+
+**Decisions.**
+
+- ***It reports and changes nothing.*** Deleting a row whose file is gone, or
+  re-uploading, is a decision for a person holding the backup — and both are
+  destructive in a way that a check run from a deployment script must not be.
+  Exits non-zero so a script can still stop on it.
+- ***`stat` is on the seam rather than in the script.*** The answer should be the
+  store's, not the filesystem's, so the same command means the same thing on a
+  deployment using a bucket. The parity suite runs the same assertions against
+  both implementations.
+- ***A HEAD, not a ranged GET.*** The obvious no-new-method alternative was to
+  ask for one byte past the end and see what came back — which the filesystem
+  answers with an empty read and an object store answers with a 416. Two
+  implementations disagreeing about the same question is exactly what the seam
+  exists to prevent, and the divergence would have been invisible until a
+  deployment moved to a bucket.
+- ***A HEAD without a usable `Content-Length` is an error, not a size of zero.***
+  A store that answers that way is one this check cannot use, and saying so beats
+  reporting every object as the wrong size.
+- ***The report names a document's title and a video's published state, never a
+  caption or a transcript.*** A report is a log, and checklist 8 applies to it.
+- *An unconfigured store with rows in the database is a problem, not a clean
+  answer.* If nothing is configured and nothing claims to be stored, that is
+  fine and it says so. If nothing is configured and forty rows name a file, that
+  is a deployment that has lost its store, and it exits non-zero.
+
+**Deviations.** `MediaStore` gained a third method this session. All three are on
+the interface and implemented by both stores.
+
+**Checklist.** Point 8 is this change's.
+
+1. **No monetary value is a JavaScript number.** A byte count is not money.
+2. **No send path bypasses anything.** Nothing here sends.
+3. **A jurisdiction block still stops one recipient.** Untouched.
+4. **The operator still cannot record, amend or void an approval.** Untouched.
+5. **No investor-facing response reveals another investor.** This is a
+   command-line script with no route and no session. It reads three tables and
+   none of them names an account.
+6. **Claim and sign-in tokens are single-use, hashed and expiring.** Untouched.
+7. **Suspension revokes sessions and refuses new links.** Untouched.
+8. **No log line carries a token, a body or a key.** The report prints a
+   document title, a video's published state, an id and two byte counts. Never a
+   caption, never a transcript, never a storage key, never the endpoint. An
+   unreadable object is reported by the client's own message, which already
+   refuses to contain a credential, a signature or a URL.
+9. **The verification page is still the only indexable route.** No new route.
+10. A published Q&A entry carries nothing identifying. Untouched.
+11. The AI path cannot change a calculated figure. Untouched.
+12. The app still refuses to send when its base URL is not the production value.
+    Untouched.
+
+**Verified.** Run three ways against the real database and a real store: with
+nothing stored (a clean answer, exit zero); with a correct row, a row whose size
+is ten bytes too large, and a row whose file was never written — it found both
+problems, named each, printed the recorded and actual sizes, changed nothing and
+exited non-zero; and clean again afterwards. `pnpm test` — 1799 tests, 91 files,
+including four `stat` assertions run against both stores. `verify:media` and
+`verify:object-store` re-run green.
+
+**Uncertain.**
+
+- *The other direction is not built.* Finding objects that no row points at
+  needs the ability to list a whole bucket, which means `ListObjectsV2`, its
+  paginated XML, and a list operation on the seam. It is a real piece of work and
+  the harm it addresses is a storage bill rather than a broken portal, so the
+  half that matters was built and the half that costs money was not.
+- *The check is only as good as the store's answer.* A store that reported a
+  stale length after a failed overwrite would pass. Reading the object and
+  counting is the only way past that, and it turns a cheap check into a download
+  of everything.
+- *It does not verify content.* A file that is the right length and the wrong
+  file passes. A hash column on the row would fix it, would have to be added to
+  three tables and every write path, and would be worth doing if a document
+  package were ever served from somewhere less trusted than a private bucket.
+- *Nobody runs it automatically.* It is in the runbook at the restore step and
+  in `DEPLOYMENT.md` §1.1, and that is a sentence in a document rather than a
+  scheduled job. Reminders already need a scheduler (§18); this belongs beside
+  them.

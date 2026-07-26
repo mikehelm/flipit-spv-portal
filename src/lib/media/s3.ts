@@ -81,8 +81,10 @@ export function amzTimestamps(now: Date): { amzDate: string; datestamp: string }
   return { amzDate, datestamp: amzDate.slice(0, 8) }
 }
 
+export type S3Method = 'PUT' | 'GET' | 'DELETE' | 'HEAD'
+
 export interface CanonicalInput {
-  method: 'PUT' | 'GET' | 'DELETE'
+  method: S3Method
   uri: string
   /** Lowercase header names to values. Must include `host` and `x-amz-*`. */
   headers: Readonly<Record<string, string>>
@@ -179,7 +181,7 @@ export interface SignedRequest {
 export function signRequest(
   config: S3Config,
   request: {
-    method: 'PUT' | 'GET' | 'DELETE'
+    method: S3Method
     key: string
     body?: Uint8Array
     contentType?: string
@@ -233,7 +235,13 @@ export function signRequest(
  */
 export function verifySignature(
   config: S3Config,
-  received: { method: 'PUT' | 'GET' | 'DELETE'; key: string; body?: Uint8Array; contentType?: string; amzDate: string },
+  received: {
+    method: S3Method
+    key: string
+    body?: Uint8Array
+    contentType?: string
+    amzDate: string
+  },
   authorization: string,
 ): boolean {
   const offered = /Signature=([0-9a-f]{64})$/.exec(authorization)?.[1]
@@ -301,7 +309,7 @@ export class S3ObjectClient {
   }
 
   private async send(
-    method: 'PUT' | 'GET' | 'DELETE',
+    method: S3Method,
     key: string,
     body?: Uint8Array,
     contentType?: string,
@@ -500,6 +508,39 @@ export class S3ObjectClient {
     if (response.status !== expected) await this.refuse(response, 'GET')
 
     return response.body as ReadableStream<Uint8Array> | null
+  }
+
+  /**
+   * How many bytes are actually there, without fetching any of them.
+   *
+   * A HEAD, so that checking a sixty-megabyte video costs a round trip rather
+   * than a download. Null for an object that is not there — the same answer
+   * `getObject` gives, for the same reason.
+   */
+  async headObject(key: string): Promise<{ sizeBytes: number } | null> {
+    const response = await this.send('HEAD', key)
+
+    if (response.status === 404) {
+      const verdict = await this.isAbsence(response)
+      if (verdict.absent) return null
+      await this.refuse(response, 'HEAD', verdict.code)
+    }
+
+    if (!response.ok) await this.refuse(response, 'HEAD')
+
+    const declared = response.headers.get('content-length')
+    // A store that answers a HEAD without a length is one this check cannot
+    // use. Saying so beats reporting a size of zero and calling it a mismatch.
+    if (declared === null || !/^\d+$/.test(declared)) {
+      throw new S3RequestError(
+        response.status,
+        null,
+        'The object store answered a HEAD without a usable Content-Length, so the size of ' +
+          'the stored object cannot be checked.',
+      )
+    }
+
+    return { sizeBytes: Number(declared) }
   }
 
   async deleteObject(key: string): Promise<void> {

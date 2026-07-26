@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Checking a stored file against the row that names it | 25 Jul session C | 2026-07-26 00:10 | `src/lib/media/store.ts`, `src/lib/media/s3.ts`, a new `scripts/check-media.ts`, `DEPLOYMENT.md` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -63,7 +63,10 @@ which is what Safari needs before it will play anything at all.
 **Streaming is done too** — every media response is built from a stream rather
 than a buffer.
 
-The largest now are a reconciliation pass for objects whose rows are gone, a
-length check between a stored file and the row that names it, and the open
-question — sharpened by corrections — of whether issuing a document should
-notify the investor at all.
+**`pnpm media:check` is done too** — every record's file is checked for presence
+and size, which is the half of reconciliation that matters.
+
+The largest left are listing a bucket to find objects no row points at, running
+these checks on a schedule rather than from the runbook, and the open question —
+sharpened by corrections — of whether issuing a document should notify the
+investor at all. None of them is a package.
