@@ -6031,3 +6031,157 @@ are green. `pnpm verify:uploads` is 55 of 55, twice; `pnpm verify:documents`
   asked what an attacker could do with them.*
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
+
+## The video's last two controls, and a check that was watching the wrong thing
+
+Three consecutive entries carried the same two items forward, and each one said
+why they mattered:
+
+> *"Replacing a **published** video is still not driven. The recorder renders a
+> specific warning for it — "Uploading a replacement **takes it down**" — and the
+> run reaches a published state but never records over it. The caption is
+> supposed to carry across, and that is untested."*
+>
+> *"Removing a video altogether is not driven, and it is the one control that
+> deletes bytes."*
+
+Both are now driven, from the operator's browser and from an investor's, and the
+run went from 67 checks to 104. Doing it also found that one of the 67 had been
+passing for the wrong reason and failing for the right one about half the time.
+
+**Built.** Three sections added to `verify:recorder`, which already had the
+fixtures — an onboarded operator, a camera, a store, and an investor holding a
+live portal session. A new script would have duplicated four hundred lines of
+them to prove less.
+
+***Replacing a published video.*** Published, then recorded over through the
+page's own controls. Every clause of the warning checked: the old row is gone
+rather than kept alongside, the replacement arrives **unpublished** however
+published its predecessor was, **the caption and the hand-typed transcript are
+carried across**, the old file is gone from the store and the new one is there,
+and the row points at the file that exists.
+
+And the investor's side of that same instant, which is the part that could not be
+checked from an administrator's browser: **the id they could reach a second ago
+is 404, the replacement is 404, and both are byte-identical to the 404 an
+invented id gets.** A replaced video is indistinguishable from one that never
+existed — §13.3's actual claim, now checked at the moment it is most likely to
+leak. Their portal shows no caption and no gap. The audit entry records
+`replacedPrevious` and `previousWasPublished`, the second being the fact an
+investor would care about.
+
+***Removing it altogether, while it is published*** — deliberately the harder
+case; removing something nobody can see proves nothing. The row goes, **the bytes
+go** (the store is asserted empty, and this is the only control in the feature
+that deletes a file), the investor gets the same 404 as for an id that never
+existed, the portal still shows no gap, the log records `wasPublished: true`, and
+**the log entry holds no storage key**. The screen returns to "Nothing recorded
+yet".
+
+***The four megabytes between the two limits.*** The previous entry's first
+Uncertain item: `MAX_VIDEO_BYTES` is 64 MB, the endpoint refuses a *declared*
+length above 1.05× that, and `verify:uploads` proves 72 MB is stopped at the
+proxy — leaving 64 to 67.2 MB as the one band where the same class of silence
+could still live. It cannot: a 65 MB body reaches the endpoint, is read, and is
+refused by `inspect` with **413 and the application's own sentence naming both
+numbers**. Nothing stored, no row.
+
+**And the check that was watching the wrong thing.**
+
+*"Taking it down puts it back out of reach"* failed on two of four runs with a
+**200 from the video route while the row said `published_at` was null**. The
+comment above it, written by an earlier session, blamed a cached copy of the
+earlier answer and added a fresh query string to every ask.
+
+That was not the cause. **The check waited on `document.body` containing "Publish
+to the portal"** — a *rendering* of the fact, which arrives on its own schedule
+— and then made the request. The request could go out while the action's write
+was still in flight. Every other in-place form in this script is waited on by
+asking the database, in a comment that explains exactly why; this one check was
+not, and it had been reported green twice.
+
+It now waits on the row. Three consecutive runs, 104 of 104.
+
+**Decisions.**
+
+- ***The fix waits on the fact, and does not retry the request.*** A retry loop
+  around that ask would have made it green in one line and destroyed the check:
+  a video taken down and still served is precisely what it exists to catch. A
+  second ask is made **only when the first one fails**, purely to write into the
+  failure detail which of the two explanations the next person is looking at —
+  "404 half a second later, so the route answered before the write was visible"
+  or "still not 404, so something is holding the answer". The check itself passes
+  on the first ask or not at all.
+- ***A separate check now asserts the row was cleared,*** so a future failure
+  says whether the action or the route is at fault rather than leaving one
+  assertion to mean both.
+- ***The replacement was made by recording, not by uploading a file.*** The file
+  path is a `Blob` and a test could post one directly, but the warning being
+  checked is rendered by the recorder, and the journey being checked is the one
+  David actually takes when a video is already live.
+- ***Removal is driven from the published state.*** The action has no guard
+  against removing a published video and should not have one — §13.3 calls the
+  feature removable — so the published case is the one worth driving.
+- ***The 65 MB fixture is built in the page,*** as every other oversized fixture
+  in this repository is.
+
+**Deviations.** None. No production code changed in this entry: the three
+sections and the corrected wait are all in `scripts/verify-recorder.ts`.
+
+**Checklist.**
+
+1. *Money as a `number`?* No — no amount is touched.
+2. *A send path bypassing a gate?* No. Nothing here sends. The run stores a
+   deliberately fake app password during onboarding and restores what was there
+   before, as it always has.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No — and this is the entry to read
+   for the video's version of that. Three ids are now asked of the portal route
+   in the same run: one that was published and has been replaced, one that exists
+   and is not published, and one that never existed. All three produce the same
+   status and the same body. The removal section adds a fourth: an id whose bytes
+   have been deleted. Same answer again.
+6. *Tokens?* Untouched. The claim token is used the way one is meant to be.
+7. *Suspension?* Not exercised here; `portalReadable` remains the input the route
+   reads for it.
+8. *Does any log line contain a token, a body or a key?* No, and the removal
+   section asserts it: the `video.removed` metadata is checked not to contain the
+   storage key of the file it deleted.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2430) and `pnpm build` are green.
+`pnpm verify:recorder` is 104 of 104, three times running; `pnpm verify:uploads`
+55 of 55; `pnpm verify:media` 54 of 54.
+
+**Uncertain.**
+
+- ***How many other checks in this repository wait on a rendering rather than on
+  a fact?*** This is the item worth taking next. One was found by accident,
+  because it happened to fail half the time; a check with the same shape and a
+  faster action would simply pass and mean nothing. `verify:recorder` states the
+  rule in a comment and broke it once in its own file. Nobody has read the other
+  twelve browser-driven scripts looking for `waitForFunction` or
+  `waitForTimeout` standing in for a database read, and that is a mechanical
+  sweep with a clear answer.
+- ***The intermittent 200 was diagnosed but never reproduced deliberately.*** The
+  explanation — the request going out before the write was visible — fits the
+  evidence and the fix has held for three runs, but a fix validated by absence is
+  weaker than one validated by making the failure happen on demand.
+- ***Nothing drives an upload between 67.2 MB and 68 MB,*** where the endpoint's
+  declared-length refusal and `proxyClientMaxBodySize` are eight hundred
+  kilobytes apart. Narrower than the band this entry closed, and the last one.
+- *The image upload preview and the email template preview are still
+  unexercised.*
+- *The error page has never been rendered by a real error.*
+- *Nothing measures bundle size, and nothing measures what the middleware
+  costs.*
+- *Nothing measures how long a 20 MB upload takes,* now that one demonstrably
+  works.
+- *`img-src data:`, `media-src blob:` and `worker-src blob:` have never been
+  asked what an attacker could do with them.*
+- *The password-reset journey is still not built,* and belongs in
+  OPEN_DECISIONS.md as a question for Michael.

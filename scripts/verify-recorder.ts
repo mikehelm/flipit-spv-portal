@@ -78,7 +78,7 @@ import { readOnboardingSnapshot } from '@/lib/auth/onboarding-store'
 import { SERVICE_CONFIG_ID } from '@/lib/auth/service-config'
 import { isStepComplete, type OnboardingStepId } from '@/lib/auth/onboarding'
 import { hashPassword } from '@/lib/auth/password'
-import { MAX_VIDEO_BYTES } from '@/lib/media/formats'
+import { MAX_VIDEO_BYTES, tooLargeMessage } from '@/lib/media/formats'
 
 const PORT = 3240
 const ORIGIN = `http://127.0.0.1:${PORT}`
@@ -973,20 +973,307 @@ async function main(): Promise<void> {
       ((await investorPage.textContent('body')) ?? '').includes('A short note from David'),
     )
 
+    /**
+     * Unpublishing, waited on **the row** rather than the screen.
+     *
+     * This check failed intermittently — roughly one run in two — with a 200
+     * from the video route while the row said `published_at` was null, and the
+     * comment above blamed a cached answer. It is not that. It waited on
+     * `document.body` containing "Publish to the portal", which is a *rendering*
+     * of the fact and arrives on its own schedule; the request could go out
+     * while the action's write was still in flight. Every other in-place form in
+     * this script is waited on by asking the database, for exactly this reason,
+     * and this one check was not.
+     *
+     * So it asks the row. And it deliberately does **not** retry the request: if
+     * the first ask after the row is null comes back 200, that is the thing this
+     * check exists to catch, and a retry loop would hide it. A second ask is
+     * made only to say, in the failure detail, which of the two explanations the
+     * next person is looking at.
+     */
     await page.getByRole('button', { name: 'Unpublish' }).click()
+
+    const downDeadline = Date.now() + 20_000
+    let downRow = (await db.select().from(operatorVideos))[0]
+    while (Date.now() < downDeadline && downRow?.publishedAt !== null) {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      downRow = (await db.select().from(operatorVideos))[0]
+    }
+    check('unpublishing clears the published moment', downRow?.publishedAt === null)
+
+    const takenDown = await ask(videoId)
+    let detail = `status ${takenDown.status}`
+    if (takenDown.status !== 404) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      const again = await ask(videoId)
+      detail += again.status === 404
+        ? ' — and 404 half a second later, so the route answered before the write was visible to it'
+        : ' — and still not 404 half a second later, so something is holding the answer'
+    }
+    check('taking it down puts it back out of reach', takenDown.status === 404, detail)
+
+    /**
+     * -----------------------------------------------------------------------
+     * Replacing a video that is **published**.
+     *
+     * Three entries in PROGRESS.md carried this forward, and it was the oldest
+     * unrun item on the list. The recorder renders a warning for it — *"A video
+     * is published right now. Uploading a replacement **takes it down** … Your
+     * caption and transcript are carried across."* — and every part of that
+     * sentence was a claim nothing had checked.
+     *
+     * It matters more than replacing an unpublished one, because the moment the
+     * replacement lands there is an investor who could reach a video a second
+     * ago and cannot now, and a caption typed out by hand that either survived
+     * or did not.
+     */
+    console.log('\nReplacing a video that is published')
+    let beforeReplace = complaints.length
+
+    await page.goto(`${ORIGIN}/admin/video`, { waitUntil: 'networkidle' })
+    await page.locator('input[name="confirm"]').check()
+    await page.getByRole('button', { name: 'Publish to the portal' }).click()
     await page.waitForFunction(
-      () => document.body.textContent?.includes('Publish to the portal') === true,
+      () => document.body.textContent?.includes('Take it down') === true,
       undefined,
       { timeout: 20_000 },
     )
-    const takenDown = await ask(videoId)
+    check('published again, so there is something to replace', (await ask(videoId)).status === 200)
+
     check(
-      'taking it down puts it back out of reach',
-      takenDown.status === 404,
-      `status ${takenDown.status} — publishedAt is ${String(
-        (await db.select().from(operatorVideos))[0]?.publishedAt,
-      )}`,
+      'and the recorder says a replacement will take it down',
+      (await page.locator('text=takes it down').count()) > 0,
+      'the warning about replacing a published video is not on the screen',
     )
+
+    const beforeKey = (await db.select().from(operatorVideos))[0]!.storageKey
+    check('one file in the store before replacing', storedFiles().length === 1, storedFiles().join(', '))
+
+    await page.locator('button', { hasText: 'Turn the camera on' }).click()
+    await page.locator('button', { hasText: 'Start recording' }).click()
+    await new Promise((resolve) => setTimeout(resolve, RECORD_MS))
+    await page.locator('button', { hasText: 'Stop' }).click()
+    await page.locator('button', { hasText: 'Use this one' }).click()
+
+    // The page reloads itself after a successful upload, so what settles is the
+    // row — asked of the database, for the reason onboarding is.
+    const replaceDeadline = Date.now() + 40_000
+    let replacement = (await db.select().from(operatorVideos))[0]
+    while (Date.now() < replaceDeadline && replacement?.id === videoId) {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      replacement = (await db.select().from(operatorVideos))[0]
+    }
+
+    check('the replacement is a different video', replacement?.id !== videoId, String(replacement?.id))
+    check(
+      'there is exactly one row — the old one is gone, not kept alongside',
+      (await db.select().from(operatorVideos)).length === 1,
+    )
+    check(
+      'it arrives UNPUBLISHED, however published the one it replaced was',
+      replacement?.publishedAt === null,
+      String(replacement?.publishedAt),
+    )
+    check(
+      'the caption is carried across',
+      replacement?.caption === 'A short note from David',
+      String(replacement?.caption),
+    )
+    check(
+      'and so is the transcript somebody typed out by hand',
+      (replacement?.transcript ?? '').startsWith('Hello'),
+      String(replacement?.transcript),
+    )
+    check(
+      'the old file is gone from the store, and the new one is there instead',
+      storedFiles().length === 1 && !storedFiles().includes(beforeKey),
+      storedFiles().join(', '),
+    )
+    check('and the new row points at the file that is there', storedFiles()[0] === replacement?.storageKey)
+
+    /**
+     * The investor's side of the same instant.
+     *
+     * Two ids now: the one they could reach a moment ago, and the one that
+     * exists. Neither may be readable, and — §13.3 — the refusal must not
+     * distinguish "there was a video here" from "there never was".
+     */
+    const oldGone = await ask(videoId)
+    const newUnpublished = await ask(replacement!.id)
+    const stillInvented = await ask('a-video-id-that-does-not-exist')
+    check(
+      'the video the investor could reach a moment ago is 404 now',
+      oldGone.status === 404,
+      String(oldGone.status),
+    )
+    check(
+      'the replacement is 404 too, because nothing is published',
+      newUnpublished.status === 404,
+      String(newUnpublished.status),
+    )
+    check(
+      'and all three refusals are the same answer — a replaced video looks like one that never existed',
+      oldGone.status === stillInvented.status &&
+        oldGone.body === stillInvented.body &&
+        newUnpublished.body === stillInvented.body,
+      `"${oldGone.body}" / "${newUnpublished.body}" / "${stillInvented.body}"`,
+    )
+
+    await investorPage.reload({ waitUntil: 'networkidle' })
+    check(
+      'and their portal shows no video and no caption — no gap where it was',
+      !((await investorPage.textContent('body')) ?? '').includes('A short note from David'),
+    )
+
+    const replaceEvents = await db
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.entityId, replacement!.id))
+    const uploadEvent = replaceEvents.find((entry) => entry.action === 'video.uploaded')
+    const metadata = (uploadEvent?.metadata ?? {}) as Record<string, unknown>
+    check('the log records that this upload replaced something', metadata.replacedPrevious === true)
+    check(
+      'and that what it replaced was published — the fact an investor would care about',
+      metadata.previousWasPublished === true,
+      JSON.stringify(metadata),
+    )
+    checkNothingWasRefused('replacing a published video', beforeReplace)
+
+    /**
+     * -----------------------------------------------------------------------
+     * Removing it altogether — the one control in this feature that deletes
+     * bytes.
+     *
+     * Also carried forward three times, and named each time as the one worth
+     * doing precisely because it is destructive. §13.3 calls the whole feature
+     * *"optional and removable"*, and this is the check that the second word is
+     * true: the row goes, **and the file goes**, and an investor holding the
+     * address is told nothing about what used to be there.
+     *
+     * Done from the published state on purpose. Removing something nobody can
+     * see is the easy case.
+     */
+    console.log('\nRemoving it altogether, while it is published')
+    beforeReplace = complaints.length
+
+    await page.goto(`${ORIGIN}/admin/video`, { waitUntil: 'networkidle' })
+    await page.locator('input[name="confirm"]').check()
+    await page.getByRole('button', { name: 'Publish to the portal' }).click()
+    await page.waitForFunction(
+      () => document.body.textContent?.includes('Take it down') === true,
+      undefined,
+      { timeout: 20_000 },
+    )
+    check(
+      'published, and the investor can reach it',
+      (await ask(replacement!.id)).status === 200,
+    )
+
+    const keyBeforeRemoval = replacement!.storageKey
+    await page.getByRole('button', { name: 'Remove the video' }).click()
+
+    const removeDeadline = Date.now() + 30_000
+    let rows = await db.select().from(operatorVideos)
+    while (Date.now() < removeDeadline && rows.length > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      rows = await db.select().from(operatorVideos)
+    }
+
+    check('the row is gone', rows.length === 0, `${rows.length} rows`)
+    check(
+      'and so are the bytes — this is the control that actually deletes a file',
+      !storedFiles().includes(keyBeforeRemoval),
+      storedFiles().join(', '),
+    )
+    check('the store is empty', storedFiles().length === 0, storedFiles().join(', '))
+
+    const afterRemoval = await ask(replacement!.id)
+    const inventedAfter = await ask('another-id-that-never-existed')
+    check(
+      'the investor gets the same 404 as for an id that never existed',
+      afterRemoval.status === 404 &&
+        afterRemoval.status === inventedAfter.status &&
+        afterRemoval.body === inventedAfter.body,
+      `"${afterRemoval.body}" against "${inventedAfter.body}"`,
+    )
+
+    await investorPage.reload({ waitUntil: 'networkidle' })
+    check(
+      'and the portal still shows no gap where it was',
+      !((await investorPage.textContent('body')) ?? '').includes('A short note from David'),
+    )
+
+    const removalEvents = await db
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.entityId, replacement!.id))
+    const removed = removalEvents.find((entry) => entry.action === 'video.removed')
+    check('the removal is in the log', removed !== undefined)
+    check(
+      'and it records that a published video was the thing removed',
+      ((removed?.metadata ?? {}) as Record<string, unknown>).wasPublished === true,
+      JSON.stringify(removed?.metadata ?? {}),
+    )
+    // The bytes are gone; the log must not have kept a copy of anything but facts.
+    check(
+      'and the log entry holds no storage key',
+      !JSON.stringify(removed?.metadata ?? {}).includes(keyBeforeRemoval),
+    )
+
+    await page.reload({ waitUntil: 'networkidle' })
+    check(
+      'and the screen is back to having nothing recorded',
+      (await page.locator('text=Nothing recorded yet').count()) > 0,
+    )
+    checkNothingWasRefused('removing the video', beforeReplace)
+
+    /**
+     * -----------------------------------------------------------------------
+     * The four megabytes between the two limits.
+     *
+     * `MAX_VIDEO_BYTES` is 64 MB. The endpoint refuses on a *declared* length
+     * above 1.05× that — 67.2 MB — before reading a byte, and `verify:uploads`
+     * proves 72 MB is stopped at the proxy. Between 64 and 67.2 MB the body is
+     * accepted, read, and refused by `inspect` on its actual length, and that
+     * band had never been driven: the previous entry's Uncertain list named it
+     * as the one place the same class of silence could still live.
+     *
+     * It does not: the refusal is the application's own sentence, naming both
+     * numbers, and nothing is stored. Sent with a 65 MB body, which is inside
+     * the band by a megabyte on either side.
+     */
+    console.log('\n65 MB — inside the band between the two limits')
+    beforeReplace = complaints.length
+
+    const inTheBand = await page.evaluate(
+      async ([origin, bytes]) => {
+        // Built here rather than pushed from Node, for the reason the other
+        // oversize fixtures are.
+        const chunk = new Uint8Array(1024 * 1024)
+        const parts: BlobPart[] = []
+        for (let sent = 0; sent < Number(bytes); sent += chunk.length) parts.push(chunk)
+        const body = new FormData()
+        body.append('file', new Blob(parts, { type: 'video/mp4' }), 'far-too-long.mp4')
+        const response = await fetch(`${origin}/admin/video/upload`, { method: 'POST', body })
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null
+        return { status: response.status, message: payload?.message ?? '' }
+      },
+      [ORIGIN, String(65 * 1024 * 1024)] as const,
+    )
+
+    check(
+      'a 65 MB body reaches the endpoint and is refused — 413',
+      inTheBand.status === 413,
+      `status ${inTheBand.status}: ${inTheBand.message}`,
+    )
+    check(
+      'with the application’s own sentence, naming both numbers',
+      inTheBand.message.includes(tooLargeMessage('video', 65 * 1024 * 1024)),
+      inTheBand.message.slice(0, 200),
+    )
+    check('and nothing was stored for it', storedFiles().length === 0, storedFiles().join(', '))
+    check('and no row was created', (await db.select().from(operatorVideos)).length === 0)
+    checkNothingWasRefused('the 65 MB refusal', beforeReplace, /status of 413/)
 
     await investorPage.close()
     await investor.close()

@@ -855,7 +855,8 @@ Then publish it and try again from an investor's portal. It plays.
 
 **Things worth trying:**
 
-- **Replace a published video.** It takes the published one down and the new one arrives unpublished, so you watch it in place before anyone else does. The screen warns you before you upload. Your caption and transcript are carried across.
+- **Replace a published video.** It takes the published one down and the new one arrives unpublished, so you watch it in place before anyone else does. The screen warns you before you upload. Your caption and transcript are carried across. *(This is now driven by machine — see below. It was described here for three weeks before anybody had actually done it.)*
+- **Remove one altogether.** The row goes and so does the file. This is the only control in this part of the application that actually deletes anything, which is why it now has checks of its own.
 - **Sign in as the owner rather than the operator.** You can watch the video. You cannot record, replace, publish or delete one — it is David's, and the buttons refuse you rather than hiding.
 - **Suspend an investor's account** and try their portal. The video goes with everything else.
 
@@ -865,7 +866,7 @@ Then publish it and try again from an investor's portal. It plays.
 pnpm build && pnpm verify:recorder
 ```
 
-Sixty-seven checks. It signs in as the owner and confirms he is offered no camera at all — and that the upload address refuses him too, not just the button. Then it signs in as David *before* he has finished setting up, confirms he is sent to the setup screen, walks all six setup steps through the real forms, and only then reaches the recorder. Then it turns the camera on, turns it off, records, watches the timer count, stops, plays the recording back, discards it, records another, keeps that one, and checks that the file on disk is exactly the file that was recorded.
+A hundred and four checks. It signs in as the owner and confirms he is offered no camera at all — and that the upload address refuses him too, not just the button. Then it signs in as David *before* he has finished setting up, confirms he is sent to the setup screen, walks all six setup steps through the real forms, and only then reaches the recorder. Then it turns the camera on, turns it off, records, watches the timer count, stops, plays the recording back, discards it, records another, keeps that one, and checks that the file on disk is exactly the file that was recorded.
 
 Two of those checks are worth calling out because they are about the camera light rather than about the video:
 
@@ -880,6 +881,15 @@ The run also now covers what happens after the recording: saving a caption and t
 
 > **The setup screen had never been opened by any automated check until now** — it is David's alone, and every other browser check signs in as Michael. Walking through it also proved something worth knowing: **finishing setup stores the sending address and password but does not mark the connection as working.** Sending stays blocked until the connection is actually tested, which is the correct order and is now checked rather than assumed. The run uses an obviously fake password and puts your real settings back when it finishes.
 - **Leave the caption and transcript empty.** The screen tells you that anyone who cannot play sound gets nothing at all from the video. Fill them in and they appear on the portal as text, in full, not hidden behind a control somebody has to find.
+
+**The last two controls, finally driven.** Two things had been described on this page for weeks without anybody having done them, and both are now walked end to end:
+
+- **Recording over a video that is live.** The run publishes one, records another over the top of it, and then checks every clause of the warning on the screen: the live one comes down, the new one arrives unpublished, the caption and the transcript you typed survive, the old file is deleted and the new one is there. Then it asks *from a real investor's browser* for the video they could watch a moment ago — and gets the same "not found" as for a video that never existed. Not "that has been replaced". The same nothing.
+- **Removing one altogether, while it is published.** The row goes, the file goes, the investor gets the same nothing again, and the portal shows no gap. Removing something nobody could see would have proved very little, so it is done from the live state on purpose.
+
+**And one of the existing checks turned out to be watching the wrong thing.** The check that a video taken down really is out of reach had been reported green twice. Run four times in a row it failed twice, with the video still being served after the database said it had been taken down — which, if it had been true, would be the most serious thing in this section. It was not true: the check was waiting for the *screen* to update and then asking, and the screen and the database do not change in the same instant. It now waits for the database, which is what every other check in that script already did. Three runs in a row, clean.
+
+That is worth reading twice, because the lesson is not about videos. A check that waits for a page to look right is not the same as a check that waits for something to *be* right, and the first kind can pass for months.
 
 **Seeking, and why it is worth a mention.** A published video now answers a browser that asks for part of it rather than always sending the whole thing. That sounds like a nicety and is not: Safari opens every video by asking for the first two bytes, and gives up entirely on a server that replies with the whole file instead. Before this, David's video did not play on an iPhone at all. Now it plays, and the scrub bar works. If you have an iPhone to hand, that is the ten-second test worth running on the first real deployment.
 
