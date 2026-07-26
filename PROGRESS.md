@@ -1835,3 +1835,124 @@ asserts the client refuses it.
   proxy could alter it without invalidating the signature — which would produce
   the wrong bytes, not a security failure, because the response is not trusted
   for anything but its length. Worth knowing about.
+
+---
+
+## Streaming a media response, instead of holding it in memory
+
+Not a numbered work package. The item the range change left behind, and named
+under its Uncertain: *"a request with no `Range` header still holds a
+sixty-megabyte video in one buffer."*
+
+Ranges fixed the seeking. They did not fix the shape: every response — the whole
+file and every partial one — was read into a `Uint8Array` and handed to a
+`Response`, so serving one video to one phone on a slow connection pinned sixty
+megabytes of heap for the length of the download. Two investors watching at once
+was a hundred and twenty.
+
+**Built.**
+
+- **`MediaStore.openStream(key, range?)`** on the interface, with a real
+  implementation on both stores — `createReadStream` with a start and an end on
+  the filesystem, the `fetch` response body passed straight through on the
+  object store.
+- **`serveMedia` builds every response from a stream.** A boundary test asserts
+  the module contains no `new Uint8Array(`, no `store.get(` and no `getRange(`
+  at all.
+- **Eleven tests** across the parity suite, including that a streamed range and
+  a buffered one return byte-identical answers on both implementations.
+
+**Decisions.**
+
+- ***`get` and `getRange` stay.*** Several callers genuinely want bytes — the
+  ingest verification reads a stored file back to compare it against what was
+  uploaded — and making them drain a stream to get a `Uint8Array` would be a
+  worse interface for the sake of tidiness. `openStream` is for the one case
+  where the bytes are going straight to a socket.
+- ***Absence is decided before a stream exists.*** The filesystem store stats the
+  file first and the object store checks the status before returning the body.
+  A stream that failed part way through would already have sent a 200, and after
+  the status line has gone there is no way left to say 404.
+- ***`Content-Length` now comes from the recorded `size_bytes`***, not from
+  counting what was read — a stream has no length until it has been drained, and
+  omitting the header would stop a browser showing a progress bar and stop
+  Safari seeking. The row is written from the ingest result and is the authority
+  on how big the object is. **A store whose file disagreed with its row would
+  now send a wrong length**, which is a real trade and is written into the
+  module rather than hidden.
+- ***No retry on a streamed read.*** A retry means sending the request again, and
+  the caller has already been handed a stream — a second attempt would have to
+  be spliced into a response that is partly written. Failing to *start* is still
+  an error before anything is sent; failing part way ends the stream, which is
+  what a truncated download looks like at every layer anyway.
+- ***No timeout on a streamed body.*** The buffered reads abort after thirty
+  seconds because a request that has not finished by then has failed. A stream
+  is the opposite: a sixty-megabyte video on a slow phone connection is
+  *supposed* to take minutes, and a timer would cut it off. A stalled connection
+  is the socket's problem to notice.
+- *A ranged stream still refuses a 200.* Same rule as the buffered ranged read,
+  and the same reason — a store that ignores `Range` must not be able to look
+  like one that honours it.
+
+**Deviations.** `MediaStore` gained a second method, so the seam has changed
+twice in one session. Both implementations have it and the interface requires
+it.
+
+**Checklist.** Point 9 is this change's; the rest were re-checked because it
+changes how two routes send their bodies.
+
+1. **No monetary value is a JavaScript number.** Nothing here touches money.
+2. **No send path bypasses anything.** Nothing here sends. `verify:deployment`
+   re-run — 56 checks pass.
+3. **A jurisdiction block still stops one recipient.** Untouched.
+4. **The operator still cannot record, amend or void an approval.** Untouched.
+5. **No investor-facing response reveals another investor.** Every access check
+   still runs before a byte is read and in the same order; `serveMedia` is
+   reached only after `mayViewVideo` has said yes. The existing boundary test
+   pinning that the session is read before the store is touched still passes,
+   and `verify:deployment` re-checks over real HTTP that an anonymous range
+   request is the same 404 as anything else.
+6. **Claim and sign-in tokens are single-use, hashed and expiring.** Untouched.
+7. **Suspension revokes sessions and refuses new links.** Untouched.
+8. **No log line carries a token, a body or a key.** Neither changed module
+   calls `console`; a stream is not logged, counted or inspected on its way
+   through.
+9. **The verification page is still the only indexable route.** The 200, the 206
+   and the 416 still carry one header table, spread three times and defined
+   once, and the test asserting exactly that still passes. A streamed response
+   is as private and as unindexed as a buffered one — and `verify:deployment`
+   checks the actual headers on both a whole and a partial response.
+10. A published Q&A entry carries nothing identifying. Untouched.
+11. The AI path cannot change a calculated figure. Untouched.
+12. The app still refuses to send when its base URL is not the production value.
+    Confirmed by `verify:deployment`.
+
+**Verified.** `pnpm verify:deployment` — the same 56 checks, now passing against
+streamed responses: the whole file arriving byte-complete, `bytes=0-1` returning
+exactly the first two bytes, an open-ended range returning exactly the last four
+and the right ones. That those still pass unchanged is the point — the bytes on
+the wire did not change, only where they were held on the way. `pnpm test` —
+1791 tests, 91 files, including that a streamed range and a buffered range give
+byte-identical answers on both stores. `verify:media`, `verify:object-store` and
+`verify:documents` all re-run green.
+
+**Uncertain.**
+
+- *`Content-Length` is now the row's claim rather than an observation.* If a
+  stored file were ever a different length from its `size_bytes` — a truncated
+  upload, a restore that brought a database back without its bucket — the
+  response would announce a length it does not deliver, and a browser would hang
+  waiting for bytes that are not coming. Nothing produces that state today: the
+  size is written from the ingest result in the same call that stores the bytes.
+  A length check on read would cost a stat per request and is the obvious guard
+  if it ever matters.
+- *A stream that fails after the first byte is a truncated download with a 200
+  already sent.* True of every streaming server and not fixable at this layer;
+  worth knowing because the buffered version could not do it.
+- *The image and document routes still buffer.* Five and twenty megabytes
+  respectively, both bounded deliberately, and neither is seeked. Consistency
+  would say convert them; the ceilings say it does not matter yet.
+- *Nothing has been measured.* The reasoning about memory is arithmetic rather
+  than a profile. It is fairly obvious arithmetic — a sixty-megabyte buffer is
+  sixty megabytes — but no run of this application has been watched to confirm
+  the heap actually drops.

@@ -23,7 +23,9 @@
  * library, which is exactly the state a fresh install is in.
  */
 
-import { mkdir, open, readFile, rm, writeFile } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
+import { mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { Readable } from 'node:stream'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { env } from '@/lib/env'
@@ -51,6 +53,23 @@ export interface MediaStore {
    * the object is a caller error rather than a case to answer.
    */
   getRange(key: string, start: number, end: number): Promise<StoredObject | null>
+  /**
+   * The same bytes as `get`/`getRange`, as a stream that is never all in
+   * memory at once.
+   *
+   * This is what the routes use. `get` stays because several callers genuinely
+   * want the bytes — the ingest verification reads a stored file to compare it,
+   * and a caller that wants a `Uint8Array` should not have to drain a stream to
+   * get one. `openStream` is for the one case where holding sixty megabytes to
+   * hand them straight to a socket is the wrong shape.
+   *
+   * `range` is inclusive on both ends, as `getRange` is. Null means the object
+   * is not there.
+   */
+  openStream(
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<ReadableStream<Uint8Array> | null>
   remove(key: string): Promise<void>
 }
 
@@ -152,6 +171,30 @@ class FilesystemMediaStore implements MediaStore {
     }
   }
 
+  async openStream(
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<ReadableStream<Uint8Array> | null> {
+    const file = this.resolve(key)
+
+    // Existence is checked before a stream is built, so a missing file is a
+    // null here rather than an error event on a response that has already
+    // begun — by which point the status line has gone and there is no way
+    // left to say 404.
+    try {
+      await stat(file)
+    } catch {
+      return null
+    }
+
+    const stream = createReadStream(
+      file,
+      range ? { start: range.start, end: range.end } : undefined,
+    )
+
+    return Readable.toWeb(stream) as ReadableStream<Uint8Array>
+  }
+
   async remove(key: string): Promise<void> {
     const file = this.resolve(key)
 
@@ -225,6 +268,13 @@ class ObjectMediaStore implements MediaStore {
     if (bytes === null) return null
 
     return { bytes, contentType: 'application/octet-stream' }
+  }
+
+  async openStream(
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<ReadableStream<Uint8Array> | null> {
+    return this.client.openObjectStream(this.checked(key), range)
   }
 
   async remove(key: string): Promise<void> {

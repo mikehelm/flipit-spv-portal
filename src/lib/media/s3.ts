@@ -448,6 +448,60 @@ export class S3ObjectClient {
     return new Uint8Array(await response.arrayBuffer())
   }
 
+  /**
+   * The object's bytes as a stream, never all in memory at once.
+   *
+   * Two things are deliberately different from the buffered reads above.
+   *
+   * **No retry.** A retry means sending the request again, and the caller of a
+   * stream has already been handed one — a second attempt would have to be
+   * spliced into a response that is partly written. A failure to *start* is
+   * still an error before anything is sent; a failure part way through ends
+   * the stream, which is what a truncated download looks like at every layer.
+   *
+   * **No timeout on the body.** The buffered reads abort after thirty seconds
+   * because a request that has not finished by then has failed. A stream is
+   * different: a sixty-megabyte video on a slow phone connection is *supposed*
+   * to take minutes, and a timeout that fires mid-download would cut it off.
+   * A stalled connection is the socket's problem to notice, not this timer's.
+   */
+  async openObjectStream(
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<ReadableStream<Uint8Array> | null> {
+    const signed = signRequest(this.config, { method: 'GET', key, now: new Date() })
+
+    const headers: Record<string, string> = { ...signed.headers }
+    if (range) headers.range = `bytes=${range.start}-${range.end}`
+
+    const response = await fetch(signed.url, {
+      method: 'GET',
+      headers,
+      redirect: 'error',
+    })
+
+    if (response.status === 404) {
+      const verdict = await this.isAbsence(response)
+      if (verdict.absent) return null
+      await this.refuse(response, 'GET', verdict.code)
+    }
+
+    if (range && response.status === 200) {
+      await response.body?.cancel().catch(() => undefined)
+      throw new S3RequestError(
+        200,
+        null,
+        'The object store ignored a range request and offered the whole object. ' +
+          'This build will not serve a partial response it did not receive.',
+      )
+    }
+
+    const expected = range ? 206 : 200
+    if (response.status !== expected) await this.refuse(response, 'GET')
+
+    return response.body as ReadableStream<Uint8Array> | null
+  }
+
   async deleteObject(key: string): Promise<void> {
     const response = await this.send('DELETE', key)
 

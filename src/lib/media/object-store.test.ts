@@ -23,6 +23,27 @@ import { mediaStore, resetMediaStoreCache, type MediaStore } from './store'
 
 const KEY = 'img_STOREKEYSTOREKEYSTOREKEY'
 
+/** Read a whole stream into one array, for a test that wants to compare bytes. */
+async function drain(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = []
+  const reader = stream.getReader()
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value) chunks.push(value)
+  }
+
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+  const out = new Uint8Array(total)
+  let at = 0
+  for (const chunk of chunks) {
+    out.set(chunk, at)
+    at += chunk.length
+  }
+  return out
+}
+
 const ORIGINAL = { ...process.env }
 
 function restoreEnv(): void {
@@ -164,6 +185,55 @@ describe('both stores answer the same questions the same way', () => {
         await expect(store.getRange('../../etc/passwd', 0, 9)).rejects.toThrow(
           /not a storage key/,
         )
+      })
+
+      it('streams the whole object, and the stream is the bytes', async () => {
+        const store = build()
+        const bytes = new Uint8Array(300)
+        for (let i = 0; i < bytes.length; i += 1) bytes[i] = i % 256
+
+        await store.put('img_STREAMSTREAMSTREAMSTR', bytes, 'image/png')
+
+        const stream = await store.openStream('img_STREAMSTREAMSTREAMSTR')
+        expect(stream).not.toBeNull()
+        expect([...(await drain(stream!))]).toEqual([...bytes])
+      })
+
+      it('streams a range, inclusive on both ends', async () => {
+        const store = build()
+        const bytes = new Uint8Array(300)
+        for (let i = 0; i < bytes.length; i += 1) bytes[i] = i % 256
+
+        await store.put('img_STREAMRANGESTREAMRAN', bytes, 'image/png')
+
+        const two = await store.openStream('img_STREAMRANGESTREAMRAN', { start: 0, end: 1 })
+        expect([...(await drain(two!))]).toEqual([0, 1])
+
+        const tail = await store.openStream('img_STREAMRANGESTREAMRAN', { start: 297, end: 299 })
+        expect([...(await drain(tail!))]).toEqual([297 % 256, 298 % 256, 299 % 256])
+
+        // Byte for byte the same answer as the buffered read, on both stores.
+        const buffered = await store.getRange('img_STREAMRANGESTREAMRAN', 10, 19)
+        const streamed = await store.openStream('img_STREAMRANGESTREAMRAN', { start: 10, end: 19 })
+        expect([...(await drain(streamed!))]).toEqual([...buffered!.bytes])
+      })
+
+      /**
+       * Absence has to be decided BEFORE a response begins. A stream that
+       * failed part way through would already have sent a 200, and there is no
+       * way left to say 404 after the status line has gone.
+       */
+      it('an absent object is null before a stream exists, not an error during one', async () => {
+        const store = build()
+        expect(await store.openStream('img_NOSTREAMNOSTREAMNOSTR')).toBeNull()
+        expect(
+          await store.openStream('img_NOSTREAMNOSTREAMNOSTR', { start: 0, end: 1 }),
+        ).toBeNull()
+      })
+
+      it('a stream refuses a key that is not a storage key too', async () => {
+        const store = build()
+        await expect(store.openStream('../../etc/passwd')).rejects.toThrow(/not a storage key/)
       })
 
       it('says where it is writing, and never says it with a credential', () => {

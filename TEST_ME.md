@@ -517,7 +517,8 @@ Worth trying, because these are all meant to work:
 - **A note saying what changed in a correction.** A corrected document is versioned and both versions stay readable, but nothing records what was different — only the description, if somebody writes one.
 - **An email when a document is issued or corrected.** Deliberate, but somebody will expect it. Send a message or an update alongside.
 - **A real storage bucket, actually connected.** The code to use one is now written and tested (see "The media library"), but only against a stand-in on the same machine. Pointing it at a real Amazon or Cloudflare bucket and uploading one image is the last step, and it is minutes rather than work.
-- **Streaming a video rather than holding it in memory.** Seeking works now, but a straight download still builds the whole file in memory before sending it. Fine at sixty megabytes; not the shape you would want for anything larger.
+- **A check that a stored file is the size its record says.** Nothing produces a mismatch today, but if one ever happened — a restore that brought the database back without its files — a download would stall rather than fail cleanly.
+- **A tidy-up for stored files whose records are gone.** Harmless, invisible, and storage somebody pays for.
 
 ## The round, and closing it
 

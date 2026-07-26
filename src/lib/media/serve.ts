@@ -13,6 +13,15 @@
  * `noindex` still apply to a partial response, and the content type is still
  * the one sniffed from the file's own bytes at upload rather than anything a
  * browser said.
+ *
+ * **The body is a stream, not a buffer.** A sixty-megabyte video was previously
+ * read into one `Uint8Array` and handed to a `Response`, which meant the whole
+ * file was in memory for as long as it took a phone on a slow connection to
+ * pull it down. `Content-Length` therefore comes from the recorded `size_bytes`
+ * rather than from counting what was read — the row is written from the ingest
+ * result and is the authority on how big the object is. A store whose file
+ * disagreed with its row would now send a wrong length rather than a right one,
+ * which is a trade recorded under Uncertain in PROGRESS.md rather than hidden.
  */
 
 import {
@@ -67,30 +76,30 @@ export async function serveMedia(input: ServeMediaInput): Promise<Response> {
 
   if (outcome.kind === 'partial') {
     const { range } = outcome
-    const part = await input.store.getRange(input.storageKey, range.start, range.end)
-    if (!part) return input.notFound
+    const stream = await input.store.openStream(input.storageKey, range)
+    if (!stream) return input.notFound
 
-    return new Response(new Uint8Array(part.bytes), {
+    return new Response(stream, {
       status: 206,
       headers: {
         ...BASE_HEADERS,
         'Content-Type': input.contentType,
-        'Content-Length': String(part.bytes.length),
+        'Content-Length': String(range.length),
         'Content-Range': contentRangeHeader(range, input.sizeBytes),
         'Accept-Ranges': 'bytes',
       },
     })
   }
 
-  const object = await input.store.get(input.storageKey)
-  if (!object) return input.notFound
+  const stream = await input.store.openStream(input.storageKey)
+  if (!stream) return input.notFound
 
-  return new Response(new Uint8Array(object.bytes), {
+  return new Response(stream, {
     status: 200,
     headers: {
       ...BASE_HEADERS,
       'Content-Type': input.contentType,
-      'Content-Length': String(object.bytes.length),
+      'Content-Length': String(input.sizeBytes),
       'Accept-Ranges': 'bytes',
     },
   })

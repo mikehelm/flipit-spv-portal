@@ -163,12 +163,21 @@ describe('the video is served only to authenticated investors — §13.3', () =>
 
   it('the range is resolved against the recorded size, never against a read', () => {
     const serve = read('src/lib/media/serve.ts')
-    expect(serve).toContain('resolveRange(input.request.headers.get(\'range\'), input.sizeBytes)')
-    // The whole object is never fetched in order to answer a partial request.
-    const partialBranch = serve.slice(serve.indexOf("outcome.kind === 'partial'"))
-    expect(partialBranch.slice(0, partialBranch.indexOf('return new Response'))).not.toContain(
-      'store.get(',
-    )
+    expect(serve).toContain("resolveRange(input.request.headers.get('range'), input.sizeBytes)")
+  })
+
+  /**
+   * The body is a stream. A route that buffered a sixty-megabyte video into one
+   * array to hand it to a socket held all of it in memory for as long as a
+   * phone on a slow connection took to pull it down.
+   */
+  it('no media response is ever built from a buffer', () => {
+    const serve = code('src/lib/media/serve.ts')
+
+    expect(serve).not.toContain('new Uint8Array(')
+    expect(serve).not.toContain('store.get(')
+    expect(serve).not.toContain('getRange(')
+    expect(serve.match(/store\.openStream\(/g)?.length).toBe(2)
   })
 
   it('never indexed', () => {
