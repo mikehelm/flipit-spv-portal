@@ -89,7 +89,7 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // The three headers that are not about indexing apply everywhere,
+        // The browser-policy headers apply everywhere,
         // including the public routes the entry above deliberately skips.
         // `/verify` must still refuse to be framed: it is the page that tells
         // an investor what a genuine message looks like, and a copy of it
@@ -99,10 +99,118 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Referrer-Policy', value: 'no-referrer' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Content-Security-Policy', value: contentSecurityPolicy() },
+          { key: 'Permissions-Policy', value: PERMISSIONS_POLICY },
+          ...strictTransportSecurity(),
         ],
       },
     ]
   },
+}
+
+// ---------------------------------------------------------------------------
+// Browser policy headers
+// ---------------------------------------------------------------------------
+
+/**
+ * Content-Security-Policy.
+ *
+ * This application loads nothing from anywhere else — no CDN, no analytics, no
+ * font service, no tag manager — so `default-src 'self'` is achievable rather
+ * than aspirational, and every widening below is named with the feature that
+ * needs it.
+ *
+ * **`script-src` carries `'unsafe-inline'`, and that is the weak part.** Next
+ * injects inline bootstrap and hydration scripts, and the tight answer is a
+ * per-request nonce, which needs middleware and makes every route dynamic.
+ * Most of this application already is. It is the next improvement here and it
+ * is recorded as such rather than glossed over: without it, CSP is defence
+ * against injected *external* script and not against injected inline script.
+ *
+ * `frame-ancestors 'none'` says what `X-Frame-Options: DENY` says, for browsers
+ * that prefer the modern spelling. Both are kept.
+ */
+function contentSecurityPolicy(): string {
+  const directives = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    // Nothing in this application is a plugin or an applet, and a <frame> on an
+    // investor's portal is somebody else's page wearing it.
+    "object-src 'none'",
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+    // A form on this origin may only post back to this origin. Without it, an
+    // injected form could post a password or a claim token elsewhere.
+    "form-action 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    // Tailwind ships a stylesheet, and Next inlines critical CSS.
+    "style-src 'self' 'unsafe-inline'",
+    // `data:` for the inline brand marks; `blob:` for a video preview held in
+    // memory before it is uploaded (§13.3).
+    "img-src 'self' data: blob:",
+    "media-src 'self' blob:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    // MediaRecorder may run off a worker created from a blob.
+    "worker-src 'self' blob:",
+  ]
+
+  // Next's development server evaluates code to hot-reload. Never in production
+  // — `'unsafe-eval'` there would undo most of the value of the policy.
+  if (process.env.NODE_ENV === 'development') {
+    directives.push("script-src-elem 'self' 'unsafe-inline'")
+  }
+
+  return directives.join('; ')
+}
+
+/**
+ * Permissions-Policy.
+ *
+ * **`camera` and `microphone` are `self`, deliberately.** §13.3 records the
+ * operator's video in the browser through `getUserMedia`, and the tidy-looking
+ * `camera=(), microphone=()` would break a shipped feature silently — the
+ * prompt simply never appears and the recorder reports a device problem. Denied
+ * to every other origin, which is what matters.
+ *
+ * Everything else this application has no use for is switched off by name
+ * rather than left to a browser default that may change.
+ */
+const PERMISSIONS_POLICY = [
+  'camera=(self)',
+  'microphone=(self)',
+  'geolocation=()',
+  'payment=()',
+  'usb=()',
+  'serial=()',
+  'bluetooth=()',
+  'midi=()',
+  'magnetometer=()',
+  'gyroscope=()',
+  'accelerometer=()',
+  'display-capture=()',
+  'idle-detection=()',
+].join(', ')
+
+/**
+ * Strict-Transport-Security, and only when a browser is actually reaching this
+ * deployment over TLS.
+ *
+ * Sent on an http:// origin it is ignored; sent on a development machine that
+ * later serves something else on localhost it is a nuisance that outlives the
+ * project. So it follows `PUBLIC_ORIGIN` — the same value that decides whether
+ * a session cookie is `Secure` — and is absent otherwise.
+ *
+ * **No `preload`, and no `includeSubDomains`.** Both are close to irreversible:
+ * preload means asking a browser vendor to hard-code the domain, and
+ * `includeSubDomains` on a name somebody else may later use for something
+ * unrelated is a decision made on their behalf. A year of max-age on this one
+ * hostname is the whole of what is needed here.
+ */
+function strictTransportSecurity(): Array<{ key: string; value: string }> {
+  const origin = (process.env.PUBLIC_ORIGIN || process.env.APP_URL || '').trim()
+  if (!origin.startsWith('https://')) return []
+  return [{ key: 'Strict-Transport-Security', value: 'max-age=31536000' }]
 }
 
 export default nextConfig

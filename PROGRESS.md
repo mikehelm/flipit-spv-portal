@@ -4607,3 +4607,89 @@ that were failing on macOS now have a path that works there.
   exercised on the platform that already worked. The claim is that `/dev/fd` is
   present and lists the calling process's descriptors on macOS; the proof is
   `pnpm test` on Michael's Mac, and it has not been run.
+
+## CSP, HSTS and Permissions-Policy — and the two things a tidy policy breaks
+
+The review reported all three absent. It was right, and it slightly overstated
+the position: `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and
+`X-Content-Type-Options: nosniff` were already served everywhere. These are the
+three that were not.
+
+Adding them was not the interesting part. The interesting part was what a
+policy that *looked* more secure would have switched off.
+
+**Built.** All three on `/:path*`, so they reach the public verification page as
+well as the private ones. `browser-policy.test.ts` — 17 tests.
+
+**Decisions.**
+
+- ***`camera=(self)` and `microphone=(self)`, not `camera=()`.*** §13.3 records
+  the operator's video in the browser through `getUserMedia`. The tidy-looking
+  denial breaks it **silently** — no permission prompt appears and the recorder
+  reports a device fault, which is indistinguishable from a broken webcam. A
+  shipped feature switched off by a header somebody added to be safe. Denied to
+  every other origin, which is the part that matters.
+- ***`blob:` in `media-src`, `img-src` and `worker-src`, and nowhere else.*** A
+  recorded video is held in memory as a blob before upload; `MediaRecorder` may
+  run off a worker created from one. `connect-src` and `script-src` are
+  asserted not to carry it.
+- ***`script-src` keeps `'unsafe-inline'`, and the comment says so out loud.***
+  Next injects inline bootstrap and hydration script. The tight answer is a
+  per-request nonce, which needs middleware and makes every route dynamic —
+  most of this application already is, so it is achievable and it is the next
+  improvement here. Until then the policy defends against injected *external*
+  script and **not** against injected inline script. That limitation is written
+  into the file and pinned by a test, because the failure mode of a CSP is
+  somebody reading it and believing it is airtight.
+- ***`'unsafe-eval'` never, in any build.*** Next's dev server wants it to
+  hot-reload; in production it would undo most of the policy. Asserted against a
+  comment-stripped copy of the source, so the word appearing in an explanation
+  cannot satisfy the check.
+- ***`form-action 'self'`.*** The quiet one worth naming: without it, injected
+  markup can post the sign-in form — password and all — to another origin.
+- ***`frame-ancestors 'none'` as well as `X-Frame-Options: DENY`.*** Same rule,
+  two spellings, and §15.1's whole subject is a copy of the verification page
+  inside somebody else's frame.
+- ***HSTS follows `PUBLIC_ORIGIN`, the same value that decides whether a cookie
+  is `Secure`.*** One question, one answer. If those two could disagree, one of
+  them is wrong and nothing would say which.
+- ***No `preload`, no `includeSubDomains`.*** Both are close to irreversible —
+  preload is a browser vendor hard-coding the hostname, and `includeSubDomains`
+  decides on behalf of names somebody may later use for something unrelated. A
+  year on this one hostname is the whole of what is needed.
+- ***`connect-src 'self'` is achievable because this application loads nothing
+  from anywhere.*** No CDN, no analytics, no font service, no tag manager. A
+  test asserts no `http://`, `https://` or `*` appears anywhere in the directive
+  list, so adding a third-party script later has to be a deliberate act.
+
+**Deviations.** None.
+
+**Checklist.** 1, 3, 4, 10, 11, 12: untouched. 2: no send path changed. 5: no
+investor data involved. 6: tokens better protected — `form-action` stops an
+injected form posting a claim token elsewhere. 7: untouched. 8: nothing logged.
+9: unchanged — `/verify` and `/privacy` are still the only indexable routes, and
+they now carry the policy too.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2312, up from 2295) and `pnpm build`
+are green. Verified against a running server: CSP and Permissions-Policy present
+on `/verify` and on `/signin`, and the pages still render.
+
+**Uncertain — and one of these is an operational trap.**
+
+- ***`next.config.ts` headers are evaluated at BUILD time.*** `PUBLIC_ORIGIN`
+  must be set when `pnpm build` runs, not only when `pnpm start` runs, or HSTS is
+  silently absent. Found by looking for the header on a running server and not
+  finding it, then confirming it appears in `routes-manifest.json` only when the
+  build had the variable. The cookie and the sitemap read it at runtime, so
+  setting it in `.env` covers all three — but a deployment that exports it only
+  in the start command gets two of the three and no warning. Recorded in
+  `.env.example`.
+- *No served-response test.* These are source-level assertions plus one manual
+  `curl`. `verify:deployment` is where a served check belongs and it does not
+  have one yet.
+- *The policy has not met a real browser.* `curl` proves the header is sent and
+  the HTML renders; it does not prove nothing is blocked at runtime. The
+  surfaces to watch are the video recorder, an image upload preview and the
+  email template preview. `verify:viewport` drives a real Chromium and would
+  catch a console violation if it were taught to look.
+- *`script-src 'unsafe-inline'` remains.* Named above; the nonce is the fix.
