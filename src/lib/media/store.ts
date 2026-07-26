@@ -24,7 +24,7 @@
  */
 
 import { createReadStream } from 'node:fs'
-import { mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, open, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -56,6 +56,12 @@ export interface StoredObject {
 export interface StoredStream {
   stream: ReadableStream<Uint8Array>
   length: number
+}
+
+/** One thing that is actually stored, as a listing describes it. */
+export interface StoredObjectSummary {
+  key: string
+  sizeBytes: number
 }
 
 /** A stream that ends immediately. Not null: the object is there, and empty. */
@@ -116,6 +122,27 @@ export interface MediaStore {
    * answer is the store's rather than the filesystem's.
    */
   stat(key: string): Promise<{ sizeBytes: number } | null>
+  /**
+   * Everything that is actually stored, up to a limit the caller states.
+   *
+   * The reverse of every other read here. `get`, `stat` and `openStream` all
+   * start from a key on a row and ask whether the object is there; this starts
+   * from the store and asks what is in it. It is the half of reconciliation
+   * `pnpm media:check` could not do: an object no row points at is invisible to
+   * a check that walks the rows, and an investor's subscription agreement
+   * sitting in a bucket that nothing references is a retention problem rather
+   * than a tidiness one.
+   *
+   * **The limit is required and the answer says whether it was reached.** A
+   * bucket is not a directory somebody sized; holding all of one in memory
+   * because a caller forgot a limit is how a report becomes an outage. A
+   * `truncated` answer is a report that must say so.
+   *
+   * Keys are returned exactly as stored, including any that this application
+   * would refuse to write. What to make of those is the caller's judgement, not
+   * the store's — a stray file is a fact about the deployment.
+   */
+  list(limit: number): Promise<{ objects: StoredObjectSummary[]; truncated: boolean }>
   remove(key: string): Promise<void>
 }
 
@@ -260,6 +287,53 @@ class FilesystemMediaStore implements MediaStore {
     }
   }
 
+  /**
+   * What is in the directory, with the sizes, sorted.
+   *
+   * Sorted because two runs of the same check on the same store should produce
+   * the same report, and `readdir` does not promise an order. A subdirectory is
+   * skipped: nothing here writes one, and recursing would be inventing a
+   * meaning for a thing somebody else put there.
+   *
+   * A directory that does not exist yet lists as empty rather than failing. A
+   * store configured on a fresh machine has written nothing, which is a clean
+   * answer to the question, not an error about it.
+   */
+  async list(limit: number): Promise<{ objects: StoredObjectSummary[]; truncated: boolean }> {
+    if (!Number.isSafeInteger(limit) || limit <= 0) {
+      throw new Error('A listing needs a positive limit of how many to hold.')
+    }
+
+    let entries: string[]
+    try {
+      entries = await readdir(this.root)
+    } catch {
+      return { objects: [], truncated: false }
+    }
+
+    entries.sort()
+
+    const objects: StoredObjectSummary[] = []
+
+    for (const entry of entries) {
+      let size: number
+      try {
+        const found = await stat(path.join(this.root, entry))
+        if (!found.isFile()) continue
+        size = found.size
+      } catch {
+        // Removed between the read of the directory and the read of the file.
+        // It is not there now, which is the answer this is collecting.
+        continue
+      }
+
+      if (objects.length === limit) return { objects, truncated: true }
+      objects.push({ key: entry, sizeBytes: size })
+    }
+
+    return { objects, truncated: false }
+  }
+
   async remove(key: string): Promise<void> {
     const file = this.resolve(key)
 
@@ -346,6 +420,18 @@ class ObjectMediaStore implements MediaStore {
 
   async stat(key: string): Promise<{ sizeBytes: number } | null> {
     return this.client.headObject(this.checked(key))
+  }
+
+  /**
+   * The bucket's own account of what is in it.
+   *
+   * No key validation here, deliberately: this is the one read that is not
+   * about a key this application chose, and refusing to report an object
+   * because its name is one we would not have written is refusing to report
+   * exactly the object worth reporting.
+   */
+  async list(limit: number): Promise<{ objects: StoredObjectSummary[]; truncated: boolean }> {
+    return this.client.listObjects(limit)
   }
 
   async remove(key: string): Promise<void> {

@@ -75,6 +75,31 @@ export function canonicalUri(bucket: string, key: string): string {
   return `/${encodeSegment(bucket)}/${encodeSegment(key)}`
 }
 
+/**
+ * The path of a request about the bucket itself rather than an object in it.
+ *
+ * One caller: listing. `/bucket`, with no trailing slash, because that is the
+ * path actually sent — and a signature is computed over the path that is sent,
+ * not over a tidier one.
+ */
+export function canonicalBucketUri(bucket: string): string {
+  return `/${encodeSegment(bucket)}`
+}
+
+/**
+ * The query string, canonicalised: sorted by name, every part encoded.
+ *
+ * Empty when there is no query, which is what every request in this file was
+ * until listing arrived — so the canonical request of a get, a put and a delete
+ * is unchanged to the character, and the golden tests that pin them still pass.
+ */
+export function canonicalQueryString(query: Readonly<Record<string, string>>): string {
+  return Object.keys(query)
+    .sort()
+    .map((name) => `${encodeSegment(name)}=${encodeSegment(query[name]!)}`)
+    .join('&')
+}
+
 /** `20260725T230000Z` and `20260725`. */
 export function amzTimestamps(now: Date): { amzDate: string; datestamp: string } {
   const amzDate = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
@@ -86,6 +111,11 @@ export type S3Method = 'PUT' | 'GET' | 'DELETE' | 'HEAD'
 export interface CanonicalInput {
   method: S3Method
   uri: string
+  /**
+   * The query, unencoded. Absent on every request about a single object, which
+   * is all of them except listing.
+   */
+  query?: Readonly<Record<string, string>>
   /** Lowercase header names to values. Must include `host` and `x-amz-*`. */
   headers: Readonly<Record<string, string>>
   payloadHash: string
@@ -115,8 +145,8 @@ export function buildCanonicalRequest(input: CanonicalInput): {
   const canonical = [
     input.method,
     input.uri,
-    // No query string is ever sent. An empty line, not an omitted one.
-    '',
+    // Empty for everything but a listing — an empty line, not an omitted one.
+    input.query ? canonicalQueryString(input.query) : '',
     canonicalHeaders,
     signedHeaders,
     input.payloadHash,
@@ -182,14 +212,23 @@ export function signRequest(
   config: S3Config,
   request: {
     method: S3Method
-    key: string
+    /**
+     * The object. Absent for a request about the bucket itself — which is
+     * listing, and only listing.
+     */
+    key?: string
+    /** Query parameters, unencoded. Listing again, and only listing. */
+    query?: Readonly<Record<string, string>>
     body?: Uint8Array
     contentType?: string
     now: Date
   },
 ): SignedRequest {
   const { amzDate, datestamp } = amzTimestamps(request.now)
-  const uri = canonicalUri(config.bucket, request.key)
+  const uri =
+    request.key === undefined
+      ? canonicalBucketUri(config.bucket)
+      : canonicalUri(config.bucket, request.key)
   const host = new URL(config.endpoint).host
   const payloadHash = request.body ? sha256Hex(request.body) : EMPTY_PAYLOAD_SHA256
 
@@ -204,6 +243,7 @@ export function signRequest(
   const { canonical, signedHeaders } = buildCanonicalRequest({
     method: request.method,
     uri,
+    query: request.query,
     headers,
     payloadHash,
   })
@@ -213,8 +253,13 @@ export function signRequest(
     .update(buildStringToSign(canonical, amzDate, scope), 'utf8')
     .digest('hex')
 
+  // The query goes on the URL exactly as it went into the signature. Building
+  // it twice, once for each, is how a signature comes to describe a request
+  // that was not the one sent.
+  const query = request.query ? canonicalQueryString(request.query) : ''
+
   return {
-    url: `${config.endpoint.replace(/\/+$/, '')}${uri}`,
+    url: `${config.endpoint.replace(/\/+$/, '')}${uri}${query ? `?${query}` : ''}`,
     headers: {
       ...headers,
       authorization:
@@ -237,7 +282,9 @@ export function verifySignature(
   config: S3Config,
   received: {
     method: S3Method
-    key: string
+    /** Absent for a bucket-level request, exactly as in `signRequest`. */
+    key?: string
+    query?: Readonly<Record<string, string>>
     body?: Uint8Array
     contentType?: string
     amzDate: string
@@ -285,6 +332,73 @@ export class S3RequestError extends Error {
  */
 function errorCodeFrom(body: string): string | null {
   return /<Code>([A-Za-z]{1,64})<\/Code>/.exec(body)?.[1] ?? null
+}
+
+/** One object in a bucket, as a listing describes it. */
+export interface ObjectSummary {
+  key: string
+  sizeBytes: number
+}
+
+/**
+ * The five XML entities, and only those five.
+ *
+ * A key is base64url and never contains one. A key this application did not
+ * write might contain anything, and reporting `a&amp;b` as a name nobody can
+ * find in their console is a small lie that costs somebody an afternoon. There
+ * is no numeric-entity handling and no external-entity handling of any kind:
+ * this reads a listing, not a document.
+ */
+function unescapeXml(text: string): string {
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+}
+
+/**
+ * A `ListBucketResult`, read with three patterns rather than an XML parser.
+ *
+ * The same argument as the rest of this file: a dependency that parses
+ * arbitrary XML, on a path that handles an investor's documents, is a larger
+ * surface than the thing it is being used for. What is needed is the contents
+ * of `<Key>` and `<Size>` inside each `<Contents>`, plus whether there is more
+ * to come — and anything that does not match those shapes is skipped rather
+ * than guessed at.
+ *
+ * A `<Size>` that is not a plain integer, or a `<Key>` that is empty, drops the
+ * entry. A listing this cannot read produces fewer objects, never a wrong one,
+ * and the caller's totals are then obviously short rather than subtly wrong.
+ */
+export function parseListResult(xml: string): {
+  objects: ObjectSummary[]
+  nextToken: string | null
+} {
+  const objects: ObjectSummary[] = []
+
+  for (const block of xml.match(/<Contents>[\s\S]*?<\/Contents>/g) ?? []) {
+    const key = /<Key>([\s\S]*?)<\/Key>/.exec(block)?.[1]
+    const size = /<Size>(\d{1,19})<\/Size>/.exec(block)?.[1]
+    if (key === undefined || key === '' || size === undefined) continue
+
+    const sizeBytes = Number(size)
+    if (!Number.isSafeInteger(sizeBytes)) continue
+
+    objects.push({ key: unescapeXml(key), sizeBytes })
+  }
+
+  const truncated = /<IsTruncated>\s*true\s*<\/IsTruncated>/i.test(xml)
+  const token = /<NextContinuationToken>([\s\S]*?)<\/NextContinuationToken>/.exec(xml)?.[1]
+
+  // A store that says "there is more" and does not say where to continue from
+  // has ended the walk, because asking again without a token would fetch the
+  // first page a second time and loop for ever.
+  return {
+    objects,
+    nextToken: truncated && token ? unescapeXml(token) : null,
+  }
 }
 
 const ATTEMPTS = 3
@@ -349,16 +463,35 @@ export class S3ObjectClient {
     return `${this.config.endpoint}/${this.config.bucket}`
   }
 
+  /**
+   * One request, retried the way an idempotent verb may be.
+   *
+   * `key` is absent for the one request that is about the bucket rather than an
+   * object in it — listing — and `query` goes with it. Everything else about
+   * the loop is the same for all five verbs, which is the reason this takes an
+   * options bag rather than growing a second copy of the retry logic.
+   */
   private async send(
     method: S3Method,
-    key: string,
-    body?: Uint8Array,
-    contentType?: string,
+    options: {
+      key?: string
+      query?: Readonly<Record<string, string>>
+      body?: Uint8Array
+      contentType?: string
+    } = {},
   ): Promise<Response> {
+    const { key, query, body, contentType } = options
     let lastError: unknown = null
 
     for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
-      const signed = signRequest(this.config, { method, key, body, contentType, now: new Date() })
+      const signed = signRequest(this.config, {
+        method,
+        key,
+        query,
+        body,
+        contentType,
+        now: new Date(),
+      })
 
       try {
         const response = await fetch(signed.url, {
@@ -428,7 +561,7 @@ export class S3ObjectClient {
   }
 
   async putObject(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
-    const response = await this.send('PUT', key, bytes, contentType)
+    const response = await this.send('PUT', { key, body: bytes, contentType })
     if (!response.ok) await this.refuse(response, 'PUT')
     // The body of a successful PUT is empty, and leaving it undrained keeps a
     // socket open until the agent collects it.
@@ -436,7 +569,7 @@ export class S3ObjectClient {
   }
 
   async getObject(key: string): Promise<Uint8Array | null> {
-    const response = await this.send('GET', key)
+    const response = await this.send('GET', { key })
 
     // Absent is an answer, not a failure — the filesystem store says the same
     // thing by returning null, and the two must be indistinguishable to a
@@ -580,7 +713,7 @@ export class S3ObjectClient {
    * `getObject` gives, for the same reason.
    */
   async headObject(key: string): Promise<{ sizeBytes: number } | null> {
-    const response = await this.send('HEAD', key)
+    const response = await this.send('HEAD', { key })
 
     if (response.status === 404) {
       const verdict = await this.isAbsence(response)
@@ -605,8 +738,58 @@ export class S3ObjectClient {
     return { sizeBytes: Number(declared) }
   }
 
+  /**
+   * Every object in the bucket, up to a limit the caller states.
+   *
+   * The only request in this file that is about the bucket rather than an
+   * object in it, and the only one carrying a query string — which is why the
+   * signer had to learn about both.
+   *
+   * **The limit is not a page size, and it is not optional.** A listing walks
+   * continuation tokens until the store says there is no more, and a bucket
+   * with a million objects in it would otherwise be a million objects in this
+   * process's memory. The caller says how many it is prepared to hold, gets at
+   * most that many, and is told whether there were more — so a report can say
+   * "and there is more" rather than describing a fraction of a bucket as though
+   * it were all of it.
+   *
+   * `truncated` covers both the caller's limit and the store's paging, and
+   * either way it means one thing: this is not the whole bucket.
+   */
+  async listObjects(limit: number): Promise<{ objects: ObjectSummary[]; truncated: boolean }> {
+    if (!Number.isSafeInteger(limit) || limit <= 0) {
+      throw new S3RequestError(0, null, 'A listing needs a positive limit of how many to hold.')
+    }
+
+    const objects: ObjectSummary[] = []
+    let token: string | null = null
+
+    for (;;) {
+      const query: Record<string, string> = {
+        'list-type': '2',
+        // A thousand is the protocol's own ceiling. One more than the caller
+        // has room for is asked for deliberately: it is how `truncated` gets
+        // to be true without a second round trip to discover it.
+        'max-keys': String(Math.min(1000, limit - objects.length + 1)),
+      }
+      if (token) query['continuation-token'] = token
+
+      const response = await this.send('GET', { query })
+
+      if (!response.ok) await this.refuse(response, 'GET')
+
+      const page = parseListResult(await response.text())
+      objects.push(...page.objects)
+
+      if (objects.length > limit) return { objects: objects.slice(0, limit), truncated: true }
+      if (!page.nextToken) return { objects, truncated: false }
+
+      token = page.nextToken
+    }
+  }
+
   async deleteObject(key: string): Promise<void> {
-    const response = await this.send('DELETE', key)
+    const response = await this.send('DELETE', { key })
 
     if (response.status === 404) {
       const verdict = await this.isAbsence(response)

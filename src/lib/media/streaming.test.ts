@@ -194,6 +194,10 @@ class SpyStore implements MediaStore {
     return { sizeBytes: this.bytes.length }
   }
 
+  async list(): Promise<never> {
+    throw new Error('serveMedia has no business listing a store')
+  }
+
   async openStream(
     _key: string,
     range?: { start: number; end: number },

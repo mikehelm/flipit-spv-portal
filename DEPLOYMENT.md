@@ -110,6 +110,14 @@ still the moment to watch.
 and it is the command to run after a restore. It reports anything missing or the
 wrong size, exits non-zero if there is a problem, and changes nothing. See §5.
 
+It now asks the question backwards as well: it lists the store and reports any
+object that no record points at. Those come from the mirror-image accidents — a
+database restored from *before* an upload, a delete that removed the row and
+failed on the object, a bucket shared with something else — and they matter more
+than untidiness, because an orphaned document package is an investor's
+subscription agreement sitting in a bucket nothing references. The listing stops
+at five thousand objects and says so if it stopped.
+
 ---
 
 ## 2. Sign-in
@@ -265,9 +273,16 @@ a backup. Do both.
 
 **After any restore, run `pnpm media:check`.** The dump holds the rows that name
 every image, video and document; it does not hold the files. The check compares
-the two and reports anything missing or the wrong size. It changes nothing and
-exits non-zero if there is a problem, so it belongs in the same script as the
-restore rather than in somebody's memory.
+the two in both directions — every record has its file, and every file has its
+record — and reports anything missing, the wrong size, or stored with nothing
+pointing at it. It changes nothing and exits non-zero if there is a problem, so
+it belongs in the same script as the restore rather than in somebody's memory.
+
+A restore from a dump taken *before* an upload is the case that produces
+orphans: the objects are still in the bucket and the rows that named them are
+gone. Nothing will serve them — every route looks the record up first — so they
+are not a leak through this application. They are data nobody is managing, and
+deleting one is a decision for a person holding the backup.
 
 **Where to keep them.** Not on the same host. A dump contains every investor's
 name, address and figures — it is the most sensitive single artefact this

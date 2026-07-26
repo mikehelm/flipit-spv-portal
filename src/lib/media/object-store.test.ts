@@ -277,6 +277,64 @@ describe('both stores answer the same questions the same way', () => {
         await expect(store.stat('../../etc/passwd')).rejects.toThrow(/not a storage key/)
       })
 
+      /**
+       * The reverse read: from the store to the keys, rather than from a key to
+       * the object. Both stores have to answer it the same way, because the
+       * report built on it is the same report either way.
+       */
+      it('lists what is stored, with sizes, in a stable order', async () => {
+        const store = build()
+
+        await store.put('img_LISTONELISTONELISTONE1', new Uint8Array(11), 'image/png')
+        await store.put('img_LISTTWOLISTTWOLISTTWO2', new Uint8Array(22), 'image/png')
+
+        const listed = await store.list(1000)
+        const found = listed.objects.filter((object) => object.key.startsWith('img_LIST'))
+
+        expect(found).toEqual([
+          { key: 'img_LISTONELISTONELISTONE1', sizeBytes: 11 },
+          { key: 'img_LISTTWOLISTTWOLISTTWO2', sizeBytes: 22 },
+        ])
+        expect(listed.truncated).toBe(false)
+
+        // Sorted, so two runs of the same check produce the same report.
+        expect([...listed.objects].sort((a, b) => (a.key < b.key ? -1 : 1))).toEqual(listed.objects)
+      })
+
+      it('a removed object stops being listed', async () => {
+        const store = build()
+        await store.put('img_LISTGONELISTGONELISTG', new Uint8Array(3), 'image/png')
+
+        const before = await store.list(1000)
+        expect(before.objects.some((o) => o.key === 'img_LISTGONELISTGONELISTG')).toBe(true)
+
+        await store.remove('img_LISTGONELISTGONELISTG')
+
+        const after = await store.list(1000)
+        expect(after.objects.some((o) => o.key === 'img_LISTGONELISTGONELISTG')).toBe(false)
+      })
+
+      /**
+       * A limit that is silently obeyed is a report that describes part of a
+       * bucket as though it were all of it. Both stores say when they stopped.
+       */
+      it('says when it stopped rather than quietly returning part of the store', async () => {
+        const store = build()
+        await store.put('img_LIMITONELIMITONELIMIT', new Uint8Array(1), 'image/png')
+        await store.put('img_LIMITTWOLIMITTWOLIMIT', new Uint8Array(1), 'image/png')
+
+        const capped = await store.list(1)
+        expect(capped.objects).toHaveLength(1)
+        expect(capped.truncated).toBe(true)
+      })
+
+      it('a limit that is not a limit is refused', async () => {
+        const store = build()
+        for (const bad of [0, -1, 1.5, Number.NaN]) {
+          await expect(store.list(bad)).rejects.toThrow(/positive limit/)
+        }
+      })
+
       it('stat and a real read agree about the size', async () => {
         const store = build()
         const bytes = new Uint8Array(777)

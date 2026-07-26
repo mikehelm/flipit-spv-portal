@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Listing a store to find objects no row points at | 26 Jul session D | 2026-07-26 00:42 | `src/lib/media/store.ts`, `src/lib/media/s3.ts`, `scripts/check-media.ts` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -77,9 +77,13 @@ the other onto it, which is recorded in PROGRESS.md. **If a row is minutes old,
 it is not stale. Ask before taking it, or build something else.**
 
 **`pnpm media:check` is done too** — every record's file is checked for presence
-and size, which is the half of reconciliation that matters.
+and size, and, as of 26 July, the question backwards as well: the store is
+listed and every object that no record points at is reported. `MediaStore.list`
+is on the seam, both stores implement it, and the S3 side walks continuation
+tokens. Reconciliation is done in both directions.
 
-The largest left are listing a bucket to find objects no row points at, running
-these checks on a schedule rather than from the runbook, and the open question —
+The largest left are running these checks on a schedule rather than from the
+runbook, streaming an image or a document rather than buffering it (the video
+streams; those two still do not, deliberately), and the open question —
 sharpened by corrections — of whether issuing a document should notify the
 investor at all. None of them is a package.

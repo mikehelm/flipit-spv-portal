@@ -30,6 +30,8 @@ export class FakeS3 {
    * supposed to refuse this, and there is a test that it does.
    */
   ignoreRanges = false
+  /** The most keys one listing response will carry. Real S3's ceiling is 1000. */
+  maxPageSize = 1000
   requests = 0
   private server: Server | null = null
   port = 0
@@ -74,12 +76,21 @@ export class FakeS3 {
     const body = Buffer.concat(chunks)
 
     const method = request.method as 'PUT' | 'GET' | 'DELETE' | 'HEAD'
-    const [, bucket, key] = (request.url ?? '').split('/')
+
+    // A listing addresses the bucket and carries a query; everything else
+    // addresses an object and carries none. The two are told apart here rather
+    // than guessed at further down.
+    const [pathname, search = ''] = (request.url ?? '').split('?')
+    const [, bucket, key] = pathname!.split('/')
 
     if (bucket !== FAKE_S3_BUCKET) {
       response.writeHead(404).end('<Error><Code>NoSuchBucket</Code></Error>')
       return
     }
+
+    const query: Record<string, string> = {}
+    for (const [name, value] of new URLSearchParams(search)) query[name] = value
+    const listing = method === 'GET' && query['list-type'] === '2'
 
     const authorization = request.headers.authorization ?? ''
     const amzDate = String(request.headers['x-amz-date'] ?? '')
@@ -89,7 +100,11 @@ export class FakeS3 {
       { ...this.config(), endpoint: `http://${request.headers.host}` },
       {
         method,
-        key: decodeURIComponent(key ?? ''),
+        // The signature is re-derived from the request as it arrived, query and
+        // all. A client that signed a different page of a listing than it asked
+        // for fails here rather than being quietly served the first page.
+        key: listing ? undefined : decodeURIComponent(key ?? ''),
+        query: listing ? query : undefined,
         body: method === 'PUT' ? new Uint8Array(body) : undefined,
         contentType: typeof contentType === 'string' ? contentType : undefined,
         amzDate,
@@ -101,6 +116,11 @@ export class FakeS3 {
       // The real thing quotes the string it signed back at you. This one does
       // not, so that a test cannot accidentally start depending on that.
       response.writeHead(403).end('<Error><Code>SignatureDoesNotMatch</Code></Error>')
+      return
+    }
+
+    if (listing) {
+      this.respondToListing(query, response)
       return
     }
 
@@ -173,4 +193,70 @@ export class FakeS3 {
       response.writeHead(405).end()
     }
   }
+
+  /**
+   * `ListObjectsV2`, with real paging.
+   *
+   * Paging is the part worth faking properly: a client that ignores
+   * `NextContinuationToken` looks perfectly correct against a store with three
+   * objects in it and silently reports a third of a real bucket. So this obeys
+   * `max-keys`, hands back a token, and refuses to start from the beginning
+   * when given one.
+   */
+  private respondToListing(
+    query: Readonly<Record<string, string>>,
+    response: ServerResponse,
+  ): void {
+    const keys = [...this.objects.keys()].sort()
+    const after = query['continuation-token']
+    const from = after === undefined ? 0 : keys.findIndex((key) => key > after)
+    const start = from === -1 ? keys.length : from
+
+    // Capped, the way a real store caps a listing at a thousand however many
+    // were asked for. Lowering this in a test is how the client's paging gets
+    // exercised without storing a thousand objects to do it.
+    const max = Math.min(Number(query['max-keys'] ?? '1000'), this.maxPageSize)
+    const page = keys.slice(start, start + max)
+    const truncated = start + page.length < keys.length
+
+    const contents = page
+      .map((key) => {
+        const bytes = this.objects.get(key)!.bytes.length
+        return `<Contents><Key>${escapeXml(key)}</Key><Size>${bytes}</Size></Contents>`
+      })
+      .join('')
+
+    const token =
+      truncated && page.length > 0
+        ? `<NextContinuationToken>${escapeXml(page[page.length - 1]!)}</NextContinuationToken>`
+        : ''
+
+    const xml =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">' +
+      `<Name>${FAKE_S3_BUCKET}</Name>` +
+      `<KeyCount>${page.length}</KeyCount>` +
+      `<MaxKeys>${max}</MaxKeys>` +
+      `<IsTruncated>${truncated}</IsTruncated>` +
+      contents +
+      token +
+      '</ListBucketResult>'
+
+    response
+      .writeHead(200, {
+        'content-type': 'application/xml',
+        'content-length': String(Buffer.byteLength(xml)),
+      })
+      .end(xml)
+  }
+}
+
+/** The five entities, so a key with an ampersand in it survives the round trip. */
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
 }

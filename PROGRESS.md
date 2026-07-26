@@ -2188,3 +2188,133 @@ with a real investor session, including every range assertion.
 - *Two sessions can still collide.* A file is not a lock. What is different now
   is that the rule has a number in it, and that this is written down where the
   next session will read it before deciding a row is dead.
+
+---
+
+## Listing a store — the objects no row points at
+
+*26 July 2026. Claimed in CLAIMS.md at 00:42, built after the claim was pushed
+and unclaimed by anybody else.*
+
+`pnpm media:check` walks every row and asks whether its object is there. It
+cannot, by construction, find the opposite: an object that no row names is
+invisible to a check that starts from the rows. The accidents that produce those
+are the mirror images of the ones it already covers — a database restored from
+*before* an upload, a delete that removed the row and failed on the object, a
+bucket shared with something else — and the consequence is worse than
+untidiness. An orphaned `document_packages` object is an investor's subscription
+agreement sitting in a bucket that nothing references and nobody is managing.
+
+**Built.**
+
+- **`MediaStore.list(limit)`** — the reverse read, on the seam rather than in
+  the script, so the answer is the store's own and both implementations are held
+  to it. It returns `{ objects, truncated }`, and the limit is required.
+- **`readdir` behind it on the filesystem**, sorted, skipping directories, and
+  answering an absent directory as empty rather than as a failure.
+- **`S3ObjectClient.listObjects`** — `ListObjectsV2`, walking continuation
+  tokens, capped by the caller's limit.
+- **A signer that knows about query strings and bucket-level requests.**
+  `buildCanonicalRequest` takes an optional query, `signRequest` takes an
+  optional key and an optional query, `canonicalQueryString` and
+  `canonicalBucketUri` are exported and pinned by golden tests. With no query
+  the canonical request is unchanged to the character, and the existing golden
+  tests still pass without amendment.
+- **`parseListResult`** — three patterns rather than an XML dependency, dropping
+  any entry it cannot read rather than guessing at one.
+- **`pnpm media:check` reports orphans**, with the total bytes, and exits
+  non-zero. It now also runs when there are no rows at all, which is the case it
+  used to call clean and is in fact the case where *everything* stored is an
+  orphan.
+- **`FakeS3` answers a listing, with real paging** and a settable page cap, and
+  re-derives the signature from the query as it arrived.
+- **Twenty-six tests**, including a three-page walk that a client ignoring
+  continuation tokens would fail and every other test in the file would not.
+
+**Decisions.**
+
+- ***The limit is required, and truncation is reported.*** A listing with a
+  default limit is a report that quietly describes part of a bucket as though it
+  were all of it. `list(limit)` refuses a limit that is not a positive integer,
+  the client asks for one more than it has room for so that `truncated` is known
+  without a second round trip, and the script prints what it did not see.
+- ***Orphan keys are printed in full, and nothing else's key ever is.*** The
+  rest of the script prints record ids and labels, deliberately, because a
+  storage key is how an image is addressed and a key in a CI log is a capability
+  in a CI log. An orphan is the exception that proves the rule: every route
+  looks the record up *first* and serves nothing without one, so a key with no
+  row behind it addresses nothing this application will hand over. The only way
+  to act on one is to name it to somebody who already holds the bucket
+  credentials.
+- ***A listing reports keys this application would refuse to write.*** The
+  object store deliberately does not validate keys on this one path: refusing to
+  report an object because its name is not one we would have chosen is refusing
+  to report exactly the object worth reporting.
+- ***`IsTruncated` with no `NextContinuationToken` ends the walk.*** Asking again
+  without a token fetches the first page a second time, for ever. Stopping
+  under-reports; looping takes the process down.
+- ***The query is rendered once.*** `signRequest` builds the canonical query
+  string and the URL from the same call, because a URL built from one rendering
+  and a signature from another works for `list-type=2` and fails the first time
+  a continuation token contains a character that encodes differently — which is
+  to say on the second page of a large bucket, and never in a test with three
+  objects in it. There is a test pinning the URL for a token containing a slash
+  and a space.
+- ***`send` took an options bag rather than a fifth positional argument.*** The
+  alternative was a second copy of the retry loop for the one verb that has a
+  query and no key.
+- ***Nothing deletes anything.*** The script reports and exits non-zero. Which
+  orphan is a lost upload and which is somebody else's file is not a judgement
+  this has the information to make.
+
+**Deviations.** `MediaStore` gained a method. Both implementations have it, and
+the parity suite holds them to the same answers.
+
+**Checklist.**
+
+1. **No monetary value is a JavaScript number.** A byte count is not money; the
+   existing assertion over the media modules still passes.
+2. **No send path bypasses anything.** Nothing here sends; `verify:deployment`
+   re-run in full.
+3. **A jurisdiction block still stops one recipient.** Untouched.
+4. **The operator still cannot record, amend or void an approval.** Untouched.
+5. **No investor-facing response reveals another investor.** Nothing here is
+   reachable from a route. `list` is called from one script, run from a terminal
+   by somebody holding the database and the bucket credentials.
+6. **Claim and sign-in tokens are single-use, hashed and expiring.** Untouched.
+7. **Suspension revokes sessions and refuses new links.** Untouched.
+8. **No log line carries a token, a body or a key.** The one new thing printed
+   is an orphan's key, argued above: it names an object no route will serve, to
+   a reader who already holds the credentials for the store it is in. No error
+   quotes a response body; `refuse` is unchanged and still matches an error code
+   out with a strict pattern.
+9. **The verification page is still the only indexable route.** No route
+   changed.
+10. A published Q&A entry carries nothing identifying. Untouched.
+11. The AI path cannot change a calculated figure. Untouched.
+12. The app still refuses to send when its base URL is not the production value.
+    Confirmed by `verify:deployment`.
+
+**Verified.** `pnpm typecheck`, `pnpm lint`, `pnpm test` — 1848 tests in 93
+files, up from 1822 in 92. `pnpm verify:object-store` — 36 checks.
+`pnpm verify:media` — 39. `pnpm verify:documents` — 48.
+`pnpm verify:deployment` — 56 against the built application over real HTTP.
+`pnpm media:check` run by hand against a directory holding one orphaned storage
+key and one stray text file: both reported, with sizes, exit code 1.
+
+**Uncertain.**
+
+- *No real provider has answered a `ListObjectsV2`.* The paging, the tokens and
+  the signature are exercised against a signature-checking fake on localhost.
+  The likeliest difference is a provider that returns keys URL-encoded when
+  `encoding-type=url` is not asked for — none is supposed to — which would show
+  up as orphan names containing `%2F` rather than as a wrong count.
+- *Five thousand is a ceiling somebody will eventually hit.* It is reported
+  rather than silently obeyed, and the number is one constant in one script.
+- *A listing is a moment.* An upload that lands between the row walk and the
+  store walk is reported as an orphan it is not. The window is seconds, the
+  report changes nothing, and a second run clears it — but somebody reading a
+  report at the wrong moment could act on it, so it is written here.
+- *Nothing runs this on a schedule.* Still true, and still the most obvious next
+  thing: `pnpm reminders:run` already needs a scheduler and this belongs beside
+  it.
