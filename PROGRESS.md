@@ -3627,3 +3627,113 @@ are green. `pnpm verify:lifecycle` is 50 of 50, up from 39.
 - *Open Decision 7 is answered mechanically, not organisationally.* The
   application now has somewhere to put a fallback address and says so when it is
   empty. Whose address it should be is still a question for Michael and David.
+
+## Three facts that were recorded and never shown
+
+An audit for one particular defect — *a setting that is written, validated and
+never read* — after the contact-address one turned out to be exactly that. It
+found seven more. Three are closed here; the rest are listed at the end, because
+naming them is worth more than half-doing them.
+
+**Built.**
+
+- **The sunset closing date reaches the notice.** §7 asks for *"a configurable
+  notice **and closing date**, with a prompt to download their records"*, and
+  §11.3 names the variable. `sunset_closing_date` was stored, and the settings
+  form refused to enter sunset without one on the stated grounds that *"the
+  portal tells investors when it closes so they can download their records
+  first"*. The portal did not. The refusal enforced a promise nothing kept.
+- **`src/lib/portal/notices.ts`** — the notice copy, lifted out of the page so
+  the sentence with a date and the sentence without one are both testable.
+- **§5 step 7 says all four things it records.** *"Amount, currency, value date,
+  reference."* `funds_receipts` holds all four; two reached the investor. The
+  currency that did reach them was the string `'USD'` written into
+  `data.ts`, not the one the operator typed. The value date and the reference
+  are what somebody checks against their own bank record, which is the entire
+  use of that step.
+- **§5 step 6 says when instructions were issued**, taken from the status event
+  that moved the offer into the stage.
+- **`explanationFor` had three unreachable branches** — written, tested at the
+  unit level, and never given the facts. They are reachable now, and asserted
+  against a real database rather than a fixture.
+
+**Decisions.**
+
+- ***The receipt is the authority for what arrived, and the offer column is the
+  fallback.*** The receipt is the record of the money and carries its own
+  currency; `received_amount_usd` is the offer's copy. A row written before the
+  receipt existed still renders.
+- ***The most recent entry into "payment instructions issued", not the first.***
+  A correction that re-issued instructions makes the later date the one the
+  investor should be working from. The first entry is the more literal reading
+  of "date issued" and the wrong one to put in front of somebody about to
+  transfer money.
+- ***No date is a sentence without a date, never a gap.*** "This portal will
+  close on ." on a page about somebody's money reads as an application that has
+  lost track of itself. Asserted for `null`, `undefined`, `''` and whitespace,
+  along with `undefined`, `null` and `Invalid Date` never appearing.
+- ***Two more queries per offer, both keyed on the offer id.*** `loadPortalView`
+  is already a query per offer for its snapshot. Neither new read can return a
+  row belonging to anybody else — `funds_receipts.offer_id` is unique and both
+  filter on the offer already loaded for this account.
+- ***"How instructions were delivered" is left uncaptured.*** §5 asks for it and
+  `payment_instructions` exists with no writer. Inventing a delivery note at
+  render time would be worse than its absence; it needs an operator field, which
+  is its own package.
+
+**Deviations.** None.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. `receipt.amount` is the decimal string Drizzle
+   returns and goes straight to `formatMoney`; nothing arithmetic happens to it.
+2. *A send path bypassing a gate?* No. Nothing here sends.
+3. *One recipient or the whole batch?* Not applicable.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No. Both new reads filter on an
+   offer already bound to this account, and `verify-certificate` asserts a
+   second investor's view carries none of it.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No log line is written.
+9. *Indexable routes?* No route added.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched. The figures rendered come from
+    the receipt the operator typed and confirmed twice.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2104, up from 2071) and `pnpm build`
+are green. `verify-certificate` is 54 of 54, up from 49; `pnpm verify:lifecycle`
+is 51 of 51, up from 50.
+
+**Uncertain — and the five the audit found that are still open.**
+
+These are recorded rather than fixed. Each is the same shape as the three above:
+a half that exists and a half that does not.
+
+1. ***Four of §12's seven filters have no control.*** `email status · account
+   status · timeline status · response status · jurisdiction · deadline ·
+   search`. All seven are parsed and applied in `lib/sending/review.ts`; the
+   form renders three. The other four are reachable only by typing a query
+   string.
+2. ***Change of contact email.*** §13 asks for it, "effective only after the new
+   address is verified". `email_change_requests` is a complete table with no
+   reader and no writer — and §20's export column `updated contact email` is
+   hard-coded `null` in `lib/export/data.ts` as a consequence, so every export
+   ships that column empty by construction.
+3. ***§13's configurable acknowledgement checkboxes.*** §8.2 makes them a
+   compliance requirement — *"configurable so that approved wording can be
+   applied without a code change"* — and there is no table, no column and no
+   checkbox. The response form has three radios and a note.
+4. ***`wa.me` in the portal.*** §2.1 promises it, onboarding tells David it will
+   happen, `whatsappLink()` exists and nothing imports it. There is no operator
+   contact anywhere on an *active* investor's portal, which is the larger point
+   — the contact route added in the previous section only appears on a notice.
+5. ***`feature_flags` gates nothing.*** Four rows are seeded naming shipped
+   features, each with a spec reference in its note, and nothing reads the
+   table. Setting one to `false` changes nothing. A switch with no wire behind
+   it is worse than no switch, because somebody will eventually turn it.
+
+Also unfixed and smaller: §13.1's *"more prominent once an investor reaches
+Commitment agreed"* is not implemented — the tiles render identically at every
+stage — and §7's sunset notice is still not *configurable*, only dated.

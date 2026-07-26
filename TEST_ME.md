@@ -394,6 +394,20 @@ Fifty checks, and it puts your settings back exactly as they were.
 
 ---
 
+## Three things you can now see that were being recorded and thrown away
+
+**The closing date.** Put the service into sunset and the portal used to say "this portal will close soon" — while the settings screen had refused to let you enter sunset at all without a closing date, on the grounds that investors are told when it closes. They were not. It now says *"This portal will close on 30 September 2026. Please download any documents or correspondence you wish to keep before that date."* With no date set it goes back to the older sentence rather than showing a gap.
+
+**The value date and the payment reference.** Record funds received and step 7 of an investor's timeline used to say *"We confirm receipt of USD 5,000."* — dropping the value date and the reference you had just typed, and which you are required to type: the form refuses a blank reference because it goes on the certificate. Those two are the things an investor checks against their own bank statement, which is the whole use of that line. It now reads *"We confirm receipt of USD 4,950.00 on 2026-07-26. Reference: FLIPIT-0007-B."*
+
+Related, and worth knowing: the currency on that line used to be the word "USD" written into the code rather than the currency you entered. It is now yours.
+
+**When payment instructions went out.** Step 6 said "Payment instructions were sent to you." It now says when. If you correct and re-issue, it shows the later date — the one they should be working from.
+
+*How* instructions were delivered — by email, by phone, in person — is still not captured anywhere. That needs a field on your side and is not built.
+
+---
+
 ## Updates
 
 Sign in as the operator and open **Updates**. Write one, choose who it goes to, and save it as a draft. Nothing has reached anybody: no portal shows it, no email exists, and the recipient list is empty because the audience is only worked out at the moment you publish.

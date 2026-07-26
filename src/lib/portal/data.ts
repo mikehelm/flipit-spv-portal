@@ -11,11 +11,13 @@
  * data to leak — it does not load it.
  */
 
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { db } from '@/db'
 import {
   emailSnapshots,
+  fundsReceipts,
   investorAccounts,
+  offerStatusEvents,
   offers,
   roadmapTiles,
   rounds,
@@ -90,6 +92,14 @@ export interface PortalView {
    * service configuration alone; nothing here comes from an account.
    */
   contacts: PortalContact[]
+  /**
+   * `sunset_closing_date`, formatted, when the portal is closing. §7, §11.3.
+   *
+   * Null in every other mode. The settings form refuses to enter sunset
+   * without one, on the stated grounds that the portal tells investors when it
+   * closes — so this is the field that makes that refusal true.
+   */
+  closingDate: string | null
 }
 
 function formatDate(value: Date | string | null): string | null {
@@ -151,6 +161,33 @@ export async function loadPortalView(accountId: string): Promise<PortalView | nu
 
     const decimalPlaces = config.decimalPlaces
 
+    /**
+     * §5 step 7's "value date, reference", and step 6's "date issued".
+     *
+     * Both were declared on `TimelineFacts`, both were rendered by
+     * `explanationFor`, and neither was ever passed — so three live branches of
+     * that function were unreachable and the investor was told "We confirm
+     * receipt of USD 5,000." with no value date and no reference against which
+     * to check their own bank record.
+     *
+     * One row each, keyed on this offer. `funds_receipts` is unique per offer.
+     * The stage event is the *most recent* entry into the stage rather than the
+     * first: a correction that re-issued instructions makes the later date the
+     * one the investor should be working from.
+     */
+    const receipt = await db.query.fundsReceipts.findFirst({
+      where: eq(fundsReceipts.offerId, row.offerId),
+    })
+
+    const instructionsEvent = await db.query.offerStatusEvents.findFirst({
+      where: and(
+        eq(offerStatusEvents.offerId, row.offerId),
+        eq(offerStatusEvents.toStage, 'PAYMENT_INSTRUCTIONS_ISSUED'),
+      ),
+      orderBy: desc(offerStatusEvents.createdAt),
+    })
+    const instructionsIssuedAt = instructionsEvent?.createdAt ?? null
+
     portalOffers.push({
       offerId: row.offerId,
       proposedAmount: money(row.proposedAmountUsd),
@@ -171,8 +208,21 @@ export async function loadPortalView(accountId: string): Promise<PortalView | nu
         committedAmount: row.committedAmountUsd ? money(row.committedAmountUsd) : null,
         acceptedAmount: row.acceptedAmountUsd ? money(row.acceptedAmountUsd) : null,
         spvPercentage: formatPercentage(row.spvPercentage, { decimalPlaces }),
-        fundsCurrency: row.receivedAmountUsd ? 'USD' : null,
-        fundsAmount: row.receivedAmountUsd ? money(row.receivedAmountUsd) : null,
+        paymentInstructionsIssuedOn: formatDate(instructionsIssuedAt),
+        // §5 step 7: "Amount, currency, value date, reference". All four are
+        // recorded on the receipt and only two of them used to arrive here —
+        // and the currency that did arrive was the literal 'USD', not the one
+        // the operator entered. The receipt is the record of what was actually
+        // received, so it is what the step reports; the offer column is the
+        // fallback for a row written before the receipt existed.
+        fundsCurrency: receipt?.currency ?? (row.receivedAmountUsd ? 'USD' : null),
+        fundsAmount: receipt
+          ? formatMoney(receipt.amount, { currencyCode: receipt.currency })
+          : row.receivedAmountUsd
+            ? money(row.receivedAmountUsd)
+            : null,
+        fundsValueDate: receipt?.valueDate ?? null,
+        fundsReference: receipt?.reference ?? null,
       }),
       showPaymentSafetyNotice: showsPaymentSafetyNotice(row.stage as OfferStage),
       certificates: (await listCertificates(row.offerId)).map((certificate) => ({
@@ -220,6 +270,7 @@ export async function loadPortalView(accountId: string): Promise<PortalView | nu
     offers: portalOffers,
     tiles: tiles.map((tile) => ({ label: tile.label, isLive: tile.isLive })),
     roundName: rows[0]?.roundName ?? null,
+    closingDate: access.notice === 'SUNSET' ? formatDate(config.sunsetClosingDate) : null,
     contacts: access.notice
       ? portalContacts({
           notice: access.notice,

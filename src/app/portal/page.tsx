@@ -5,8 +5,9 @@ import { portalSignOutAction, recordResponseAction } from '@/actions/portal'
 import { ActionForm } from '@/components/admin/action-form'
 import { PageCurl } from '@/components/page-curl'
 import { SiteFooter } from '@/components/site-footer'
-import { canRespond, canView, type PortalNotice } from '@/lib/portal/access'
+import { canRespond, canView } from '@/lib/portal/access'
 import { CONTACT_COPY, type PortalContact } from '@/lib/portal/contact'
+import { noticeCopy } from '@/lib/portal/notices'
 import { loadPortalView, type PortalOffer } from '@/lib/portal/data'
 import { PAYMENT_SAFETY_NOTICE, type TimelineStep } from '@/lib/portal/timeline'
 import { readInvestorAccount } from '@/lib/portal/session'
@@ -37,43 +38,6 @@ export const dynamic = 'force-dynamic'
  * no total raised, no position in any queue, and no wording that implies any of
  * those exist — §15.
  */
-
-/**
- * The notice copy. §4.2, §7.
- *
- * None of these says "contact David" any more. Each of those sentences was an
- * instruction with no way to follow it — the reader has just been locked out of
- * the only page that ever named him — and the address now comes from
- * configuration, underneath, through `portalContacts`. A first name written
- * into a notice is also the thing that goes wrong quietly on the day somebody
- * else is answering.
- */
-const NOTICES: Record<PortalNotice, { title: string; body: string }> = {
-  SUSPENDED: {
-    title: 'Access temporarily unavailable',
-    body: 'Access to this portal is temporarily unavailable.',
-  },
-  CLOSED: {
-    title: 'This process has concluded',
-    body: 'This process has concluded for your record. A copy of your documents and correspondence remains available on request.',
-  },
-  READ_ONLY: {
-    title: 'Read-only',
-    body: 'This portal is currently read-only. You can view your record and download your documents, but responses and messages are not being accepted at this time.',
-  },
-  SUNSET: {
-    title: 'This portal is closing',
-    body: 'This portal will close soon. Please download any documents or correspondence you wish to keep before then.',
-  },
-  SERVICE_CLOSED: {
-    title: 'The portal is no longer available',
-    body: 'The Flipit investor portal is no longer available.',
-  },
-  ARCHIVED: {
-    title: 'This record is closed',
-    body: 'This record is retained for our files and is no longer available here.',
-  },
-}
 
 /**
  * The contact route, rendered. §4.2 asks for one on a suspended account and §7
@@ -302,7 +266,9 @@ export default async function PortalPage() {
   const view = await loadPortalView(account.id)
   if (!view) redirect('/portal/signin')
 
-  const notice = view.access.notice ? NOTICES[view.access.notice] : null
+  const notice = view.access.notice
+    ? noticeCopy(view.access.notice, { closingDate: view.closingDate })
+    : null
   const qa = canView(view.access) ? await loadInvestorQa(account.id, view.access) : null
   const register = canView(view.access)
     ? await loadInvestorRegisterView(account.id, view.access)

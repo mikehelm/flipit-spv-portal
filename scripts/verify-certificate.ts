@@ -383,6 +383,50 @@ async function main(): Promise<void> {
     portalOffer?.certificates.some((certificate) => certificate.superseded) === true,
   )
 
+  /**
+   * §5 step 7: "Amount, currency, value date, reference".
+   *
+   * All four were recorded and only two reached the timeline — and the currency
+   * that did was the literal 'USD' rather than the one the operator entered.
+   * The value date and the reference are what an investor checks their own bank
+   * record against, which is the whole use of that step.
+   */
+  const fundsStep = portalOffer?.timeline.find((step) => step.number === 7)
+  check(
+    'the funds-received step names the amount and its currency',
+    fundsStep?.explanation.includes('USD 4,950.00') === true,
+    fundsStep?.explanation,
+  )
+  check(
+    'and the value date it was received on',
+    fundsStep?.explanation.includes(today()) === true,
+    fundsStep?.explanation,
+  )
+  check(
+    'and the payment reference',
+    fundsStep?.explanation.includes('FLIPIT-0007-B') === true,
+    fundsStep?.explanation,
+  )
+
+  /**
+   * §5 step 6: "Date issued and how instructions were delivered".
+   *
+   * The date is taken from the status event that moved the offer into the
+   * stage — the most recent one, so a correction that re-issued instructions
+   * shows the date the investor should actually be working from. *How* they
+   * were delivered is still not captured anywhere; see PROGRESS.md.
+   */
+  const instructionsStep = portalOffer?.timeline.find((step) => step.number === 6)
+  check(
+    'the payment-instructions step names the date they were issued',
+    instructionsStep?.explanation.includes(today()) === true,
+    instructionsStep?.explanation,
+  )
+  check(
+    'and still carries the payment-safety warning',
+    instructionsStep?.explanation.includes('verify payment details directly') === true,
+  )
+
   const otherView = await loadPortalView(other!.id)
   check(
     'another investor sees none of them',

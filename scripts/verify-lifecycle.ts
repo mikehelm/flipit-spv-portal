@@ -439,11 +439,16 @@ async function main(): Promise<void> {
     // monitored and must not be offered underneath a live one.
     await db
       .update(serviceConfig)
-      .set({ serviceMode: 'SUNSET' })
+      .set({ serviceMode: 'SUNSET', sunsetClosingDate: '2026-09-30' })
       .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
 
     const aliceView = await loadPortalView(alice.id)
     check('a closing portal shows every account the sunset notice', aliceView?.access.notice === 'SUNSET')
+    check(
+      'and the notice carries the configured closing date — §7, §11.3',
+      aliceView?.closingDate === '2026-09-30',
+      String(aliceView?.closingDate),
+    )
     check(
       'and offers the standing address alone',
       aliceView?.contacts.length === 1 &&
@@ -483,6 +488,7 @@ async function main(): Promise<void> {
         defaultSenderEmail: configBefore.defaultSenderEmail,
         serviceContactEmail: configBefore.serviceContactEmail,
         serviceMode: configBefore.serviceMode,
+        sunsetClosingDate: configBefore.sunsetClosingDate,
       })
       .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
   }
@@ -492,7 +498,8 @@ async function main(): Promise<void> {
     'the service configuration is exactly as it was',
     configAfter.serviceMode === configBefore.serviceMode &&
       configAfter.defaultSenderEmail === configBefore.defaultSenderEmail &&
-      configAfter.serviceContactEmail === configBefore.serviceContactEmail,
+      configAfter.serviceContactEmail === configBefore.serviceContactEmail &&
+      configAfter.sunsetClosingDate === configBefore.sunsetClosingDate,
   )
 
   console.log('\nCleaning up')
