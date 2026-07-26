@@ -10,6 +10,7 @@ import {
   storageFindings,
   buildFindings,
   contactFindings,
+  flagFindings,
   complianceFindings,
   describeAreas,
   deploymentFindings,
@@ -72,6 +73,7 @@ function healthy(overrides: Partial<HealthFacts> = {}): HealthFacts {
     },
     lastBackupAt: hoursAgo(20),
     contact: { hasOperatorAddress: true, hasStandingAddress: true },
+    disabledFlags: [],
     ...overrides,
   }
 }
@@ -738,6 +740,49 @@ describe('the contact route on a notice', () => {
         }
       }
     }
+  })
+})
+
+describe('a portal section switched off by a flag', () => {
+  it('says so, as a decision rather than a fault', () => {
+    const findings = flagFindings(healthy({ disabledFlags: ['qa_shared'] }))
+    expect(findings[0]?.severity).toBe('ATTENTION')
+    expect(findings[0]?.area).toBe('Portal sections')
+    expect(findings[0]?.detail).toContain('qa_shared')
+  })
+
+  it('counts them when there is more than one, and names them in order', () => {
+    const findings = flagFindings(healthy({ disabledFlags: ['roadmap_tiles', 'qa_shared'] }))
+    expect(findings[0]?.headline).toContain('2 portal sections')
+    expect(findings[0]?.detail).toContain('qa_shared, roadmap_tiles')
+  })
+
+  it('says it checked, when nothing is off', () => {
+    // A report that prints nothing when all is well is indistinguishable from
+    // one that did not look.
+    const findings = flagFindings(healthy())
+    expect(findings[0]?.severity).toBe('OK')
+  })
+
+  it('is never a fault, whatever is off', () => {
+    // Somebody's decision. Same treatment as a non-active service mode, and
+    // the same reason: a check that goes red for a deliberate setting is a
+    // check that gets ignored.
+    const all = flagFindings(
+      healthy({ disabledFlags: ['qa_shared', 'roadmap_tiles', 'operator_video', 'register_of_interest'] }),
+    )
+    expect(all.every((row) => row.severity !== 'WRONG')).toBe(true)
+  })
+
+  it('says plainly that nothing an investor wrote has been removed', () => {
+    const findings = flagFindings(healthy({ disabledFlags: ['qa_shared'] }))
+    expect(findings[0]?.detail).toMatch(/never removes|stay readable/)
+  })
+
+  it('is on the full report and not on the overview banner', () => {
+    const facts = healthy({ disabledFlags: ['qa_shared'] })
+    expect(buildFindings(facts).some((row) => row.area === 'Portal sections')).toBe(true)
+    expect(unattendedFindings(facts).some((row) => row.area === 'Portal sections')).toBe(false)
   })
 })
 

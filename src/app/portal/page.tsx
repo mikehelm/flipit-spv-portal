@@ -6,6 +6,7 @@ import { ActionForm } from '@/components/admin/action-form'
 import { PageCurl } from '@/components/page-curl'
 import { SiteFooter } from '@/components/site-footer'
 import { canRespond, canView } from '@/lib/portal/access'
+import { flagEnabled, PORTAL_FLAGS, readFeatureFlags } from '@/lib/flags'
 import { CONTACT_COPY, type PortalContact } from '@/lib/portal/contact'
 import { noticeCopy } from '@/lib/portal/notices'
 import { loadPortalView, type PortalOffer } from '@/lib/portal/data'
@@ -281,7 +282,13 @@ export default async function PortalPage() {
   // placeholder, no empty player, no gap where one would have been. The video
   // is global rather than per-investor — there is one, David's, and it is the
   // same one for everybody — so nothing here reads or reveals another account.
-  const video = canView(view.access) ? await currentVideo() : null
+  // §7, §13.3. Off: the section is absent. The video is global — one video,
+  // David's, the same for everybody — so nothing of this investor's goes with
+  // it.
+  const video =
+    canView(view.access) && flagEnabled(await readFeatureFlags(), PORTAL_FLAGS.operatorVideo)
+      ? await currentVideo()
+      : null
   const videoText = video ? videoTextAlternative(video) : null
 
   // §5 status 3 and §13. Issued documents only — `investorDocuments` joins

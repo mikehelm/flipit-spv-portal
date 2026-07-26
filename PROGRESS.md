@@ -3829,3 +3829,97 @@ are green. `pnpm verify:viewport` is 158 of 158 — the new controls hold at
   `pnpm verify:viewport` in this container*, whose Playwright browser build is
   older than the pinned client. The escape hatch already existed; this is a note
   that it is required here, not a change.
+
+## A switch with no wire behind it — `feature_flags`, made real
+
+§7: *"Phase-two modules ship behind feature flags so functionality can be
+switched on for a later round without redeployment risk."*
+
+The table existed. The seed wrote four rows — `register_of_interest`,
+`operator_video`, `qa_shared`, `roadmap_tiles` — each `enabled: true`, each with
+a spec reference in its note. Nothing anywhere read it. Setting one to `false`
+changed nothing at all.
+
+A switch with no wire behind it is worse than no switch, because eventually
+somebody turns it and believes the result. On a securities application the
+belief in question is *"I have switched the register off"*, held while the
+register goes on accepting joins.
+
+**Built.**
+
+- **`src/lib/flags.ts`** — the four keys this application consults, the default,
+  and the read. One function holds the default so there is one place it lives.
+- **Wired**, in the two ways the two kinds of section deserve.
+- **A health finding**, `Portal sections`, when a flag is off.
+- **The test that would have caught it**: every declared key must appear at a
+  call site, and every declared key must be seeded. Both directions, because a
+  seeded row naming something nothing consults puts the same lie back one row
+  along.
+
+**Decisions.**
+
+- ***A missing row means on.*** §7's sentence is about switching functionality
+  *on for a later round* — a flag is a gate in front of something not yet
+  wanted, not a licence every feature must hold. So an unseeded deployment
+  behaves exactly as it did before flags existed, and a deleted row can never
+  take a section off an investor's portal. This is the conservative reading and
+  it is the one that cannot cause an outage.
+- ***A flag off never removes what an investor already has.*** The two sections
+  that are entirely ours — the video and the roadmap tiles — disappear, and
+  nothing of theirs goes with them. The two that hold their own record — the
+  register and the question thread — stay on the screen and stop accepting
+  anything new. This is the same narrowing `portalAccess` already performs for a
+  read-only service mode, and for the same reason: an operational posture may
+  stop somebody acting and may not take away what they have done. Pinned by a
+  test asserting `canAsk` is gated and `canReadOwn` is not.
+- ***Documents, certificates, the timeline and the offer are ungated, and
+  a test says so.*** A subscription agreement is not a phase-two module.
+- ***`ATTENTION`, never `WRONG`.*** A flag that is off is somebody's decision,
+  and the report's rule for a decision is to say it plainly and exit zero.
+- ***Nothing in the application writes a flag.*** §7 wants a switch that does
+  not need a redeployment; it does not ask for a screen. A toggle would need its
+  own authorisation story, and the health report is what stops a hand-edited row
+  being forgotten.
+
+**Deviations.** None.
+
+**Checklist.**
+
+1. *Money as a `number`?* No.
+2. *A send path bypassing a gate?* No, and note what is deliberately absent: no
+   flag touches sending, the compliance gate, the jurisdiction list or the
+   pre-flight. A flag that could switch off a gate would be an override, and
+   there are none.
+3. *One recipient or the whole batch?* Not applicable.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No. A flag is global and its effect
+   is identical for everybody, so nothing about it varies per person.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched. A flag narrows; it can never widen, so no flag can
+   reopen a suspended account's portal.
+8. *Does any log line contain a token, a body or a key?* No. The health finding
+   carries flag keys, which are fixed words naming modules.
+9. *Indexable routes?* No route added.
+10. *Published Q&A?* A flag off stops new questions and hides nothing already
+    published.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2150, up from 2120) and `pnpm build`
+are green. `pnpm verify:health` 31 of 31, `verify-qa` 51 of 51, `verify-register`
+49 of 49 — all unchanged, which is the point: with every flag on, nothing moved.
+
+**Uncertain.**
+
+- *No database-backed check turns a flag off and watches a portal change.* The
+  wiring is asserted at the source and the defaults are asserted as values. A
+  script that flips a row, loads the view and puts it back — the shape
+  `verify:lifecycle` now uses for the contact address — would be stronger, and
+  is the obvious next thing here.
+- *A flag off is invisible to the operator until he opens System health.* The
+  overview banner deliberately carries only faults, and this is not one. If
+  flags are ever used in anger, a line on the settings screen would be better
+  than a line on a health page.
+- *Nothing stops somebody adding a fifth row to the table by hand.* It would be
+  ignored, which is the safe outcome, and it would also be silent — the report
+  says nothing about a row naming something no code consults.

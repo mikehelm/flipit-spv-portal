@@ -14,6 +14,7 @@
 
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { db } from '@/db'
+import { flagEnabled, PORTAL_FLAGS, readFeatureFlags } from '@/lib/flags'
 import {
   commitments,
   fundsReceipts,
@@ -68,7 +69,11 @@ export async function loadInvestorRegisterView(
     indicativeAmount:
       onRegister && row.indicativeAmountUsd ? formatMoney(row.indicativeAmountUsd) : null,
     // §5.2.3: "Any active investor can join or leave from their portal."
-    canChange: access.capability === 'FULL',
+    // §7: and not while the flag is off — the section stays on the screen with
+    // whatever they have already told us, and stops accepting a change.
+    canChange:
+      access.capability === 'FULL' &&
+      flagEnabled(await readFeatureFlags(), PORTAL_FLAGS.registerOfInterest),
   }
 }
 

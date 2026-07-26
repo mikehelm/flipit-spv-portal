@@ -166,6 +166,13 @@ export interface HealthFacts extends UnattendedFacts {
     /** `service_contact_email` — the one shown once the portal has closed. */
     hasStandingAddress: boolean
   }
+  /**
+   * Feature flags that are switched off. §7.
+   *
+   * Keys, which are a fixed handful of words naming modules — never a row and
+   * never anything an investor wrote.
+   */
+  disabledFlags: string[]
 }
 
 /** The audit action `pnpm backup` writes. The only record that one happened. */
@@ -621,6 +628,54 @@ export function contactFindings(facts: HealthFacts): Finding[] {
   ]
 }
 
+/**
+ * A portal section switched off by a flag.
+ *
+ * §7 puts phase-two modules behind flags *"so functionality can be switched on
+ * for a later round without redeployment risk"*. The table shipped with four
+ * rows and nothing read it, so a flag was a switch with no wire; it has one
+ * now, which makes the opposite failure possible for the first time. Somebody
+ * turns one off by hand in a database in October and in March nobody remembers
+ * why the register does not accept a join.
+ *
+ * `ATTENTION`, never `WRONG`. A flag that is off is somebody's decision, and
+ * the report's rule for a decision is to say it plainly and exit zero — the
+ * same treatment a non-active service mode gets.
+ */
+export function flagFindings(facts: HealthFacts): Finding[] {
+  if (facts.disabledFlags.length === 0) {
+    return [
+      {
+        area: 'Portal sections',
+        severity: 'OK',
+        headline: 'Every portal section is switched on.',
+        detail: 'No feature flag is turning anything off.',
+        remedy: 'Nothing to do.',
+      },
+    ]
+  }
+
+  const names = [...facts.disabledFlags].sort().join(', ')
+
+  return [
+    {
+      area: 'Portal sections',
+      severity: 'ATTENTION',
+      headline:
+        facts.disabledFlags.length === 1
+          ? 'A portal section is switched off by a feature flag.'
+          : `${facts.disabledFlags.length} portal sections are switched off by feature flags.`,
+      detail:
+        `Off: ${names}. A flag never removes what an investor has already written — the ` +
+        'register and the question thread stay readable and stop accepting anything new — ' +
+        'and the video and the tiles are absent while their flag is off.',
+      remedy:
+        'Deliberate, if somebody set it. The flags are rows in feature_flags; nothing in ' +
+        'this application writes them.',
+    },
+  ]
+}
+
 /** Deadlines that have passed with people still to answer (§6.6). */
 export function roundFindings(facts: HealthFacts): Finding[] {
   if (!facts.round || !facts.round.open) return []
@@ -904,6 +959,7 @@ export function buildFindings(facts: HealthFacts): Finding[] {
     ...serviceModeFindings(facts),
     ...deploymentFindings(facts),
     ...contactFindings(facts),
+    ...flagFindings(facts),
     ...roundFindings(facts),
     ...storageFindings(facts),
     ...backupFindings(facts),

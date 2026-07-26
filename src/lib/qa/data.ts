@@ -34,6 +34,7 @@ import {
   type QaEntrySource,
 } from './anonymity'
 import { isAwaitingAnswer, lastInvestorMessageTimes } from './service'
+import { flagEnabled, PORTAL_FLAGS, readFeatureFlags } from '@/lib/flags'
 import { canAskQuestion, canReadOwnQuestions, sharedQaState, type SharedQaState } from './visibility'
 
 // ---------------------------------------------------------------------------
@@ -137,7 +138,10 @@ export async function loadInvestorQa(
     sharedState: state,
     shared,
     own,
-    canAsk: canAskQuestion(access),
+    // §7. A flag off closes the door and leaves the room: existing threads and
+    // published answers stay readable, and no new question is accepted. The
+    // same narrowing a read-only service mode already does.
+    canAsk: canAskQuestion(access) && flagEnabled(await readFeatureFlags(), PORTAL_FLAGS.sharedQa),
     canReadOwn,
   }
 }

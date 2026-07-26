@@ -37,6 +37,7 @@ import { forbiddenWordsInTileLabel } from './roadmap'
  * siblings are named for it.
  */
 const money = (value: string) => formatMoney(value, { currencyCode: 'USD' })
+import { flagEnabled, PORTAL_FLAGS, readFeatureFlags } from '@/lib/flags'
 import { portalContacts, type PortalContact } from './contact'
 import { portalAccess, type AccountStatus, type PortalAccess } from './access'
 import { buildTimeline, showsPaymentSafetyNotice, type OfferStage, type TimelineStep } from './timeline'
@@ -116,6 +117,7 @@ export async function loadPortalView(accountId: string): Promise<PortalView | nu
   if (!account) return null
 
   const config = await readServiceConfig()
+  const flags = await readFeatureFlags()
   const access = portalAccess({
     accountStatus: account.status as AccountStatus,
     closedAccountAccess: config.closedAccountAccess,
@@ -268,7 +270,12 @@ export async function loadPortalView(accountId: string): Promise<PortalView | nu
     status: account.status as AccountStatus,
     access,
     offers: portalOffers,
-    tiles: tiles.map((tile) => ({ label: tile.label, isLive: tile.isLive })),
+    // §7, §13.1. Off: the tiles are absent. They are the same for everybody
+    // and hold nothing of this investor's, so removing them removes nothing
+    // that was theirs.
+    tiles: flagEnabled(flags, PORTAL_FLAGS.roadmapTiles)
+      ? tiles.map((tile) => ({ label: tile.label, isLive: tile.isLive }))
+      : [],
     roundName: rows[0]?.roundName ?? null,
     closingDate: access.notice === 'SUNSET' ? formatDate(config.sunsetClosingDate) : null,
     contacts: access.notice

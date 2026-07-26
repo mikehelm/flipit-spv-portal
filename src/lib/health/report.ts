@@ -18,6 +18,7 @@ import { readServiceConfig } from '@/lib/auth/service-config'
 import { checkTemplateDrift } from '@/lib/compliance/drift'
 import { readMailConnectionHealth } from '@/lib/email/transport'
 import { env } from '@/lib/env'
+import { disabledFlags, readFeatureFlags } from '@/lib/flags'
 import {
   countTrackedFiles,
   MEDIA_CHECK_COMPLETED_ACTION,
@@ -199,6 +200,10 @@ export async function gatherFacts(now: Date = new Date()): Promise<HealthFacts> 
       hasOperatorAddress: (config.defaultSenderEmail ?? '').trim() !== '',
       hasStandingAddress: (config.serviceContactEmail ?? '').trim() !== '',
     },
+    // Keys only, and only the ones this application actually consults. A row
+    // in the table naming something nothing reads is not a portal section
+    // switched off; it is a row.
+    disabledFlags: disabledFlags(await readFeatureFlags()),
   }
 }
 

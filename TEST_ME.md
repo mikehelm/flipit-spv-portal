@@ -418,6 +418,21 @@ Two small things worth noticing: the email-status box used to offer you the word
 
 ---
 
+## The switches that were not connected to anything
+
+There has always been a table in the database with four switches in it — the register of interest, David's video, the questions section, and the tiles at the bottom of the portal. They were there so a section could be turned off without rebuilding and redeploying the whole application. None of them was connected to anything. Turning one off did nothing at all, which is worse than not having the switch, because you would believe it had worked.
+
+They are connected now, and they behave in two different ways on purpose:
+
+- **The video and the tiles** are ours — the same for everybody, with nothing of any investor's in them. Switch one off and the section is simply gone.
+- **The register and the questions** hold things investors have written. Switch one off and the section *stays on their screen* with everything they have already said and everything you have answered — it just stops accepting anything new. Turning a section off must never take away somebody's own record.
+
+Nothing an investor is entitled to — their offer, their timeline, their documents, their certificate — can be switched off by any of these. That is deliberate and there is a test holding it shut.
+
+A switch that is off shows up on the **System health** page, as something worth knowing rather than something wrong. That matters because these are changed directly in the database, and six months later nobody remembers why the register will not accept a join.
+
+---
+
 ## Updates
 
 Sign in as the operator and open **Updates**. Write one, choose who it goes to, and save it as a draft. Nothing has reached anybody: no portal shows it, no email exists, and the recipient list is empty because the audience is only worked out at the moment you publish.
