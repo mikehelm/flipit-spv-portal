@@ -673,6 +673,8 @@ pnpm build && pnpm verify:viewport
 
 242 checks across every screen, admin and investor, in a real browser. If your machine has a Chromium that Playwright did not install, put its path in `CHROMIUM_PATH` and it will use that rather than asking you to download another.
 
+The run also now *uses* the camera, rather than only reading the header that permits it. Two lines in the security policy were written the awkward way on purpose — the camera is allowed for this site rather than blocked outright, because blocking it would break the video recorder with no error message anywhere — and until now the evidence for that was somebody having read the file. The run asks the browser for a camera and plays back a recording, and both were checked by deliberately breaking the policy, rebuilding, and confirming the run went red before putting it back.
+
 > **Two things were added to that run and both found something immediately.** The password page and the refusal page had never been measured at all, and the refusal page turned out to have the two smallest tap targets in the application — 20 pixels where 44 is the minimum. And the run now *listens to the browser console*, which nothing had ever done: the security policy added last week was checked by reading the headers it sends, which proves a header is sent and proves nothing about what it blocks. It was blocking something on the Updates screen. Nothing was visibly broken — the page worked, the tests passed — but every visit filed a violation into a console nobody was reading, and standing noise like that is what a real problem hides behind. Fixed at the cause, and the run now fails if it comes back.
 
 Open your own portal link on your phone and look for:
