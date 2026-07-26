@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest'
 import {
   BACKUP_STALE_DAYS,
   CLAIM_STUCK_HOURS,
+  MEDIA_CHECK_STALE_DAYS,
   RUN_OVERDUE_HOURS,
   backupFindings,
+  storageFindings,
   buildFindings,
   complianceFindings,
   deploymentFindings,
@@ -53,9 +55,28 @@ function healthy(overrides: Partial<HealthFacts> = {}): HealthFacts {
       stuck: [],
     },
     round: { open: true, deadlineReached: 0, awaitingResponse: 3 },
+    storage: { configured: true, recordsNamingAFile: 4 },
+    lastMediaCheck: {
+      at: hoursAgo(30),
+      storeConfigured: true,
+      checked: 4,
+      missing: 0,
+      wrongSize: 0,
+      unreadable: 0,
+      orphans: 0,
+      listed: true,
+      truncated: false,
+      problems: 0,
+    },
     lastBackupAt: hoursAgo(20),
     ...overrides,
   }
+}
+
+/** A healthy deployment with one thing changed about its last media check. */
+function withMediaCheck(patch: Partial<NonNullable<HealthFacts['lastMediaCheck']>>): HealthFacts {
+  const base = healthy()
+  return { ...base, lastMediaCheck: { ...base.lastMediaCheck!, ...patch } }
 }
 
 function withReminders(patch: Partial<HealthFacts['reminders']>): HealthFacts {
@@ -161,10 +182,11 @@ describe('the cheap subset the overview banner is built from', () => {
     }
   })
 
-  it('needs only the two facts that cost one query each', () => {
+  it('needs only the facts that cost one query each', () => {
     // Assignable without `dueNow`, `overdue`, the mail state, the templates,
-    // the round or the backup. If that stops being true the overview starts
-    // paying for the full report on a page nobody opened to read one.
+    // the round, the storage counts or the backup. If that stops being true the
+    // overview starts paying for the full report on a page nobody opened to
+    // read one.
     const minimal: UnattendedFacts = {
       now: NOW,
       reminders: {
@@ -173,23 +195,38 @@ describe('the cheap subset the overview banner is built from', () => {
         lastRunCompletedAt: null,
         stuck: [],
       },
+      lastMediaCheck: null,
     }
     expect(unattendedFindings(minimal).some((row) => row.severity === 'WRONG')).toBe(true)
   })
 
-  it('carries the two findings nothing else in the application surfaces', () => {
-    const areas = unattendedFindings(
-      withReminders({
+  it('carries the findings nothing else in the application surfaces', () => {
+    const areas = unattendedFindings({
+      ...withReminders({
         lastRunCompletedAt: hoursAgo(RUN_OVERDUE_HOURS + 2),
         stuck: [{ id: 'rem_1', claimedAt: hoursAgo(9) }],
       }),
-    ).map((row) => row.area)
+      lastMediaCheck: { ...healthy().lastMediaCheck!, missing: 1, problems: 1 },
+    }).map((row) => row.area)
     expect(areas).toContain('Scheduled run')
     expect(areas).toContain('Reminders')
+    expect(areas).toContain('Stored files')
   })
 
   it('is silent on a healthy system', () => {
     expect(unattendedFindings(healthy()).filter((row) => row.severity === 'WRONG')).toHaveLength(0)
+  })
+
+  it('is still a strict subset when the media check is the thing that is wrong', () => {
+    // The banner and the page must not describe the same fault differently.
+    const facts = withMediaCheck({ missing: 2, orphans: 1, problems: 3 })
+    const full = buildFindings(facts)
+    for (const finding of unattendedFindings(facts)) {
+      expect(
+        full.some((row) => row.headline === finding.headline && row.severity === finding.severity),
+        finding.headline,
+      ).toBe(true)
+    }
   })
 })
 
@@ -420,6 +457,113 @@ describe('when the database was last backed up', () => {
   it('points at the half of backups that goes untested', () => {
     const finding = backupFindings({ ...healthy(), lastBackupAt: hoursAgo(24 * 30) })[0]!
     expect(finding.remedy).toMatch(/verify:restore/)
+  })
+})
+
+describe('stored files against the records that name them', () => {
+  it('is quiet when a recent check came back clean', () => {
+    const findings = storageFindings(healthy())
+    expect(findings).toHaveLength(1)
+    expect(findings[0]?.severity).toBe('OK')
+    expect(findings[0]?.headline).toMatch(/clean/i)
+  })
+
+  it('is a fault when the last check found something', () => {
+    const finding = storageFindings(withMediaCheck({ missing: 2, problems: 2 }))[0]!
+    expect(finding.severity).toBe('WRONG')
+    expect(finding.headline).toMatch(/2 problems/)
+    expect(finding.remedy).toMatch(/media:check/)
+  })
+
+  it('says which kind of problem it was, so the reader knows what they are walking into', () => {
+    const finding = storageFindings(
+      withMediaCheck({ missing: 1, wrongSize: 2, unreadable: 3, orphans: 4, problems: 10 }),
+    )[0]!
+    expect(finding.detail).toMatch(/1 file the record survived without/)
+    expect(finding.detail).toMatch(/2 the wrong size/)
+    expect(finding.detail).toMatch(/3 the store refused to answer about/)
+    expect(finding.detail).toMatch(/4 stored with no record pointing at them/)
+  })
+
+  it('says so when the store could not be listed, rather than implying it was clean', () => {
+    const finding = storageFindings(withMediaCheck({ listed: false, problems: 1 }))[0]!
+    expect(finding.detail).toMatch(/could not be listed/i)
+  })
+
+  it('says so when the listing hit its limit', () => {
+    const finding = storageFindings(withMediaCheck({ truncated: true, problems: 1 }))[0]!
+    expect(finding.detail).toMatch(/limit/i)
+  })
+
+  it('reports a check that has never run, which is not the same as a clean one', () => {
+    // The failure this exists for: a media check that is never run looks, from
+    // every page in this application, exactly like one that keeps coming back
+    // clean.
+    const finding = storageFindings({ ...healthy(), lastMediaCheck: null })[0]!
+    expect(finding.severity).toBe('ATTENTION')
+    expect(finding.headline).toMatch(/never been run|no media check has been run/i)
+    expect(finding.remedy).toMatch(/DEPLOYMENT\.md/)
+  })
+
+  it('does not count a run that had no store to check as having checked this one', () => {
+    const finding = storageFindings(withMediaCheck({ storeConfigured: false }))[0]!
+    expect(finding.severity).toBe('ATTENTION')
+    expect(finding.headline).toMatch(/no media check has been run/i)
+  })
+
+  it('notices a weekly check that stopped', () => {
+    const finding = storageFindings(
+      withMediaCheck({ at: hoursAgo(24 * (MEDIA_CHECK_STALE_DAYS + 4)) }),
+    )[0]!
+    expect(finding.severity).toBe('ATTENTION')
+    expect(finding.headline).toMatch(/days ago/)
+  })
+
+  it('does not chase a check that ran within the weekly cadence', () => {
+    const finding = storageFindings(
+      withMediaCheck({ at: hoursAgo(24 * (MEDIA_CHECK_STALE_DAYS - 3)) }),
+    )[0]!
+    expect(finding.severity).toBe('OK')
+  })
+
+  it('does not claim files added since the last run were checked', () => {
+    const facts = {
+      ...healthy(),
+      storage: { configured: true, recordsNamingAFile: 9 },
+    }
+    const finding = storageFindings(facts)[0]!
+    expect(finding.severity).toBe('OK')
+    expect(finding.detail).toMatch(/5 records have been added since/)
+  })
+
+  it('is a fault when records name files and there is nowhere to read one from', () => {
+    const finding = storageFindings({
+      ...healthy(),
+      storage: { configured: false, recordsNamingAFile: 6 },
+    })[0]!
+    expect(finding.severity).toBe('WRONG')
+    expect(finding.headline).toMatch(/6 records name a stored file/)
+    expect(finding.remedy).toMatch(/MEDIA_STORE/)
+  })
+
+  it('treats no store and nothing needing one as the supported state it is', () => {
+    // §13.2 — the portal, the invitation and the certificate are all complete
+    // with an empty media library, which is what a fresh install has.
+    const findings = storageFindings({
+      ...healthy(),
+      storage: { configured: false, recordsNamingAFile: 0 },
+      lastMediaCheck: null,
+    })
+    expect(findings[0]?.severity).toBe('OK')
+    expect(findings[0]?.remedy).toMatch(/nothing to do/i)
+  })
+
+  it('names no storage key, label or record id, because it only ever had counts', () => {
+    const finding = storageFindings(
+      withMediaCheck({ missing: 1, orphans: 1, problems: 2 }),
+    )[0]!
+    const text = `${finding.headline} ${finding.detail} ${finding.remedy}`
+    expect(text).not.toMatch(/img_|doc_|vid_/)
   })
 })
 

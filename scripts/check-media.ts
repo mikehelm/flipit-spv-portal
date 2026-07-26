@@ -30,85 +30,38 @@
  * nothing references is a retention problem rather than an untidiness. So the
  * store is listed and every key it holds is checked back against the rows.
  *
- * **It changes nothing.** It reports, and exits non-zero if anything is wrong,
- * so it can go in a deployment script. Deleting or re-uploading is a decision
- * for a person holding the backup.
+ * **It changes nothing.** It reports, exits non-zero if anything is wrong, and
+ * writes one line to the audit log saying that it ran and what it found — which
+ * is how `pnpm check:health` can say whether this is being run at all. Deleting
+ * or re-uploading is a decision for a person holding the backup.
+ *
+ * The comparing lives in `src/lib/media/reconcile.ts` and is unit-tested there.
+ * This file is the printing and the exit code.
  *
  *   pnpm media:check
  */
 
 import 'dotenv/config'
-import { db } from '@/db'
-import { documentPackages, mediaAssets, operatorVideos } from '@/db/schema'
+import { audit, systemActor } from '@/lib/audit'
+import {
+  collectTrackedFiles,
+  LIST_LIMIT,
+  MEDIA_CHECK_COMPLETED_ACTION,
+  reconcile,
+  recordOf,
+  recordOfUnconfigured,
+  type MediaCheckRecord,
+  type Reconciliation,
+} from '@/lib/media/reconcile'
 import { isValidStorageKey, mediaStore, MEDIA_STORE_UNCONFIGURED } from '@/lib/media/store'
-
-interface Tracked {
-  what: string
-  id: string
-  label: string
-  storageKey: string
-  sizeBytes: number
-}
-
-/**
- * How many objects this is prepared to hold in memory while it reports.
- *
- * A real deployment has tens; five thousand is a ceiling on a mistake, not an
- * expectation. Reaching it is reported rather than silently obeyed — a check
- * that describes a fraction of a bucket as though it were all of it is worse
- * than one that refuses to guess.
- */
-const LIST_LIMIT = 5000
-
-let checked = 0
-const missing: Tracked[] = []
-const wrongSize: Array<Tracked & { actual: number }> = []
-const unreadable: Array<Tracked & { reason: string }> = []
-
-async function collect(): Promise<Tracked[]> {
-  const out: Tracked[] = []
-
-  for (const row of await db.select().from(mediaAssets)) {
-    out.push({
-      what: 'image',
-      id: row.id,
-      label: row.name,
-      storageKey: row.storageKey,
-      sizeBytes: row.sizeBytes,
-    })
-  }
-
-  for (const row of await db.select().from(operatorVideos)) {
-    out.push({
-      what: 'video',
-      id: row.id,
-      // Never the caption or the transcript. §16, checklist 8 — a report is a
-      // log, and neither of those belongs in one.
-      label: row.publishedAt ? 'published' : 'not published',
-      storageKey: row.storageKey,
-      sizeBytes: row.sizeBytes,
-    })
-  }
-
-  for (const row of await db.select().from(documentPackages)) {
-    out.push({
-      what: 'document',
-      id: row.id,
-      label: `${row.title}${row.issuedAt ? ' (issued)' : ' (not issued)'}`,
-      storageKey: row.storageKey,
-      sizeBytes: row.sizeBytes,
-    })
-  }
-
-  return out
-}
 
 async function main(): Promise<void> {
   const store = mediaStore()
 
   if (!store) {
     console.log(`\nThere is no media store configured.\n\n  ${MEDIA_STORE_UNCONFIGURED}\n`)
-    const rows = await collect()
+    const rows = await collectTrackedFiles()
+
     if (rows.length > 0) {
       console.log(
         `But ${rows.length} row${rows.length === 1 ? '' : 's'} in the database name a stored ` +
@@ -117,58 +70,44 @@ async function main(): Promise<void> {
       )
       process.exitCode = 1
     }
+
+    await record(recordOfUnconfigured(rows.length))
     return
   }
 
   console.log(`\nChecking stored files against their records\n  store: ${store.describe()}\n`)
 
-  const rows = await collect()
+  const rows = await collectTrackedFiles()
+  const result = await reconcile(store, rows)
 
   if (rows.length === 0) {
     // No rows is not the end of the check — it is the case where *everything*
     // in the store is an orphan, which is what a database restored from before
-    // its uploads looks like. Returning here would have called that clean.
+    // its uploads looks like. Stopping here would have called that clean.
     console.log('  No record names a stored file.')
 
-    const strays = await reportOrphans(store, new Set())
+    printOrphans(result)
 
-    if (strays === 0) {
+    if (result.problems === 0) {
       console.log('\n  And nothing is stored. That is a clean answer.\n')
     } else {
-      console.log(`\n  ${strays} problem${strays === 1 ? '' : 's'}. Nothing was changed.\n`)
+      console.log(
+        `\n  ${result.problems} problem${result.problems === 1 ? '' : 's'}. Nothing was changed.\n`,
+      )
       process.exitCode = 1
     }
+
+    await record(recordOf(result))
     return
   }
 
-  for (const row of rows) {
-    checked += 1
+  console.log(`  ${result.checked} record${result.checked === 1 ? '' : 's'} checked`)
 
-    let stat: { sizeBytes: number } | null
-    try {
-      stat = await store.stat(row.storageKey)
-    } catch (error) {
-      // The message, never the key and never the endpoint — the client already
-      // refuses to put either in an error, and this does not undo that.
-      unreadable.push({ ...row, reason: error instanceof Error ? error.message : 'unknown' })
-      continue
-    }
-
-    if (stat === null) {
-      missing.push(row)
-      continue
-    }
-
-    if (stat.sizeBytes !== row.sizeBytes) {
-      wrongSize.push({ ...row, actual: stat.sizeBytes })
-    }
-  }
-
-  console.log(`  ${checked} record${checked === 1 ? '' : 's'} checked`)
-
-  if (missing.length > 0) {
-    console.log(`\n  ${missing.length} file${missing.length === 1 ? ' is' : 's are'} MISSING:`)
-    for (const row of missing) {
+  if (result.missing.length > 0) {
+    console.log(
+      `\n  ${result.missing.length} file${result.missing.length === 1 ? ' is' : 's are'} MISSING:`,
+    )
+    for (const row of result.missing) {
       console.log(`    ${row.what.padEnd(9)} ${row.label} — record ${row.id}`)
     }
     console.log(
@@ -178,9 +117,11 @@ async function main(): Promise<void> {
     )
   }
 
-  if (wrongSize.length > 0) {
-    console.log(`\n  ${wrongSize.length} file${wrongSize.length === 1 ? '' : 's'} the WRONG SIZE:`)
-    for (const row of wrongSize) {
+  if (result.wrongSize.length > 0) {
+    console.log(
+      `\n  ${result.wrongSize.length} file${result.wrongSize.length === 1 ? '' : 's'} the WRONG SIZE:`,
+    )
+    for (const row of result.wrongSize) {
       console.log(
         `    ${row.what.padEnd(9)} ${row.label} — record says ${row.sizeBytes}, store has ` +
           `${row.actual} (record ${row.id})`,
@@ -192,31 +133,33 @@ async function main(): Promise<void> {
     )
   }
 
-  if (unreadable.length > 0) {
-    console.log(`\n  ${unreadable.length} could not be checked at all:`)
-    for (const row of unreadable) {
+  if (result.unreadable.length > 0) {
+    console.log(`\n  ${result.unreadable.length} could not be checked at all:`)
+    for (const row of result.unreadable) {
       console.log(`    ${row.what.padEnd(9)} ${row.label} — ${row.reason}`)
     }
   }
 
-  if (missing.length + wrongSize.length + unreadable.length === 0) {
+  if (result.missing.length + result.wrongSize.length + result.unreadable.length === 0) {
     console.log('\n  Every stored file is present and is the size its record says.')
   }
 
-  const orphans = await reportOrphans(store, new Set(rows.map((row) => row.storageKey)))
+  printOrphans(result)
 
-  const wrong = missing.length + wrongSize.length + unreadable.length + orphans
-
-  if (wrong === 0) {
+  if (result.problems === 0) {
     console.log('\n  Nothing is stored that nothing points at, either.\n')
   } else {
-    console.log(`\n  ${wrong} problem${wrong === 1 ? '' : 's'}. Nothing was changed.\n`)
+    console.log(
+      `\n  ${result.problems} problem${result.problems === 1 ? '' : 's'}. Nothing was changed.\n`,
+    )
     process.exitCode = 1
   }
+
+  await record(recordOf(result))
 }
 
 /**
- * The reverse pass: everything in the store, checked back against the rows.
+ * The reverse pass, printed.
  *
  * **Orphan keys are printed in full, and that is deliberate.** The rest of this
  * script prints record ids and labels but never a storage key, because a key is
@@ -227,38 +170,31 @@ async function main(): Promise<void> {
  * an object in a bucket — and the only way to act on that is to name it to
  * somebody who already holds the credentials.
  */
-async function reportOrphans(
-  store: NonNullable<ReturnType<typeof mediaStore>>,
-  known: ReadonlySet<string>,
-): Promise<number> {
-  let listed: Awaited<ReturnType<typeof store.list>>
-
-  try {
-    listed = await store.list(LIST_LIMIT)
-  } catch (error) {
+function printOrphans(result: Reconciliation): void {
+  if (result.listingError !== null) {
     console.log(
-      `\n  The store could not be listed: ${error instanceof Error ? error.message : 'unknown'}` +
+      `\n  The store could not be listed: ${result.listingError}` +
         '\n  Objects that no record points at cannot be checked for. Everything above still ' +
         '\n  holds — this half of the check did not run.',
     )
-    return 1
+    return
   }
 
+  const listed = result.listed ?? 0
+
   console.log(
-    `\n  ${listed.objects.length} object${listed.objects.length === 1 ? '' : 's'} in the store` +
-      `${listed.truncated ? `, and there are more than ${LIST_LIMIT} — this is not all of them` : ''}`,
+    `\n  ${listed} object${listed === 1 ? '' : 's'} in the store` +
+      `${result.truncated ? `, and there are more than ${LIST_LIMIT} — this is not all of them` : ''}`,
   )
 
-  const orphans = listed.objects.filter((object) => !known.has(object.key))
-
-  if (orphans.length > 0) {
-    const bytes = orphans.reduce((total, object) => total + object.sizeBytes, 0)
+  if (result.orphans.length > 0) {
+    const bytes = result.orphans.reduce((total, object) => total + object.sizeBytes, 0)
     console.log(
-      `\n  ${orphans.length} object${orphans.length === 1 ? ' is' : 's are'} stored that no ` +
-        `record points at (${bytes} bytes):`,
+      `\n  ${result.orphans.length} object${result.orphans.length === 1 ? ' is' : 's are'} ` +
+        `stored that no record points at (${bytes} bytes):`,
     )
 
-    for (const object of orphans) {
+    for (const object of result.orphans) {
       const shape = isValidStorageKey(object.key)
         ? object.key.slice(0, 4).replace('_', '')
         : 'not a storage key this application would write'
@@ -272,15 +208,31 @@ async function reportOrphans(
     )
   }
 
-  if (listed.truncated) {
+  if (result.truncated) {
     console.log(
       `\n  The listing stopped at ${LIST_LIMIT} objects, so there may be orphans this did ` +
         '\n  not see. Raise LIST_LIMIT, or find out what is putting that much in the store.',
     )
-    return orphans.length + 1
   }
+}
 
-  return orphans.length
+/**
+ * Write down that this ran, and what it found.
+ *
+ * Counts only — no storage key, no label, no record id. The report above is
+ * where the detail belongs, because a person is reading it and can act on it.
+ * This line exists for one question: has anybody run this lately, and did it
+ * come back clean. `pnpm check:health` asks it, so an operator watching one
+ * thing is watching this too.
+ */
+async function record(metadata: MediaCheckRecord): Promise<void> {
+  await audit({
+    actor: systemActor,
+    entityType: 'media',
+    entityId: null,
+    action: MEDIA_CHECK_COMPLETED_ACTION,
+    metadata,
+  })
 }
 
 main()

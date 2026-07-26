@@ -18,6 +18,12 @@ import { readServiceConfig } from '@/lib/auth/service-config'
 import { checkTemplateDrift } from '@/lib/compliance/drift'
 import { readMailConnectionHealth } from '@/lib/email/transport'
 import { env } from '@/lib/env'
+import {
+  countTrackedFiles,
+  MEDIA_CHECK_COMPLETED_ACTION,
+  mediaCheckRecordSchema,
+} from '@/lib/media/reconcile'
+import { mediaStore } from '@/lib/media/store'
 import { currentRound, loadQueue } from '@/lib/reminders/queue'
 import { loadRoundSummary } from '@/lib/rounds/summary'
 import {
@@ -28,6 +34,7 @@ import {
   worstOf,
   type Finding,
   type HealthFacts,
+  type MediaCheckSummary,
   type ServiceMode,
   type Severity,
   type UnattendedFacts,
@@ -52,6 +59,33 @@ async function lastActionAt(action: string): Promise<Date | null> {
     .limit(1)
 
   return rows[0]?.createdAt ?? null
+}
+
+/**
+ * What `pnpm media:check` last wrote down, parsed rather than cast.
+ *
+ * One query, and it never touches a store. The metadata is written by a script
+ * and read here weeks later, which is exactly the gap over which a shape drifts
+ * — so it goes through the same Zod schema the script builds it with, and a row
+ * that does not match is treated as no row at all. A health report that threw on
+ * a malformed audit entry would take the whole page down over the one finding
+ * that matters least.
+ */
+async function lastMediaCheck(): Promise<MediaCheckSummary | null> {
+  const rows = await db
+    .select({ createdAt: auditEvents.createdAt, metadata: auditEvents.metadata })
+    .from(auditEvents)
+    .where(eq(auditEvents.action, MEDIA_CHECK_COMPLETED_ACTION))
+    .orderBy(desc(auditEvents.createdAt))
+    .limit(1)
+
+  const row = rows[0]
+  if (!row) return null
+
+  const parsed = mediaCheckRecordSchema.safeParse(row.metadata)
+  if (!parsed.success) return null
+
+  return { at: row.createdAt, ...parsed.data }
 }
 
 /**
@@ -144,6 +178,11 @@ export async function gatherFacts(now: Date = new Date()): Promise<HealthFacts> 
       overdue: counts.overdue,
       stuck: await stuckClaims(),
     },
+    lastMediaCheck: await lastMediaCheck(),
+    storage: {
+      configured: mediaStore() !== null,
+      recordsNamingAFile: await countTrackedFiles(),
+    },
     round: summary
       ? {
           open: summary.closedAt === null,
@@ -156,7 +195,7 @@ export async function gatherFacts(now: Date = new Date()): Promise<HealthFacts> 
 }
 
 /**
- * The two queries behind the overview banner.
+ * The handful of indexed reads behind the overview banner.
  *
  * Deliberately not `gatherFacts`. That reads every template, evaluates the
  * eligibility of every queued reminder — a query per offer — and loads the round
@@ -165,7 +204,10 @@ export async function gatherFacts(now: Date = new Date()): Promise<HealthFacts> 
  *
  * What it leaves out is what the overview already shows: the mail connection has
  * its own panel there, the service mode has its own card. What it keeps is the
- * two things nothing else anywhere surfaces.
+ * things nothing else anywhere surfaces — and none of them costs more than one
+ * bounded query. In particular the media check's *verdict* is read here and the
+ * media check itself is not: reconciling stats every stored object over the
+ * network, which has no place inside a page render.
  */
 export async function gatherUnattendedFacts(
   now: Date = new Date(),
@@ -185,6 +227,7 @@ export async function gatherUnattendedFacts(
       lastRunCompletedAt: await lastActionAt(RUN_COMPLETED_ACTION),
       stuck: await stuckClaims(),
     },
+    lastMediaCheck: await lastMediaCheck(),
   }
 }
 

@@ -405,6 +405,13 @@ nobody does. It asks, in one pass:
 - **Is each template still approved, and has it drifted?**
 - **What is the service mode, and does `APP_URL` still permit real sends?**
 - **Have deadlines passed with people still to answer?**
+- **Do the stored files still match the records that name them — and has
+  anything looked?** Read from the line `pnpm media:check` writes when it runs,
+  never by reconciling: reconciling stats every stored object over the network,
+  which is the right cost for a weekly command and the wrong one for a report a
+  scheduler runs every morning and a page somebody waits on. The consequence is
+  that a media check nobody runs is itself a finding, because a check that never
+  runs looks from every page here exactly like one that keeps coming back clean.
 
 **Exit codes.** Zero when everything is as it should be *or* when the only
 findings are decisions somebody made — a non-active service mode, a testing
@@ -434,11 +441,18 @@ succeeds, and the report says when the last one was. It can only ever speak for
 that command: a deployment whose backups are the host's volume snapshots has
 nothing to record here, and the report says so rather than calling it a fault.
 
+**Stored files.** `pnpm media:check` writes a line the same way — counts only, no
+storage key, no title — and the report reads the most recent one. So the three
+commands in §8 have become one thing to watch: whatever the weekly reconciliation
+found turns up in the daily health report, and in the operator's System health
+page, without anybody remembering to read a third log.
+
 ```
 pnpm verify:health
 ```
 
-Twenty-one checks that spawn the real command against a database put into each
+Thirty-one checks that spawn the real command against a database put into each
 bad state in turn — no run ever completed, a scheduler that stopped, a reminder
-abandoned mid-send — and read its actual output and exit code. It puts the
+abandoned mid-send, a media check that found missing files and one that has never
+run — and read its actual output and exit code. It puts the
 database back afterwards, including the audit entries it hides while it works.

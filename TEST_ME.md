@@ -6,7 +6,7 @@ Rewritten after every work package, so it always describes the current state.
 
 You can also upload brand images that are stripped of their embedded location and camera data before they are stored; David can record a short personal video in the browser or upload one from his phone, watch it in place, and publish it to the portal when he is ready; and you can put a subscription agreement or any other PDF on an investor's record, check it, and issue it to their portal.
 
-**Since then, seven more pieces have landed**, all of them things the build had written down as unfinished rather than new ideas. Files can now be stored in a real cloud bucket instead of only on a disk, which is what a live deployment needs. A document you have already issued can be **corrected** — the new version replaces the old on the investor's portal, and the old one stays visible and marked as replaced, so a correction is never a silent swap. Uploaded videos now have their metadata stripped like everything else. David's video **plays on an iPhone**, which it did not before. Videos, images and documents are all sent as a stream rather than being held whole in memory, which is what lets several people open the same file at once without the server minding. And `pnpm media:check` tells you whether every stored file is actually there and the size its record says — and, the other way round, whether anything is sitting in storage that no record points at. It is the command to run after restoring a backup, and it changes nothing: it reports, and leaves every decision to you.
+**Since then, seven more pieces have landed**, all of them things the build had written down as unfinished rather than new ideas. Files can now be stored in a real cloud bucket instead of only on a disk, which is what a live deployment needs. A document you have already issued can be **corrected** — the new version replaces the old on the investor's portal, and the old one stays visible and marked as replaced, so a correction is never a silent swap. Uploaded videos now have their metadata stripped like everything else. David's video **plays on an iPhone**, which it did not before. Videos, images and documents are all sent as a stream rather than being held whole in memory, which is what lets several people open the same file at once without the server minding. And `pnpm media:check` tells you whether every stored file is actually there and the size its record says — and, the other way round, whether anything is sitting in storage that no record points at. It is the command to run after restoring a backup, and it changes nothing: it reports, and leaves every decision to you — and its verdict now turns up in the health report and on the **System health** page, so what used to be three logs to remember is one screen to glance at.
 
 The last two packages are the ones that check everything else and then put it somewhere real: a table saying, for each of the forty-eight things the specification requires, which test proves it — and a runbook for the day it goes live. **ACCEPTANCE.md** and **DEPLOYMENT.md** are those two documents, and the plain-English version of each is further down, under "The forty-eight things this was meant to do" and "Putting it somewhere real".
 
@@ -321,13 +321,25 @@ Worth noticing on a fresh setup: it lists what it checked *and found fine* rathe
 
 **Backups get a line too.** Run `pnpm backup` and reload the page — it now says when the last one was. It can only speak for that command, so if your backups come from somewhere else (a snapshot of the whole server, say), it will keep saying it has no record, and it says so in those words rather than pretending that is a problem.
 
-To see it proved against a database deliberately put into each bad state — no run ever recorded, a scheduler that stopped, a reminder abandoned half sent:
+**And so do your stored files.** There was a second command, `pnpm media:check`, that goes through every image, video and document and checks the file is really there and really the right size — and then the same question backwards, listing what is stored and reporting anything nothing points at. It printed to its own log, which meant you had three things to watch instead of one.
+
+It now writes down what it found, and the health report reads it. So on a fresh setup the health page says **no media check has been run against this store** — which is not the same thing as saying everything is fine, and that distinction is the whole point. Run:
+
+```bash
+pnpm media:check
+```
+
+then reload the page. It now says when the check ran and that it came back clean. If it ever finds a file missing, that turns up here as something that needs you, in the daily report and on the page, without your having to remember to read a third log.
+
+Two things it deliberately does *not* do. It does not go and check the files itself when you load the page — checking means asking the storage for every file one at a time, which is fine once a week from a command and wrong on a page you are waiting for. And it never names a file, an image or a document title in the report; it carries counts only, because this report is written to a log.
+
+To see it proved against a database deliberately put into each bad state — no run ever recorded, a scheduler that stopped, a reminder abandoned half sent, a media check that found missing files, and a store nothing has ever looked at:
 
 ```bash
 pnpm verify:health
 ```
 
-Twenty-one checks, and it puts everything back afterwards.
+Thirty-one checks, and it puts everything back afterwards.
 
 ---
 

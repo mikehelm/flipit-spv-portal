@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Storage in the health report — `media:check` folded in | claude-opus-5, 26 Jul | 2026-07-26 02:10 | `src/lib/media/reconcile.ts` (new), `scripts/check-media.ts`, `src/lib/health/rules.ts`, `src/lib/health/report.ts`, `scripts/verify-health.ts`, `scripts/verify-media.ts`, tests |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -113,9 +113,16 @@ The admin **overview** carries a banner when something needs a person, from a
 deliberately cheap two-query subset of the same rules, plus a permanent card so
 silence is never ambiguous.
 
+**`media:check` is folded into the health report**, as of 26 July. The comparing
+moved out of the script into `src/lib/media/reconcile.ts`, the command writes one
+counts-only line to the audit log when it runs, and `pnpm check:health` and the
+System health page read it — including saying so when nothing has ever run it,
+which is not the same answer as clean. The report never reconciles: that costs a
+round trip per stored file and has no place in a page render. `pnpm verify:health`
+is 31 checks and `pnpm verify:media` 54.
+
 The largest left is installing the three cron lines in `DEPLOYMENT.md` §8, and
 the open question — sharpened by corrections — of whether issuing a document
 should notify the investor at all. Neither is a package. After that: nothing
-tells anybody when `check:health` goes red without somebody looking, and folding
-`media:check`'s result into the same report would mean one thing to watch rather
-than three.
+tells anybody when `check:health` goes red without somebody looking, which is a
+decision about adding a second unattended sender rather than a piece of work.

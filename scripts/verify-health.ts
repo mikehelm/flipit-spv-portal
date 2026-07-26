@@ -37,7 +37,11 @@ import {
   reminderEvents,
   rounds,
 } from '@/db/schema'
-import { CLAIM_STUCK_HOURS, RUN_OVERDUE_HOURS } from '@/lib/health/rules'
+import {
+  CLAIM_STUCK_HOURS,
+  MEDIA_CHECK_STALE_DAYS,
+  RUN_OVERDUE_HOURS,
+} from '@/lib/health/rules'
 
 const PREFIX = 'health-verify'
 
@@ -68,9 +72,12 @@ interface Run {
  * once: `flipit-spv-portal@0.1.0` matches an email address well enough for the
  * check that the report names none.
  */
-function runCheck(): Promise<Run> {
+function runCheck(overrides: Record<string, string> = {}): Promise<Run> {
   return new Promise((resolve) => {
-    const child = spawn('pnpm', ['check:health'], { cwd: process.cwd(), env: process.env })
+    const child = spawn('pnpm', ['check:health'], {
+      cwd: process.cwd(),
+      env: { ...process.env, ...overrides },
+    })
     let out = ''
     child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString()))
     child.stderr.on('data', (chunk: Buffer) => (out += chunk.toString()))
@@ -283,6 +290,132 @@ async function main(): Promise<void> {
     !resolved.out.includes(claimed!.id),
   )
 
+  // --- Stored files, from the line `pnpm media:check` writes ---------------
+  //
+  // The report never reconciles: reconciling stats every stored object over the
+  // network, which has no business inside a page render or a report a scheduler
+  // runs every morning. It reads the verdict of the last run instead. So what
+  // has to be verified here is the reading — that a recorded problem reaches
+  // the exit code, that a recorded clean run goes quiet, and that a check
+  // nobody has ever run is not mistaken for a clean one.
+  console.log('\nStored files, and whether anything has looked at them')
+
+  const WITH_A_STORE = { MEDIA_STORE: 'filesystem', MEDIA_DIR: '.media-verify-health' }
+
+  // Same treatment as the completed runs above: renamed for the duration, put
+  // back afterwards. `pnpm verify:media` spawns the real `pnpm media:check`
+  // several times and each run leaves a line, so on a development database
+  // there is almost always one of these already — and "nothing has ever
+  // checked" cannot be arranged by hoping there is not.
+  const HIDDEN_MEDIA = 'media.checked__hidden_by_verify'
+  const existingMedia = await db
+    .select({ id: auditEvents.id })
+    .from(auditEvents)
+    .where(eq(auditEvents.action, 'media.checked'))
+
+  if (existingMedia.length > 0) {
+    await db
+      .update(auditEvents)
+      .set({ action: HIDDEN_MEDIA })
+      .where(
+        inArray(
+          auditEvents.id,
+          existingMedia.map((row) => row.id),
+        ),
+      )
+  }
+
+  const neverChecked = await runCheck(WITH_A_STORE)
+  check(
+    'a store nothing has ever checked is reported, not assumed clean',
+    /No media check has been run against this store/i.test(neverChecked.out),
+  )
+  check(
+    'and it is not a fault, because nothing is known to be wrong',
+    neverChecked.code === 0,
+    `exit ${neverChecked.code}`,
+  )
+
+  const [mediaEntry] = await db
+    .insert(auditEvents)
+    .values({
+      actorLabel: 'verify-health',
+      entityType: 'media',
+      entityId: null,
+      action: 'media.checked',
+      metadata: {
+        storeConfigured: true,
+        checked: 7,
+        missing: 2,
+        wrongSize: 0,
+        unreadable: 0,
+        orphans: 1,
+        listed: true,
+        truncated: false,
+        problems: 3,
+      },
+    })
+    .returning({ id: auditEvents.id })
+
+  const found = await runCheck(WITH_A_STORE)
+  check('a media check that found something exits non-zero', found.code !== 0, `exit ${found.code}`)
+  check(
+    'and says how many, and what kind',
+    /The last media check found 3 problems/.test(found.out) &&
+      /2 files the record survived without/.test(found.out),
+    found.out.match(/The last media check[^\n]*/)?.[0],
+  )
+  check(
+    'and names no storage key, because it only ever had counts',
+    !/\b(img|vid|doc)_[A-Za-z0-9_-]{16,}/.test(found.out),
+  )
+  check('and sends the reader to the command that names them', /media:check/.test(found.out))
+
+  await db
+    .update(auditEvents)
+    .set({
+      metadata: {
+        storeConfigured: true,
+        checked: 7,
+        missing: 0,
+        wrongSize: 0,
+        unreadable: 0,
+        orphans: 0,
+        listed: true,
+        truncated: false,
+        problems: 0,
+      },
+    })
+    .where(eq(auditEvents.id, mediaEntry!.id))
+
+  const cleanCheck = await runCheck(WITH_A_STORE)
+  check('a clean media check is not a fault', cleanCheck.code === 0, `exit ${cleanCheck.code}`)
+  check(
+    'and is still listed, so silence never means nobody looked',
+    /Last media check .* and it was clean/i.test(cleanCheck.out),
+    cleanCheck.out.match(/Last media check[^\n]*/i)?.[0],
+  )
+
+  await db
+    .update(auditEvents)
+    .set({ createdAt: hoursAgo(24 * (MEDIA_CHECK_STALE_DAYS + 4)) })
+    .where(eq(auditEvents.id, mediaEntry!.id))
+
+  const stopped2 = await runCheck(WITH_A_STORE)
+  check(
+    'a weekly check that stopped is worth knowing about, and is not a fault',
+    /The last media check was \d+ days ago/.test(stopped2.out) && stopped2.code === 0,
+    stopped2.out.match(/The last media check was[^\n]*/)?.[0] ?? `exit ${stopped2.code}`,
+  )
+
+  await db.delete(auditEvents).where(eq(auditEvents.id, mediaEntry!.id))
+  if (existingMedia.length > 0) {
+    await db
+      .update(auditEvents)
+      .set({ action: 'media.checked' })
+      .where(eq(auditEvents.action, HIDDEN_MEDIA))
+  }
+
   console.log('\nWhat the report is allowed to say')
 
   check(
@@ -322,8 +455,18 @@ async function main(): Promise<void> {
   const leftHidden = await db
     .select({ id: auditEvents.id })
     .from(auditEvents)
-    .where(eq(auditEvents.action, HIDDEN))
+    .where(inArray(auditEvents.action, [HIDDEN, HIDDEN_MEDIA]))
   check('no audit entry is left renamed', leftHidden.length === 0)
+
+  const restoredMedia = await db
+    .select({ id: auditEvents.id })
+    .from(auditEvents)
+    .where(eq(auditEvents.action, 'media.checked'))
+  check(
+    'and every media check line is back too',
+    restoredMedia.length === existingMedia.length,
+    `${restoredMedia.length} of ${existingMedia.length}`,
+  )
 
   const restored = await db
     .select({ id: auditEvents.id })

@@ -21,13 +21,17 @@ import { spawn } from 'node:child_process'
 import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { eq, like } from 'drizzle-orm'
+import { desc, eq, like } from 'drizzle-orm'
 import { db } from '@/db'
 import { auditEvents, investorAccounts, mediaAssets, operatorVideos, users } from '@/db/schema'
 import { resetEnvCache } from '@/lib/env'
 import { readDimensions } from '@/lib/media/dimensions'
 import { jpegWithMetadata, mp4WithLocation, svgBytes, webmWithMetadata } from '@/lib/media/fixtures'
 import { ingest } from '@/lib/media/ingest'
+import {
+  MEDIA_CHECK_COMPLETED_ACTION,
+  mediaCheckRecordSchema,
+} from '@/lib/media/reconcile'
 import { mediaStore, resetMediaStoreCache } from '@/lib/media/store'
 import { mayViewVideo } from '@/lib/media/video'
 import { currentVideo, deleteVideo } from '@/lib/media/video-store'
@@ -408,6 +412,45 @@ async function verifyReconciliation(): Promise<void> {
       clean.out.trim().split('\n').slice(-3).join(' | '),
     )
     check('and says so in as many words', /clean answer/.test(clean.out))
+
+    // --- And the line it leaves behind, which is the whole of what the health
+    // report reads. A check whose verdict never reaches the audit log is a
+    // check `pnpm check:health` will report as never having run.
+    const written = await db
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, MEDIA_CHECK_COMPLETED_ACTION))
+      .orderBy(desc(auditEvents.createdAt))
+      .limit(2)
+
+    check('each run writes a line saying that it ran', written.length === 2)
+
+    const latest = mediaCheckRecordSchema.safeParse(written[0]?.metadata)
+    check(
+      'and it parses as the record the health report expects',
+      latest.success,
+      latest.success ? undefined : latest.error.message,
+    )
+    check(
+      'the clean run is recorded as clean',
+      latest.success && latest.data.problems === 0 && latest.data.checked === 0,
+    )
+
+    const problematic = mediaCheckRecordSchema.safeParse(written[1]?.metadata)
+    check(
+      'and the run that found things is recorded as having found them',
+      problematic.success && problematic.data.problems === 3 && problematic.data.missing === 1,
+      problematic.success ? JSON.stringify(problematic.data) : 'did not parse',
+    )
+
+    check(
+      'neither line carries a storage key',
+      !/\b(img|vid|doc)_[A-Za-z0-9_-]{16,}/.test(JSON.stringify(written)),
+    )
+
+    await db
+      .delete(auditEvents)
+      .where(eq(auditEvents.action, MEDIA_CHECK_COMPLETED_ACTION))
   } finally {
     process.env.MEDIA_DIR = previousDirectory
     resetEnvCache()

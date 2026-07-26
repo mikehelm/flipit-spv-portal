@@ -2973,3 +2973,138 @@ with the overview's new banner and card measured at 375px.
   would need the media check extracted from its script, and it should come with a
   bound on what it costs — it stats every stored object, which is fine for a
   command and would need thinking about on a page.
+
+## The media check, folded into the health report — three logs become one
+
+The previous three sections each ended with the same line under Uncertain:
+*`media:check` is still a third thing to watch.* `pnpm check:health` answers
+whether the scheduled job is running, `pnpm backup` records itself so the report
+can say when the last dump was, and `pnpm media:check` — the one that asks
+whether every stored file is actually there — wrote to a log of its own that
+nothing reads. An operator watching two of the three is watching the wrong
+number of things.
+
+The note also said what made it awkward, which turned out to be the whole design
+question: *it should come with a bound on what it costs — it stats every stored
+object, which is fine for a command and would need thinking about on a page.*
+
+**Built.**
+
+- **`src/lib/media/reconcile.ts`** — the comparing, lifted out of the script.
+  `collectTrackedFiles()`, `countTrackedFiles()`, and `reconcile(store, rows)`
+  returning a `Reconciliation` rather than printing one.
+- **`scripts/check-media.ts` is now the printing and the exit code**, and
+  nothing else. Every string it emits is unchanged, which the existing
+  `pnpm verify:media` assertions hold it to.
+- **It writes one line to the audit log when it runs** — `media.checked`, counts
+  only — the same shape `pnpm backup` established.
+- **`storageFindings`** on the health report, and **`mediaProblemFindings`**
+  shared with the overview banner, so a missing file reaches the first screen
+  after sign-in.
+- **`MEDIA_CHECK_STALE_DAYS = 10`**, against the weekly cron in `DEPLOYMENT.md`
+  §8.
+- **Twenty-seven unit tests** on the reconciliation and the new rules, and
+  **ten more database-backed checks** across `verify:health` (21 → 31) and
+  `verify:media` (49 → 54).
+
+**Decisions.**
+
+- ***The report reads a verdict; it never reconciles.*** This is the bound the
+  note asked for, and it is a stronger one than a limit or a timeout would have
+  been. Reconciling means a `stat` per stored object and a listing of the whole
+  bucket — network round trips, unbounded in the number of files, inside a page
+  render and inside a report a scheduler runs every morning. So the command
+  writes down what it found and the report reads the line: one indexed query,
+  fixed cost, no network. The full report adds three `count()` queries to know
+  whether there is anything to check at all; the banner does not even pay those.
+- ***Which means "nobody has run it" is itself a finding.*** That is the price
+  of reading a verdict rather than taking one, and it is paid explicitly: a
+  store with no recorded check reports **"No media check has been run against
+  this store"** rather than silence. Silence would be indistinguishable from
+  clean, which is the exact failure the whole health report exists to close.
+  It is ATTENTION rather than WRONG — nothing is known to be wrong; nothing has
+  looked.
+- ***A run that had no store to check does not count as a run.*** The audit line
+  carries `storeConfigured`, and a report reading one written by a deployment
+  with `MEDIA_STORE=""` treats it as no check at all. Otherwise switching the
+  store off and on again would leave a clean-looking record of a run that
+  examined nothing.
+- ***No store and no records is OK, not a warning.*** §13.2 is explicit that the
+  portal, the invitation and the certificate are all complete with an empty
+  media library, and that is the state a fresh install is in. No store *with*
+  records is WRONG, because every one of those rows points at a file this
+  deployment cannot read.
+- ***The audit line carries counts and nothing else.*** No storage key, no
+  document title, no record id. The command prints orphan keys to its own
+  output deliberately — naming one is the only way to act on it — but the audit
+  log is exported to a spreadsheet and read on a screen, and a key there outlives
+  the reason for it. A document's title is an investor's document's title. There
+  is a test that serialises the record and asserts none of the three appear.
+- ***Parsed, not cast.*** The script writes the metadata and the report reads it
+  weeks later, which is exactly the gap a shape drifts across. Both ends use
+  `mediaCheckRecordSchema`, and a row that does not parse is treated as no row —
+  a health page that threw on a malformed audit entry would take down the whole
+  report over its least important finding.
+- ***The banner gets the problem case only.*** `mediaProblemFindings` takes
+  `UnattendedFacts` and one query, so a missing file appears on the overview.
+  The "no store configured, and records that need one" case needs the three
+  counts to describe properly and stays on the full report — it is a deployment
+  configuration change rather than something that happens on a Tuesday, and the
+  daily command catches it. The strict-subset test now covers a media fault as
+  well as a scheduler one.
+- ***`verify:health` hides existing `media.checked` rows for the duration.***
+  `pnpm verify:media` spawns the real command several times and each run leaves
+  a line, so "nothing has ever checked this store" cannot be arranged by hoping
+  there is not one. Same rename-and-restore treatment the completed reminder
+  runs already got, and the same assertion afterwards that every hidden row came
+  back.
+
+**Deviations.** None.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Everything added is a count of files or problems.
+2. *A send path bypassing a gate?* Nothing added sends.
+3. *One recipient or the whole batch?* Not applicable.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No. The findings carry counts and no
+   title, name or key — tested — and both surfaces are behind
+   `requireOnboardedAdmin()` as before. No investor-facing file changed.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The audit metadata
+   is nine numbers and booleans, and `assertNoSecrets` sees them. The report
+   prints no storage key, and there is a test asserting the pattern never
+   appears in a finding.
+9. *Indexable routes?* No route added.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (1979, up from 1952) and `pnpm build`
+are green. `pnpm verify:health` is 31 of 31, `pnpm verify:media` 54 of 54, and
+`pnpm verify:viewport` 135 of 135.
+
+**Uncertain.**
+
+- *Nothing still tells anybody without somebody looking.* Unchanged, and now
+  covering one more thing. The non-zero exit from `pnpm check:health` remains
+  the only signal a machine could act on, and nothing acts on it. Wiring it to
+  an email means adding a second unattended sender to this application, which
+  is a decision about who gets woken up rather than a piece of work.
+- *A clean media check can be up to a week stale and the report will still call
+  it clean.* It says when the run was, so the reader can tell — but "last media
+  check 6 days ago, and it was clean" describes a state that may have changed
+  the day after. The alternative is reconciling on the page, which is the cost
+  this deliberately refused. Sharpening it would mean the check running more
+  often, not the report working harder.
+- *The overview banner still has no rendering with a fault behind it.* The
+  viewport run exercises the healthy branch, because the database it runs
+  against is healthy. Unchanged from the previous section, and now one more
+  finding could put it there.
+- *`countTrackedFiles` counts every row in `document_packages`, superseded
+  versions included.* That is right for "how many records name a stored file",
+  because a superseded version still has an object behind it — but it means the
+  "records added since the last check" clause counts a correction as an
+  addition. Harmless, and worth knowing before somebody reads that number as a
+  count of documents.
