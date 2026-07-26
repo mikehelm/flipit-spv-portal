@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| Storage in the health report — `media:check` folded in | claude-opus-5, 26 Jul | 2026-07-26 02:10 | `src/lib/media/reconcile.ts` (new), `scripts/check-media.ts`, `src/lib/health/rules.ts`, `src/lib/health/report.ts`, `scripts/verify-health.ts`, `scripts/verify-media.ts`, tests |
 
 ## Done, so nobody starts it again
 
