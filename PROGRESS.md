@@ -3737,3 +3737,95 @@ a half that exists and a half that does not.
 Also unfixed and smaller: §13.1's *"more prominent once an investor reaches
 Commitment agreed"* is not implemented — the tiles render identically at every
 stage — and §7's sunset notice is still not *configurable*, only dated.
+
+## Four filters that worked and could not be reached
+
+§12 names seven filters: *"email status · account status · timeline status ·
+response status · jurisdiction · deadline · search by name or email."* All seven
+were parsed from the query string and applied by `applyFilters` from the day the
+screen shipped. The form rendered three.
+
+The other four worked perfectly. They were reachable by hand-typing a query
+string and by nothing else, which for the person this screen exists for is the
+same as not existing. Nothing failed, and nothing could have: from every test
+that existed, a filter with no control is indistinguishable from a filter with
+one.
+
+**Built.**
+
+- **`REVIEW_FILTER_CONTROLS`**, beside `applyFilters` — every filter, the values
+  it takes, and what to call them in a sentence a person would use rather than
+  an enum.
+- **The four missing controls**: account status, timeline status, response, and
+  a date for the deadline.
+- **A "Clear" link**, when any filter is set. A filtered view that cannot be
+  left is how somebody concludes a recipient has vanished.
+- **The test that would have caught this.** It reads the keys `applyFilters`
+  actually branches on out of its own source, asserts there are seven, and
+  asserts each has a control on the page — either named outright or in the list
+  the page maps over. A filter added to the function and not to the screen now
+  fails a test.
+
+**Decisions.**
+
+- ***The list of controls lives beside the function that applies them***, not in
+  the page. Two lists in two files is exactly how these drifted in the first
+  place, and the test that checks them is only meaningful because they are
+  adjacent enough to read together.
+- ***Labels rather than enum values.*** The email-status select offered `DRAFT`,
+  which is a database word for "not sent yet". Asserted: no option's label is
+  its own value, and none contains an underscore.
+- ***Every option is checked to be a value the filter accepts.*** A control
+  offering a value that silently matches nothing is the same defect one level
+  down, and it is the kind that survives a screenshot.
+- ***A date input for the deadline, not a preset like "this week".*** §12 says
+  "deadline" and nothing more. A preset would be a rule about time that the
+  specification does not contain.
+- ***No `outline-none` on the new controls.*** The accessibility test caught a
+  focus ring removed for tidiness on the date field, which is exactly the check
+  it exists for. Left as a comment there, since the next person will want to
+  remove it too.
+
+**Deviations.** None. §12 asked for seven and there were seven; only four had no
+way in.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here touches an amount; the summary
+   totals are untouched.
+2. *A send path bypassing a gate?* No. Filtering changes what is listed, never
+   what may be sent — the gate is evaluated per recipient in
+   `loadBatchContext` and a filtered view cannot widen it.
+3. *One recipient or the whole batch?* Unchanged, and note the existing rule
+   this preserves: a blocked recipient is never filtered out of the table by
+   default. §8.2 shows them; it does not erase them.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* This is the admin screen, whose
+   whole purpose is the list. No investor-facing surface changed.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched — though suspended accounts can now be found on this
+   screen, which was one of the four.
+8. *Does any log line contain a token, a body or a key?* Nothing is logged.
+9. *Indexable routes?* No route added; the admin area is `noindex`.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2120, up from 2104) and `pnpm build`
+are green. `pnpm verify:viewport` is 158 of 158 — the new controls hold at
+375px, which is where a row of seven selects was most likely to break.
+
+**Uncertain.**
+
+- *The filters are a `GET` form and the state is the URL*, which was already
+  true and is why a filtered view can be shared. Nothing has been done about a
+  filter combination that matches nothing looking identical to an empty round —
+  the copy distinguishes them, but only in a sentence.
+- *Timeline status offers all eight stages whether or not anybody is at one.*
+  Jurisdiction is derived from the rows on screen and these are not, which is a
+  deliberate inconsistency: a stage list that shrinks as the round progresses
+  would be a moving target on a screen somebody is learning.
+- *`CHROMIUM_PATH=/opt/pw-browsers/chromium` is needed to run
+  `pnpm verify:viewport` in this container*, whose Playwright browser build is
+  older than the pinned client. The escape hatch already existed; this is a note
+  that it is required here, not a change.

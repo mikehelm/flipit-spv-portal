@@ -408,6 +408,16 @@ Related, and worth knowing: the currency on that line used to be the word "USD" 
 
 ---
 
+## The four filters you could not reach
+
+The **Recipients** screen has always been able to filter by account status, by where somebody is on the timeline, by how they answered, and by deadline. It has been able to since the day it was built. There was simply no box on the screen for any of them — they worked only if you typed the right thing into the address bar, which nobody does.
+
+All four are now on the screen, next to the three that were already there. Filter to everyone who has not answered yet, or everyone whose deadline is inside the next week, or everyone sitting at "documents issued". There is a **Clear** link once any filter is on, so a filtered list can always be got out of.
+
+Two small things worth noticing: the email-status box used to offer you the word "DRAFT", which is a database word — it now says "Not sent". And a blocked recipient is still never hidden from the list by a filter; a block stops a send, it does not erase the person.
+
+---
+
 ## Updates
 
 Sign in as the operator and open **Updates**. Write one, choose who it goes to, and save it as a draft. Nothing has reached anybody: no portal shows it, no email exists, and the recipient list is empty because the audience is only worked out at the moment you publish.

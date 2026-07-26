@@ -9,13 +9,19 @@ const money = (value: string) => formatMoney(value, { currencyCode: 'USD' })
 import { loadBatchContext } from '@/lib/sending/data'
 import {
   applyFilters,
+  anyFilterSet,
   jurisdictionsIn,
+  REVIEW_FILTER_CONTROLS,
   summarise,
   type ReviewFilters,
   type ReviewRow,
 } from '@/lib/sending/review'
 import { PreflightPanel } from './preflight-panel'
 import { SendControl } from './send-row'
+
+/** One class for every filter control, so they line up on a narrow screen. */
+const SELECT =
+  'w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext focus:border-orange'
 
 export const metadata: Metadata = {
   title: 'Review and send — Flipit SPV',
@@ -296,12 +302,12 @@ export default async function RecipientsPage({
             name="emailStatus"
             defaultValue={filters.emailStatus ?? ''}
             aria-label="Filter by email status"
-            className="w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext focus:border-orange"
+            className={SELECT}
           >
             <option value="">Any email status</option>
-            {['DRAFT', 'SENT', 'FAILED', 'BLOCKED'].map((value) => (
-              <option key={value} value={value}>
-                {value}
+            {REVIEW_FILTER_CONTROLS[0]!.options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -309,7 +315,7 @@ export default async function RecipientsPage({
             name="jurisdiction"
             defaultValue={filters.jurisdiction ?? ''}
             aria-label="Filter by jurisdiction"
-            className="w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext focus:border-orange"
+            className={SELECT}
           >
             <option value="">Any jurisdiction</option>
             {jurisdictionsIn(context.rows).map((code) => (
@@ -318,12 +324,63 @@ export default async function RecipientsPage({
               </option>
             ))}
           </select>
-          <button
-            type="submit"
-            className="inline-flex min-h-11 items-center justify-center rounded-sm border hairline px-4 text-sm font-semibold text-ftext transition-colors hover:border-orange sm:w-auto"
-          >
-            Apply filters
-          </button>
+
+          {/*
+            §12 names seven filters. All seven were parsed and applied; three
+            had a control. The other four were reachable only by typing a query
+            string, which for the person this screen is built for is the same as
+            not existing. They are rendered from REVIEW_FILTER_CONTROLS so the
+            list and `applyFilters` are read together — and a test asserts the
+            two agree, which is the check that would have caught the gap.
+          */}
+          {REVIEW_FILTER_CONTROLS.filter((control) => control.name !== 'emailStatus').map(
+            (control) => (
+              <select
+                key={control.name}
+                name={control.name}
+                defaultValue={(filters[control.name] as string | null) ?? ''}
+                aria-label={`Filter by ${control.label.toLowerCase()}`}
+                className={SELECT}
+              >
+                <option value="">{control.anyLabel}</option>
+                {control.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ),
+          )}
+
+          {/*
+            No `outline-none` anywhere near this, deliberately: the whole set of
+            controls is meant to be usable from a keyboard, and a focus ring
+            removed for tidiness is the commonest way that stops being true.
+          */}
+          <label className="flex flex-col gap-1 text-xs text-muted">
+            <span>Deadline on or before</span>
+            <input
+              type="date"
+              name="deadlineOnOrBefore"
+              defaultValue={filters.deadlineOnOrBefore ?? ''}
+              aria-label="Filter by deadline, on or before a date"
+              className={SELECT}
+            />
+          </label>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              className="inline-flex min-h-11 items-center justify-center rounded-sm border hairline px-4 text-sm font-semibold text-ftext transition-colors hover:border-orange"
+            >
+              Apply filters
+            </button>
+            {anyFilterSet(filters) ? (
+              <Link href="/recipients" className="text-sm text-orange underline">
+                Clear
+              </Link>
+            ) : null}
+          </div>
         </form>
 
         {visible.length === 0 ? (

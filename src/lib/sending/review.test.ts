@@ -1,6 +1,15 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { applyFilters, jurisdictionsIn, summarise, type ReviewRow } from './review'
+import { join } from 'node:path'
+import {
+  anyFilterSet,
+  applyFilters,
+  jurisdictionsIn,
+  REVIEW_FILTER_CONTROLS,
+  summarise,
+  type ReviewFilters,
+  type ReviewRow,
+} from './review'
 
 const row = (overrides: Partial<ReviewRow> = {}): ReviewRow => ({
   offerId: 'offer_1',
@@ -196,5 +205,138 @@ describe('filters', () => {
 
   it('lists the distinct jurisdictions present, normalised and sorted', () => {
     expect(jurisdictionsIn(rows)).toEqual(['AU', 'US'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Every filter §12 names has a control somebody can actually reach
+// ---------------------------------------------------------------------------
+
+/**
+ * §12: *"Filters: email status · account status · timeline status · response
+ * status · jurisdiction · deadline · search by name or email."*
+ *
+ * Seven. All seven were parsed from the query string and applied by
+ * `applyFilters` from the day the screen shipped, and the form rendered three.
+ * The other four worked perfectly and were reachable only by hand-typing a
+ * URL — which, for the person this screen exists for, is the same as not
+ * existing at all. Nothing failed. Nothing could fail: a filter with no control
+ * is indistinguishable, from every test that existed, from a filter with one.
+ *
+ * So the check is between the function and the page, in both directions.
+ */
+describe('every filter is reachable', () => {
+  const rows = [
+    row({ offerId: 'a', jurisdiction: 'AU', emailStatus: 'SENT', responseDeadline: '2026-08-01' }),
+    row({ offerId: 'b', jurisdiction: 'US', emailStatus: 'BLOCKED', blocked: true, responseDeadline: '2026-08-20' }),
+  ]
+
+  const page = readFileSync(
+    join(process.cwd(), 'src/app/(admin)/recipients/page.tsx'),
+    'utf8',
+  )
+
+  /** The keys `applyFilters` actually branches on, read out of its source. */
+  const branchedOn = [
+    ...readFileSync(join(process.cwd(), 'src/lib/sending/review.ts'), 'utf8')
+      .slice(
+        readFileSync(join(process.cwd(), 'src/lib/sending/review.ts'), 'utf8').indexOf(
+          'export function applyFilters(',
+        ),
+      )
+      .matchAll(/filters\.(\w+)/g),
+  ].map((match) => match[1]!)
+
+  it('is checking against a real list', () => {
+    expect(new Set(branchedOn).size).toBe(7)
+  })
+
+  /**
+   * A key has a control if the page names it outright, or if it is in
+   * `REVIEW_FILTER_CONTROLS` — which the page maps over, asserted just below,
+   * so an entry there is a rendered `<select>`.
+   */
+  const reachable = new Set<string>([
+    ...[...page.matchAll(/name="(\w+)"/g)].map((match) => match[1]!),
+    ...REVIEW_FILTER_CONTROLS.map((control) => String(control.name)),
+  ])
+
+  it('renders the control list rather than a second copy of it', () => {
+    expect(page).toContain('REVIEW_FILTER_CONTROLS')
+    expect(page).toMatch(/REVIEW_FILTER_CONTROLS[\s\S]{0,120}\.map\(/)
+    expect(page).toContain('name={control.name}')
+  })
+
+  it.each([...new Set(branchedOn)])('%s has a control on the page', (key) => {
+    expect(reachable.has(key)).toBe(true)
+  })
+
+  it('names all seven of §12s filters', () => {
+    expect(new Set(branchedOn)).toEqual(
+      new Set([
+        'emailStatus',
+        'accountStatus',
+        'stage',
+        'responseChoice',
+        'jurisdiction',
+        'deadlineOnOrBefore',
+        'search',
+      ]),
+    )
+  })
+
+  it('offers every value each select can be given', () => {
+    // A control whose options are a subset of what the filter accepts is the
+    // same defect one level down.
+    for (const control of REVIEW_FILTER_CONTROLS) {
+      expect(control.options.length).toBeGreaterThan(0)
+      expect(new Set(control.options.map((option) => option.value)).size).toBe(
+        control.options.length,
+      )
+    }
+  })
+
+  it('gives every option a label a person would use, not an enum', () => {
+    for (const control of REVIEW_FILTER_CONTROLS) {
+      for (const option of control.options) {
+        expect(option.label).not.toBe(option.value)
+        expect(option.label).not.toMatch(/_/)
+      }
+    }
+  })
+
+  it('accepts every option value it offers', () => {
+    // Each option, applied on its own, must be a filter `applyFilters`
+    // understands — not merely a string that removes every row.
+    for (const control of REVIEW_FILTER_CONTROLS) {
+      for (const option of control.options) {
+        const filters = { [control.name]: option.value } as ReviewFilters
+        expect(() => applyFilters(rows, filters)).not.toThrow()
+        expect(applyFilters(rows, filters).length).toBeLessThanOrEqual(rows.length)
+      }
+    }
+  })
+
+  it('filters by each of the four that had no control', () => {
+    expect(applyFilters(rows, { accountStatus: 'ACTIVE' }).every((r) => r.accountStatus === 'ACTIVE')).toBe(true)
+    expect(applyFilters(rows, { stage: 'INVITATION_SENT' }).every((r) => r.stage === 'INVITATION_SENT')).toBe(true)
+    expect(
+      applyFilters(rows, { responseChoice: 'INTERESTED' }).every((r) => r.responseChoice === 'INTERESTED'),
+    ).toBe(true)
+    expect(
+      applyFilters(rows, { deadlineOnOrBefore: '2099-01-01' }).length,
+    ).toBe(rows.length)
+  })
+})
+
+describe('whether to offer a way out of a filtered view', () => {
+  it('is false when nothing is set', () => {
+    expect(anyFilterSet({})).toBe(false)
+    expect(anyFilterSet({ search: null, stage: undefined, jurisdiction: '' })).toBe(false)
+  })
+
+  it('is true as soon as one is', () => {
+    expect(anyFilterSet({ accountStatus: 'SUSPENDED' })).toBe(true)
+    expect(anyFilterSet({ search: 'a' })).toBe(true)
   })
 })

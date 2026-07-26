@@ -144,3 +144,94 @@ export function jurisdictionsIn(rows: readonly ReviewRow[]): string[] {
   }
   return [...seen].sort()
 }
+
+// ---------------------------------------------------------------------------
+// The controls §12 asks for
+// ---------------------------------------------------------------------------
+
+/**
+ * Every filter, with the values it can take and what to call them.
+ *
+ * §12: *"Filters: email status · account status · timeline status · response
+ * status · jurisdiction · deadline · search by name or email."* Seven. All
+ * seven were parsed from the query string and applied by `applyFilters`; the
+ * form rendered three. The other four worked perfectly and were reachable only
+ * by hand-typing a URL, which is the same as not existing.
+ *
+ * The list lives here, beside `applyFilters`, so the two are read together —
+ * and `review.test.ts` asserts that every key `applyFilters` branches on has an
+ * entry, which is the check that would have caught the gap. A filter added to
+ * the function and not to this list fails a test rather than shipping invisible.
+ *
+ * Jurisdiction is deliberately absent: its options come from the rows on the
+ * screen rather than from a fixed list, and the page builds it with
+ * `jurisdictionsIn`.
+ */
+export interface ReviewFilterControl {
+  /** The query-string key, which is also the form field name. */
+  name: keyof ReviewFilters
+  /** For the visible label and the `aria-label`. */
+  label: string
+  /** The empty option — what "no filter" is called. */
+  anyLabel: string
+  options: Array<{ value: string; label: string }>
+}
+
+const STAGE_LABELS: Array<[string, string]> = [
+  ['INVITATION_SENT', 'Invitation sent'],
+  ['RESPONSE_RECORDED', 'Response recorded'],
+  ['DOCUMENTS_ISSUED', 'Documents issued'],
+  ['COMMITMENT_AGREED', 'Commitment agreed'],
+  ['ALLOCATION_ACCEPTED', 'Allocation accepted'],
+  ['PAYMENT_INSTRUCTIONS_ISSUED', 'Payment instructions issued'],
+  ['FUNDS_RECEIVED', 'Funds received'],
+  ['COMPLETED', 'Completed'],
+]
+
+export const REVIEW_FILTER_CONTROLS: ReviewFilterControl[] = [
+  {
+    name: 'emailStatus',
+    label: 'Email status',
+    anyLabel: 'Any email status',
+    options: [
+      { value: 'DRAFT', label: 'Not sent' },
+      { value: 'SENT', label: 'Sent' },
+      { value: 'FAILED', label: 'Failed' },
+      { value: 'BLOCKED', label: 'Blocked' },
+    ],
+  },
+  {
+    name: 'accountStatus',
+    label: 'Account status',
+    anyLabel: 'Any account status',
+    options: [
+      { value: 'INVITED', label: 'Invited' },
+      { value: 'ACTIVE', label: 'Active' },
+      { value: 'SUSPENDED', label: 'Suspended' },
+      { value: 'CLOSED', label: 'Closed' },
+      { value: 'ARCHIVED', label: 'Archived' },
+    ],
+  },
+  {
+    name: 'stage',
+    label: 'Timeline status',
+    anyLabel: 'Any timeline status',
+    options: STAGE_LABELS.map(([value, label]) => ({ value, label })),
+  },
+  {
+    name: 'responseChoice',
+    label: 'Response',
+    anyLabel: 'Any response',
+    options: [
+      { value: 'NO_RESPONSE', label: 'Not yet answered' },
+      { value: 'INTERESTED', label: 'Interested' },
+      { value: 'NOT_INTERESTED', label: 'Not interested' },
+      { value: 'QUESTION', label: 'Has a question' },
+    ],
+  },
+]
+
+/** Is any filter set? Decides whether a "clear" link is worth showing. */
+export function anyFilterSet(filters: ReviewFilters): boolean {
+  return Object.values(filters).some((value) => value !== null && value !== undefined && value !== '')
+}
