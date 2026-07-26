@@ -166,6 +166,42 @@ describe('both stores answer the same questions the same way', () => {
         )
       })
 
+      /**
+       * The streaming read is the one the video route uses, so both stores have
+       * to answer it the same way — the awkward answers included. A store that
+       * said "absent" where the other said "there, and empty" would make the
+       * choice of backend visible in an HTTP status code.
+       */
+      it('streams, and declares the length before a byte is read', async () => {
+        const store = build()
+        const bytes = new Uint8Array(256)
+        for (let i = 0; i < bytes.length; i += 1) bytes[i] = i
+
+        await store.put('img_STREAMSTREAMSTREAMSTR', bytes, 'image/png')
+
+        const whole = (await store.openStream('img_STREAMSTREAMSTREAMSTR'))!
+        expect(whole.length).toBe(256)
+        expect(whole.contentType).toBe('application/octet-stream')
+        expect([...new Uint8Array(await new Response(whole.stream).arrayBuffer())]).toEqual([
+          ...bytes,
+        ])
+
+        const part = (await store.openStream('img_STREAMSTREAMSTREAMSTR', { start: 8, end: 11 }))!
+        expect(part.length).toBe(4)
+        expect([...new Uint8Array(await new Response(part.stream).arrayBuffer())]).toEqual([
+          8, 9, 10, 11,
+        ])
+      })
+
+      it('a stream of an object that is not there is null, and a backwards range too', async () => {
+        const store = build()
+        await store.put('img_STREAMNULLSTREAMNULLS', new Uint8Array([1, 2, 3]), 'image/png')
+
+        expect(await store.openStream('img_NOTHINGHEREATALLNOTHING')).toBeNull()
+        expect(await store.openStream('img_STREAMNULLSTREAMNULLS', { start: 2, end: 1 })).toBeNull()
+        await expect(store.openStream('../../etc/passwd')).rejects.toThrow(/not a storage key/)
+      })
+
       it('says where it is writing, and never says it with a credential', () => {
         const store = build()
         const described = store.describe()

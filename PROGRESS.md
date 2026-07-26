@@ -1835,3 +1835,145 @@ asserts the client refuses it.
   proxy could alter it without invalidating the signature — which would produce
   the wrong bytes, not a security failure, because the response is not trusted
   for anything but its length. Worth knowing about.
+
+---
+
+## Streaming a media response — the sixty megabytes the range work left behind
+
+*26 July 2026. Claimed by the previous session at 00:02 and never started — the
+container it was in was discarded a minute later. Taken over rather than
+re-claimed, per CLAIMS.md's own rule about a stale row.*
+
+The range work fixed the video that would not play on an iPhone and wrote its
+own remaining problem down under Uncertain: *"the whole-file response still
+reads the whole file into memory."* That is the ordinary case, not the exotic
+one. A `<video>` element sends `Range` when it is **seeking**; when it is simply
+downloading — which is what every desktop browser does on load — it sends no
+`Range` at all and takes the 200. So the branch that held a sixty-megabyte
+video in one buffer was the branch nearly every viewer used, once per viewer, on
+the one route several people plausibly open in the same minute of a raise.
+
+**Built.**
+
+- **`StoredStream` and `MediaStore.openStream(key, range?)`** — the read an HTTP
+  response should use. It hands back a `ReadableStream` that has not been read,
+  the content type, and a `length` taken from the source itself: `stat` on a
+  filesystem, `Content-Length` on an object store. Never from a database column.
+- **A filesystem implementation on a file handle**, streamed with
+  `handle.createReadStream({ start, end })`, which closes the descriptor when
+  the stream ends, errors **or is cancelled** — the third being the one that
+  matters, since a browser seeking away mid-download cancels the body.
+- **An object-store implementation that hands the `fetch` body on** rather than
+  draining it, via a new `S3ObjectClient.openObject`. The buffering in that
+  class was one `arrayBuffer()` call; there is now none on the serving path.
+- **`serveMedia` builds every body from a stream** — the 206 and, the point of
+  the exercise, the 200.
+- **`getRange` on both stores, and `getObjectRange` on the client, are now
+  `openStream` with a collector on the end.** One implementation of the
+  arithmetic per store rather than two, and the buffering read is a named
+  function called `collect` rather than the default everything falls into.
+- **Thirty-six new tests**, including four shape assertions in `boundary.test.ts`
+  that would fail on a single `store.get(` put back into `serve.ts` for
+  convenience.
+
+**Decisions.**
+
+- ***The proof is about when bytes move, not which bytes arrive.*** A buffered
+  implementation and a streaming one return identical bodies, so a test that
+  only checks the body cannot tell them apart, and "it streams" would decay to a
+  comment. So: a spy store whose stream counts pulls asserts that a built
+  `Response` has pulled **zero** bytes and that reading it pulls all of them; a
+  real 200 KiB file asserts the body arrives in more than one chunk, which a
+  buffered read cannot do; and an S3 test stands up a server that sends half the
+  body, waits, then sends the rest, and asserts `openObject` returned during the
+  wait.
+- ***`get` still buffers, and is still what the image and document routes use.***
+  An image is capped at five megabytes and a document at twenty; the video is
+  the one thing here that is sixty. Converting the other two would be the same
+  change to two more routes with their own header sets and their own boundary
+  tests, for a ceiling a third the size. Recorded rather than done.
+- ***A response whose length nobody stated is refused.*** Every S3-compatible
+  store sends `Content-Length` on a GET, and a 206 also sends `Content-Range`;
+  `responseLength` reads the first, falls back to the second, and returns null
+  otherwise — on which `openObject` refuses. The alternative is inventing a
+  length and promising it to a browser, which holds a connection open waiting
+  for bytes that are not coming. The refusal names nothing from the body.
+- ***`Content-Range` is built from what the store is about to send, not from
+  what was asked for.*** They differ only when the stored file is shorter than
+  the row says, and in that case the old code sent a `Content-Length` of what it
+  read alongside a `Content-Range` promising what was requested — a response
+  that hangs a player. A test truncates a file behind its row and pins the
+  corrected header.
+- ***A range that begins past the real end of a real object is the ordinary
+  404.*** The store distinguishes it from absence — null means gone, length zero
+  means there and shorter than claimed — and `serveMedia` deliberately collapses
+  the two, because the alternative is a 416 quoting a size that is wrong, and
+  neither answer is one an investor is entitled to tell apart.
+- ***The ranged read now goes through `send`,*** so it retries a 5xx like every
+  other verb. A GET is idempotent; the previous single-shot fetch was an
+  omission rather than a policy. `Range` is still outside the signature, so the
+  canonical request shape is unchanged.
+- ***`FakeS3` now sets `Content-Length` by hand.*** Node answers chunked
+  otherwise, and a fake that omits a header every real store sends is a fake
+  that lets a client come to depend on not having one. The genuinely
+  length-less case is covered by a separate bare server, which is refused.
+
+**Deviations.** `MediaStore` gained a method again — a breaking change to the
+seam, and both implementations have it. Nothing outside `src/lib/media` calls
+it.
+
+**Checklist.**
+
+1. **No monetary value is a JavaScript number.** A byte offset is not money. The
+   existing assertion that `parseFloat` and `.toNumber(` appear in no media
+   module still covers every file here.
+2. **No send path bypasses anything.** Nothing here sends. `verify:deployment`
+   re-run — 56 checks, including that a real invitation is refused off the
+   production deployment and a test send to the operator is still allowed.
+3. **A jurisdiction block still stops one recipient.** Untouched.
+4. **The operator still cannot record, amend or void an approval.** Untouched.
+5. **No investor-facing response reveals another investor.** The access checks
+   are unchanged and still run before a byte is read — `serveMedia` is reached
+   only after `mayViewVideo` has said yes. The one new refusal, a stored file
+   shorter than its row, is the route's own 404 rather than a new status, so a
+   deployment's storage trouble is not something an investor can detect.
+   `verify:deployment` still checks an anonymous range request gets the same 404
+   as anything else.
+6. **Claim and sign-in tokens are single-use, hashed and expiring.** Untouched.
+7. **Suspension revokes sessions and refuses new links.** Untouched.
+8. **No log line carries a token, a body or a key.** Nothing added calls
+   `console`. The new refusal message quotes no part of the response it refuses.
+9. **The verification page is still the only indexable route.** `BASE_HEADERS`
+   is still defined once and spread exactly three times, and the boundary test
+   that pins that count still passes.
+10. A published Q&A entry carries nothing identifying. Untouched.
+11. The AI path cannot change a calculated figure. Untouched.
+12. The app still refuses to send when its base URL is not the production value.
+    Confirmed by `verify:deployment`.
+
+**Verified.** `pnpm typecheck`, `pnpm lint`, `pnpm test` — 1818 tests in 92
+files, up from 1782 in 91. `pnpm verify:media` — 39 checks. `pnpm
+verify:object-store` — 36 checks. `pnpm verify:deployment` — 56 checks against
+the built application over real HTTP with a real investor session, including
+every range assertion the previous package added. `pnpm acceptance` regenerates
+`ACCEPTANCE.md` unchanged at 48 criteria.
+
+**Uncertain.**
+
+- *Nothing has measured the memory.* The tests prove the bytes move lazily and
+  that a body arrives in pieces, which is the mechanism; they do not put a
+  number on the saving. A deployment with a real sixty-megabyte video and two
+  browsers is where that number comes from.
+- *A `Response` that is built and never sent now holds a socket or a descriptor
+  until it is collected.* That is inherent to handing a stream to a caller
+  rather than a buffer, and the caller here is Next.js, which sends what it is
+  given. Worth knowing about if a route ever starts building a response it might
+  discard.
+- *Images and documents still buffer,* stated under Decisions and unchanged: a
+  five-megabyte ceiling and a twenty-megabyte one against the video's sixty.
+- *The object store's whole-object `getObject` still buffers too.* It is what
+  `store.get` uses, so the same note applies to it as to the routes above.
+- *No real S3 provider has answered any of this.* `verify:object-store` runs
+  against a signature-checking fake on the same machine. The one behaviour a
+  real provider could differ on is refusing a `Range` header it was not asked to
+  sign, and that is a 403 with a name on it rather than a wrong answer.

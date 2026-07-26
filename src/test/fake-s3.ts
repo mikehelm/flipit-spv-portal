@@ -135,6 +135,7 @@ export class FakeS3 {
         response
           .writeHead(206, {
             'content-type': stored.contentType,
+            'content-length': String(slice.length),
             'content-range': `bytes ${start}-${end}/${stored.bytes.length}`,
             'accept-ranges': 'bytes',
           })
@@ -142,7 +143,17 @@ export class FakeS3 {
         return
       }
 
-      response.writeHead(200, { 'content-type': stored.contentType }).end(stored.bytes)
+      // `Content-Length` is set by hand, because Node would otherwise answer
+      // this chunked and every real S3-compatible store states the length of
+      // the body it is sending. A fake that omits a header the real thing
+      // always sends is a fake that lets a client come to depend on not having
+      // one — and this client refuses a body whose length nobody stated.
+      response
+        .writeHead(200, {
+          'content-type': stored.contentType,
+          'content-length': String(stored.bytes.length),
+        })
+        .end(stored.bytes)
     } else if (method === 'DELETE') {
       this.objects.delete(key!)
       response.writeHead(204).end()

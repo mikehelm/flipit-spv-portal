@@ -171,6 +171,52 @@ describe('the video is served only to authenticated investors — §13.3', () =>
     )
   })
 
+  /**
+   * The video response streams, and there is no shape of edit that quietly
+   * un-streams it. A single `await store.get(...)` put back for convenience
+   * would restore a sixty-megabyte buffer per viewer and pass every
+   * behavioural test in the suite, because the bytes that arrive would be
+   * identical. Only the shape tells them apart.
+   */
+  it('serveMedia never reads an object into memory, on any branch', () => {
+    const serve = code('src/lib/media/serve.ts')
+
+    expect(serve).not.toContain('store.get(')
+    expect(serve).not.toContain('store.getRange(')
+    expect(serve).not.toContain('arrayBuffer(')
+    expect(serve).not.toContain('Uint8Array')
+    // Two bodies — the 200 and the 206 — and both of them are the store's
+    // stream rather than anything this module has held.
+    expect(serve.match(/new Response\(\w+\.stream,/g)?.length).toBe(2)
+    expect(serve.match(/store\.openStream\(/g)?.length).toBe(2)
+  })
+
+  it('both stores stream, and the range arithmetic exists once in each', () => {
+    const store = code('src/lib/media/store.ts')
+
+    // Two implementations, two `openStream`s, and each `getRange` is that
+    // method with a collector on the end rather than a second copy of the
+    // arithmetic.
+    expect(store.match(/async openStream\(/g)?.length).toBe(2)
+    expect(store.match(/await this\.openStream\(key, \{ start, end \}\)/g)?.length).toBe(2)
+    // The buffering read exists in exactly one place, and it is the one named
+    // for what it does.
+    expect(store.match(/async function collect\(/g)?.length).toBe(1)
+  })
+
+  it('the object-store client hands the body on rather than draining it', () => {
+    const s3 = code('src/lib/media/s3.ts')
+
+    const opener = s3.slice(s3.indexOf('async openObject('))
+    const body = opener.slice(0, opener.indexOf('async deleteObject('))
+
+    // `cancel()` is a drain that throws bytes away, which is what a refusal
+    // does; `arrayBuffer()` is a drain that keeps them, which is the thing
+    // this method exists not to do.
+    expect(body).not.toContain('arrayBuffer(')
+    expect(body).toContain('response.body ?? emptyBody()')
+  })
+
   it('never indexed', () => {
     for (const source of [portalRoute, previewRoute]) {
       expect(source).toContain('X-Robots-Tag')

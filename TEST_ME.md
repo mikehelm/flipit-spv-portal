@@ -474,6 +474,8 @@ Then publish it and try again from an investor's portal. It plays.
 
 **Seeking, and why it is worth a mention.** A published video now answers a browser that asks for part of it rather than always sending the whole thing. That sounds like a nicety and is not: Safari opens every video by asking for the first two bytes, and gives up entirely on a server that replies with the whole file instead. Before this, David's video did not play on an iPhone at all. Now it plays, and the scrub bar works. If you have an iPhone to hand, that is the ten-second test worth running on the first real deployment.
 
+**And the video is now sent as it is read, rather than read and then sent.** Until today the server loaded the whole video into its memory before sending a single byte of it. That worked, and it cost the size of the video — sixty megabytes, say — for every person watching at that moment. It now reads and sends in step, so ten people watching at once costs roughly what one person costs. There is nothing to click and nothing looks different: the video plays exactly as it did. The way to see it is to watch the server's memory while several browsers play the same video, and it is the sort of thing that only ever shows up on the day the round is going well.
+
 ---
 
 ## Sending yourself the whole thing
@@ -517,7 +519,7 @@ Worth trying, because these are all meant to work:
 - **A note saying what changed in a correction.** A corrected document is versioned and both versions stay readable, but nothing records what was different — only the description, if somebody writes one.
 - **An email when a document is issued or corrected.** Deliberate, but somebody will expect it. Send a message or an update alongside.
 - **A real storage bucket, actually connected.** The code to use one is now written and tested (see "The media library"), but only against a stand-in on the same machine. Pointing it at a real Amazon or Cloudflare bucket and uploading one image is the last step, and it is minutes rather than work.
-- **Streaming a video rather than holding it in memory.** Seeking works now, but a straight download still builds the whole file in memory before sending it. Fine at sixty megabytes; not the shape you would want for anything larger.
+- **Images and documents are still sent the old way.** The video streams; an image (five megabytes at most) and a document (twenty at most) are still built in memory before being sent. Both are small enough that it does not matter today, and both would be a short piece of work if a much larger document ever needed issuing.
 
 ## The round, and closing it
 

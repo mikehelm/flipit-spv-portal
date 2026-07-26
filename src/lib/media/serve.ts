@@ -13,6 +13,13 @@
  * `noindex` still apply to a partial response, and the content type is still
  * the one sniffed from the file's own bytes at upload rather than anything a
  * browser said.
+ *
+ * **Nothing here holds a file.** Every response body is the store's stream,
+ * handed to `Response` and pulled from at the speed the client's socket
+ * drains. The 200 was the case that mattered: a `<video>` element that is
+ * downloading rather than seeking sends no `Range` at all, so the whole-file
+ * branch was sixty megabytes of process memory per viewer, on the one route
+ * several people plausibly open in the same minute.
  */
 
 import {
@@ -67,30 +74,46 @@ export async function serveMedia(input: ServeMediaInput): Promise<Response> {
 
   if (outcome.kind === 'partial') {
     const { range } = outcome
-    const part = await input.store.getRange(input.storageKey, range.start, range.end)
+    const part = await input.store.openStream(input.storageKey, range)
     if (!part) return input.notFound
 
-    return new Response(new Uint8Array(part.bytes), {
+    // The object is there, and has nothing at that offset: the stored file is
+    // shorter than the row claims. That is the same 404 as an id that does not
+    // exist — the only answer that tells an investor nothing about the state of
+    // this deployment's storage.
+    if (part.length === 0) return input.notFound
+
+    // Built from what the store is about to send, not from what was asked for.
+    // Where the two differ the row has drifted from storage, and a
+    // `Content-Range` promising bytes that will not arrive hangs a player
+    // rather than ending it.
+    const sending = {
+      start: range.start,
+      end: range.start + part.length - 1,
+      length: part.length,
+    }
+
+    return new Response(part.stream, {
       status: 206,
       headers: {
         ...BASE_HEADERS,
         'Content-Type': input.contentType,
-        'Content-Length': String(part.bytes.length),
-        'Content-Range': contentRangeHeader(range, input.sizeBytes),
+        'Content-Length': String(part.length),
+        'Content-Range': contentRangeHeader(sending, input.sizeBytes),
         'Accept-Ranges': 'bytes',
       },
     })
   }
 
-  const object = await input.store.get(input.storageKey)
+  const object = await input.store.openStream(input.storageKey)
   if (!object) return input.notFound
 
-  return new Response(new Uint8Array(object.bytes), {
+  return new Response(object.stream, {
     status: 200,
     headers: {
       ...BASE_HEADERS,
       'Content-Type': input.contentType,
-      'Content-Length': String(object.bytes.length),
+      'Content-Length': String(object.length),
       'Accept-Ranges': 'bytes',
     },
   })

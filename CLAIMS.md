@@ -28,7 +28,7 @@ Take the work, and say so in PROGRESS.md.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Streaming a media response instead of buffering it | 25 Jul session C | 2026-07-26 00:02 | `src/lib/media/store.ts`, `src/lib/media/s3.ts`, `src/lib/media/serve.ts` |
+| *(nothing claimed — the table is empty and that is the normal state)* | | | |
 
 ## Done, so nobody starts it again
 
@@ -60,7 +60,12 @@ except PDF is now stripped, and PDF is deliberate.
 **Range requests on the video are done too** — the portal video answers 206,
 which is what Safari needs before it will play anything at all.
 
-The largest now are streaming a whole-file response rather than buffering it, a
-reconciliation pass for objects whose rows are gone, and the open question —
-sharpened by corrections — of whether issuing a document should notify the
-investor at all.
+**Streaming a media response is done too** — as of 26 July the video is sent as
+it is read rather than read and then sent, on both stores. The row claiming it
+was written at 00:02 by a session that was discarded before it started; a later
+session took the work under the stale-row rule above and said so in PROGRESS.md.
+Images and documents still buffer, deliberately and on the record.
+
+The largest left are a reconciliation pass for objects whose rows are gone, and
+the open question — sharpened by corrections — of whether issuing a document
+should notify the investor at all.
