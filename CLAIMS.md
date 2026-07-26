@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| Measuring the memory the streaming work claims | claude-opus-5, 26 Jul | 2026-07-26 03:05 | `scripts/verify-memory.ts` (new), `package.json`, `DEPLOYMENT.md` |
 
 ## Done, so nobody starts it again
 
