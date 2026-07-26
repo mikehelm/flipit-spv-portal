@@ -74,6 +74,24 @@ export function absoluteUrl(path: string): string {
   return `${base}${path.startsWith('/') ? path : `/${path}`}`
 }
 
+/**
+ * Absolute URL on the origin a **browser or a crawler** is actually talking to.
+ *
+ * The counterpart to `absoluteUrl`, and the distinction is not cosmetic.
+ * `absoluteUrl` uses `APP_URL` — what this deployment calls itself — which is
+ * held at localhost before launch so the send guard refuses. That is right for
+ * anything gated behind the guard, and wrong for anything a stranger reads:
+ * `robots.txt` and `sitemap.xml` are fetched from the public hostname and were
+ * publishing `http://localhost:3000` to search engines.
+ *
+ * Rule of thumb: if the URL is going somewhere the send guard controls, use
+ * `absoluteUrl`. If it is going somewhere the guard has no say over, use this.
+ */
+export function canonicalUrl(path: string): string {
+  const base = env().canonicalOrigin.replace(/\/+$/, '')
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`
+}
+
 /** The claim link carried by an invitation. Never contains personal data (§15). */
 export function buildPortalLink(claimToken: string): string {
   return absoluteUrl(`${PORTAL_CLAIM_PATH}/${encodeURIComponent(claimToken)}`)

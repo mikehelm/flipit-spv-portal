@@ -39,6 +39,26 @@ const schema = z.object({
    */
   PRODUCTION_APP_URL: z.string().url('PRODUCTION_APP_URL must be an absolute URL'),
 
+  /**
+   * Where the world actually reaches this deployment. Optional.
+   *
+   * `APP_URL` answers "what does this deployment call itself", and it is
+   * deliberately held at `http://localhost:3000` before launch because the send
+   * guard compares it with `PRODUCTION_APP_URL` — that inequality is the safety
+   * catch on a securities solicitation.
+   *
+   * That made one variable answer three unrelated questions, and the third one
+   * broke: **cookie security was derived from it.** With `APP_URL` at localhost
+   * behind an HTTPS tunnel, session cookies were issued without `Secure`, so a
+   * browser would send an administrator's session over plain HTTP. Cloudflare
+   * would redirect the request, but the cookie has already left.
+   *
+   * So the question is asked separately. Empty means "the same as APP_URL",
+   * which is the correct answer for local development and keeps every existing
+   * deployment behaving as it did.
+   */
+  PUBLIC_ORIGIN: z.string().default(''),
+
   /** 32-byte key, base64 encoded, for encrypting secrets at rest. */
   ENCRYPTION_KEY: z
     .string()
@@ -174,6 +194,17 @@ type Env = z.infer<typeof schema> & {
   operatorEmails: string[]
   viewerEmails: string[]
   isProductionDeployment: boolean
+  /**
+   * The origin a browser is actually talking to. `PUBLIC_ORIGIN` when set,
+   * `APP_URL` otherwise.
+   *
+   * Cookie security and crawler metadata follow this. Sending does not — see
+   * `isProductionDeployment`, which is a different question with a different
+   * answer, on purpose.
+   */
+  canonicalOrigin: string
+  /** Will a browser reach this deployment over TLS? Decides `Secure`. */
+  isHttpsOrigin: boolean
 }
 
 function normaliseUrl(value: string): string {
@@ -202,6 +233,12 @@ function load(): Env {
 
   const value = parsed.data
 
+  const declaredOrigin = value.PUBLIC_ORIGIN.trim()
+  const canonicalOrigin = (declaredOrigin === '' ? value.APP_URL : declaredOrigin).replace(
+    /\/+$/,
+    '',
+  )
+
   return {
     ...value,
     ownerEmails: splitList(value.OWNER_EMAILS),
@@ -209,6 +246,10 @@ function load(): Env {
     viewerEmails: splitList(value.VIEWER_EMAILS),
     isProductionDeployment:
       normaliseUrl(value.APP_URL) === normaliseUrl(value.PRODUCTION_APP_URL),
+    canonicalOrigin,
+    // Asked of the canonical origin and never of `APP_URL`. This one line is
+    // the whole reason the two are separate.
+    isHttpsOrigin: canonicalOrigin.startsWith('https://'),
   }
 }
 

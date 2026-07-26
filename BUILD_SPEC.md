@@ -69,6 +69,7 @@ That split is deliberate, not inconsistency. A passwordless admin login cannot w
 Dropping OAuth means the password becomes the only thing between an attacker and investor names, amounts, and the ability to send mail as the operator. That is a real trade and it is paid for here, not waved away:
 
 - **Argon2id** password hashing, per-user salt, sensible cost parameters. Never a fast hash.
+  *(Built as scrypt from Node core instead — memory-hard, no native addon to fail at deploy time. The full reasoning, the parameters and the migration path are at the head of `src/lib/auth/password.ts`, and the deviation is recorded in PROGRESS.md. The requirement above is left as written so the divergence stays visible rather than being edited away.)*
 - **Minimum 12 characters**, checked against a common-password list. No composition rules — length beats symbols.
 - **Rate limiting** on sign-in: progressive delay by address and by IP, then a temporary lock. Enumeration-resistant — a wrong address and a wrong password fail identically, in the same time.
 - **TOTP two-factor** for both privileged accounts. Optional in v1 and strongly recommended, mandatory before the production deployment sends anything real. Standard authenticator apps; recovery codes issued once at setup.

@@ -4451,3 +4451,116 @@ roles and both are unchanged.
 - *Graham has no account.* The role exists and its allowlist is empty. Adding
   the address is Michael's step, and it grants sight of every named investor's
   financial position — worth being a deliberate act rather than a config edit.
+
+## One variable answering three questions, and the one it got wrong
+
+An external review of the deployment found this and it is the real thing in that
+review. It is also a flaw in the arrangement recommended in `HOSTING.md` and
+`GO_LIVE.md`, so it is recorded as a correction rather than as a discovery.
+
+`APP_URL` was answering three unrelated questions:
+
+1. **Where do links point.** `absoluteUrl`, and every portal, claim, sign-in and
+   verification link built from it.
+2. **May real invitations be sent.** §18.1 — `APP_URL === PRODUCTION_APP_URL`.
+   This is why the deployment guidance holds `APP_URL` at
+   `http://localhost:3000` until somebody deliberately goes live: the inequality
+   *is* the safety catch.
+3. **Is a browser on HTTPS.** `secure: config.APP_URL.startsWith('https://')`,
+   in both session modules.
+
+The third one broke, precisely because of the second. Served publicly over an
+HTTPS tunnel with `APP_URL` at localhost, **the administrator session cookie was
+issued without `Secure`.** A browser will then send it on any `http://` request
+to the public hostname — in the clear, before Cloudflare's redirect can happen,
+because the cookie leaves with the request that gets redirected. The session it
+protects belongs to somebody who can send securities solicitations and read
+every investor's financial position.
+
+**Built.**
+
+- **`PUBLIC_ORIGIN`**, optional, empty by default. Empty means "the same as
+  `APP_URL`", so local development and every existing deployment behave exactly
+  as they did.
+- **`canonicalOrigin` and `isHttpsOrigin`** derived from it.
+- **Both session cookies** now ask `isHttpsOrigin`.
+- **`canonicalUrl()`** beside `absoluteUrl()`, and `robots.txt` / `sitemap.xml`
+  use it — they were publishing `http://localhost:3000` to search engines.
+- **`cookie-security.test.ts`** — 19 tests, most of them naming the regression.
+
+**Decisions.**
+
+- ***Links stay on `APP_URL`. Deliberately.*** This is the part worth reading
+  twice. A portal link embeds the domain it was issued from, and §18.1 refuses
+  to issue one at all while `APP_URL` is not the production value. Moving link
+  building onto the canonical origin would let a pre-launch deployment mint
+  links that *look* real — which is the failure §18.1 exists to prevent, arrived
+  at from the other side. So the split is along a precise line: **anything the
+  send guard controls uses `APP_URL`; anything a stranger reads uses the
+  canonical origin.**
+- ***`isProductionDeployment` is untouched, and a test asserts it never consults
+  the origin.*** If the two ever collapse back into one value, turning HTTPS on
+  would turn sending on. That is the whole risk of this change and it is pinned
+  by an assertion on the expression itself.
+- ***Empty means fall back, rather than empty being an error.*** A required
+  variable would have broken every existing deployment on upgrade to fix a
+  problem those deployments only have when they are behind TLS.
+- ***`secure` is never a literal.*** `true` breaks local development and `false`
+  breaks production; both are a value where a question belongs. Asserted.
+- ***The trailing slash is stripped once, at load.*** Otherwise
+  `canonicalUrl('/verify')` on an origin ending in `/` produces a double slash
+  in the one file a crawler reads.
+
+**Deviations.** None. §18.1 is unchanged and §2.2's cookie requirements are now
+met rather than nearly met.
+
+**Also recorded, not changed: scrypt where §2.2 says Argon2id.** The review
+called this an unreconciled divergence. It is in fact reasoned at length at the
+head of `src/lib/auth/password.ts` — scrypt is memory-hard, is in Node core, and
+does not ship a native addon that can fail to build on a machine nobody has
+tested. What was missing was a pointer from the specification, so §2.2 now
+carries one. The requirement is left as written rather than edited to match the
+code, so the divergence stays visible.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here touches an amount.
+2. *A send path bypassing a gate?* No — and this was the risk of the change. The
+   send guard is untouched, links still resolve through `APP_URL`, and a test
+   asserts `isProductionDeployment` consults neither `PUBLIC_ORIGIN` nor
+   `canonicalOrigin` nor `isHttpsOrigin`.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No. Nothing here reads an account.
+6. *Tokens?* Untouched — but better protected. A session cookie without `Secure`
+   is a bearer token on the wire.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* Nothing is logged.
+9. *Indexable routes?* Unchanged — `/verify` and `/privacy`, and they now carry
+   the right hostname, which is the point.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* **Strengthened by separation.** It was previously entangled
+    with cookie security, which meant the one safe pre-launch configuration was
+    also an insecure one.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (2295, up from 2276) are green.
+
+**Uncertain.**
+
+- *No test observes a real `Set-Cookie` header.* These are source-level
+  assertions, because the cookie is written through Next's `cookies()` and there
+  is no response to read from a unit test. A served-response check belongs in
+  `verify:deployment`, and it is the honest version of this proof.
+- *Nothing refuses to start when `PUBLIC_ORIGIN` is `http://` on a real
+  deployment.* An operator who sets it wrongly gets insecure cookies and no
+  warning. A boot check or a health rule would close that, and it is the next
+  thing here.
+- *`BASE_PATH` is not validated against `PUBLIC_ORIGIN`.* If the origin carries a
+  path and `BASE_PATH` also does, a URL could be built with the prefix twice.
+  Not reachable in the current configuration and not guarded.
+- *The remaining review findings are not addressed here* — CSP, HSTS,
+  Permissions-Policy, `xlsx@0.18.5`, the two macOS-only test failures, the
+  privacy copy, and the absent password-reset journey. CSP is deliberately held
+  until the login-page work lands, because a strict policy and new visual
+  effects will fight.

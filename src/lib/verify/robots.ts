@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next'
-import { absoluteUrl, PRIVACY_PATH, VERIFICATION_PATH } from '@/lib/email/variables'
+import { canonicalUrl, PRIVACY_PATH, VERIFICATION_PATH } from '@/lib/email/variables'
 import { env } from '@/lib/env'
 
 /**
@@ -73,7 +73,7 @@ export function buildVerificationRobotsPolicy(): MetadataRoute.Robots {
       ]),
       disallow: withBasePath('/'),
     },
-    sitemap: absoluteUrl('/sitemap.xml'),
+    sitemap: canonicalUrl('/sitemap.xml'),
   }
 }
 
@@ -91,7 +91,7 @@ export function buildVerificationRobotsPolicy(): MetadataRoute.Robots {
  */
 export function buildVerificationSitemap(): MetadataRoute.Sitemap {
   return PUBLIC_PATHS.map((path) => ({
-    url: absoluteUrl(path),
+    url: canonicalUrl(path),
     changeFrequency: 'yearly' as const,
     // The verification page is the one somebody may be searching for in a
     // hurry. The privacy policy exists to be linked from a consent screen.

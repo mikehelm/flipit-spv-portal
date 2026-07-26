@@ -35,7 +35,12 @@ function cookieOptions() {
   return {
     httpOnly: true,
     sameSite: 'lax' as const,
-    secure: config.APP_URL.startsWith('https://'),
+    // Asked of the canonical origin, never of APP_URL. APP_URL is held at
+    // localhost before launch so the send guard refuses, and deriving `Secure`
+    // from it meant an administrator's session cookie went out without it
+    // behind an HTTPS tunnel — sent in the clear on any http:// request before
+    // the redirect. See `env.ts`, PUBLIC_ORIGIN.
+    secure: config.isHttpsOrigin,
     path: config.BASE_PATH === '' ? '/' : config.BASE_PATH,
   }
 }
