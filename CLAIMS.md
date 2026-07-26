@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| The health report where the operator will see it, and a backup signal | 26 Jul session (cloud) | 2026-07-26 01:42 | `src/app/(admin)/health/**` (new), the admin nav, `src/lib/health/rules.ts`, `scripts/backup.ts` |
 
 ## Done, so nobody starts it again
 
