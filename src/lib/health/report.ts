@@ -24,11 +24,13 @@ import {
   BACKUP_COMPLETED_ACTION,
   buildFindings,
   RUN_OVERDUE_HOURS,
+  unattendedFindings,
   worstOf,
   type Finding,
   type HealthFacts,
   type ServiceMode,
   type Severity,
+  type UnattendedFacts,
 } from './rules'
 
 export interface HealthReport {
@@ -151,6 +153,50 @@ export async function gatherFacts(now: Date = new Date()): Promise<HealthFacts> 
       : null,
     lastBackupAt: await lastActionAt(BACKUP_COMPLETED_ACTION),
   }
+}
+
+/**
+ * The two queries behind the overview banner.
+ *
+ * Deliberately not `gatherFacts`. That reads every template, evaluates the
+ * eligibility of every queued reminder — a query per offer — and loads the round
+ * summary, which is the right cost for a page somebody opened to look at the
+ * health and the wrong cost for the page they land on first.
+ *
+ * What it leaves out is what the overview already shows: the mail connection has
+ * its own panel there, the service mode has its own card. What it keeps is the
+ * two things nothing else anywhere surfaces.
+ */
+export async function gatherUnattendedFacts(
+  now: Date = new Date(),
+): Promise<UnattendedFacts> {
+  const round = await currentRound()
+  const schedule = round
+    ? await db.query.reminderSchedules.findFirst({
+        where: eq(reminderSchedules.roundId, round.id),
+      })
+    : null
+
+  return {
+    now,
+    reminders: {
+      roundOpen: round !== undefined && round !== null,
+      scheduleEnabled: schedule?.enabled ?? false,
+      lastRunCompletedAt: await lastActionAt(RUN_COMPLETED_ACTION),
+      stuck: await stuckClaims(),
+    },
+  }
+}
+
+/**
+ * What the overview banner needs: how many things need a person, and nothing
+ * else. Zero is the answer on a healthy system and the banner shows nothing.
+ */
+export async function readUnattendedAlert(
+  now: Date = new Date(),
+): Promise<{ needsAPerson: number }> {
+  const findings = unattendedFindings(await gatherUnattendedFacts(now))
+  return { needsAPerson: findings.filter((row) => row.severity === 'WRONG').length }
 }
 
 export async function buildHealthReport(now: Date = new Date()): Promise<HealthReport> {

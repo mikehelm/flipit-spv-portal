@@ -2889,3 +2889,87 @@ are green. `pnpm verify:health` is 21 of 21 and `pnpm verify:viewport` is 135 of
 - *`pnpm verify:restore` was re-run after the backup script changed* and is 14 of
   14. Recorded here because "the change is additive so it should be unaffected"
   is exactly the phrase that precedes finding out otherwise.
+
+## Health on the overview — the line that catches an eye
+
+The previous section left this under Uncertain: *the page is not linked from the
+overview; it is in the navigation, which is enough to find but not enough to
+notice.* That is the whole gap. A health page nobody opens is a log file nobody
+reads with better typography.
+
+**Built.**
+
+- **A banner on the admin overview**, shown only when something needs a person,
+  naming what it is about and linking to `/health`.
+- **A permanent "System health" card** alongside it, so that when the banner is
+  silent there is still a way through — and so that "no banner" is never
+  ambiguous between nothing wrong and nothing checked.
+- **`readUnattendedAlert()`** — two queries, and a strict subset of the same
+  rules the full report uses.
+- **`overdueFindings` split out of `schedulerFindings`**, because it is the one
+  scheduler rule that costs a query per offer.
+- **Nine more tests**: four on the subset, five on the page.
+
+**Decisions.**
+
+- ***The banner is silent on a healthy system.*** A banner that says "all is
+  well" every day is a banner nobody reads on the day it says otherwise. This is
+  the opposite of the rule on the health page itself, which lists what it checked
+  and found fine — and deliberately so. There, silence would be ambiguous,
+  because looking at the health is why you opened it. Here, the permanent card
+  removes the ambiguity and the banner is free to mean something.
+- ***It reads two queries, not the whole report.*** `buildHealthReport` reads
+  every template, evaluates the eligibility of every queued reminder — a query
+  per offer — and loads the round summary. That is the right cost for a page
+  somebody opened to look at the health and the wrong cost for the page everybody
+  lands on. `UnattendedFacts` is the cheap subset and `HealthFacts` extends it,
+  so the same rule functions run on both surfaces and there is nothing to drift.
+  There is a test asserting the banner's findings are a strict subset of the
+  page's, and another asserting the minimal fact object still satisfies the
+  rules.
+- ***The subset is the two things nothing else surfaces.*** Not an arbitrary
+  cheap half. The mail connection has its own panel on the overview and the
+  service mode its own card; repeating them in a banner would be noise. Whether
+  the scheduled job is running, and whether a run abandoned a reminder mid-send,
+  are surfaced nowhere else in the application at all.
+- ***`overdueFindings` is silent when the scheduler is the cause.*** It was
+  already, inside `schedulerFindings`; splitting it out made the condition
+  explicit and testable, and the test now covers both ways the scheduler can be
+  the cause — never run, and run too long ago.
+
+**Deviations.** None.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. The banner carries one count of findings.
+2. *A send path bypassing a gate?* Nothing sends.
+3. *One recipient or the whole batch?* Not applicable.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No. The banner names no recipient —
+   tested — and the overview is behind `requireOnboardedAdmin()` as before.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* Nothing new is logged.
+9. *Indexable routes?* No route added. The enumeration test still passes.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (1952, up from 1942) and `pnpm build`
+are green. `pnpm verify:health` is 21 of 21 and `pnpm verify:viewport` 135 of 135
+with the overview's new banner and card measured at 375px.
+
+**Uncertain.**
+
+- *The banner has never been seen in a browser with a fault behind it.* The
+  viewport run exercises the healthy branch, because the database it runs against
+  is healthy — which means the one rendering that matters most is the one nobody
+  has looked at. Its markup is the same `Notice` used elsewhere, so this is
+  unlikely rather than unknown, and unlikely is not the same thing.
+- *Still nothing tells anybody without somebody looking.* Two surfaces now, both
+  requiring a person. The non-zero exit from `pnpm check:health` remains the only
+  thing a machine could act on, and nothing acts on it.
+- *`media:check` is still a third thing to watch.* Folding it into the report
+  would need the media check extracted from its script, and it should come with a
+  bound on what it costs — it stats every stored object, which is fine for a
+  command and would need thinking about on a page.

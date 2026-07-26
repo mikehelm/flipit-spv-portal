@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Health on the overview, so it catches an eye | 26 Jul session (cloud) | 2026-07-26 02:02 | `src/app/(admin)/admin/page.tsx`, `src/lib/health/**` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -109,6 +109,9 @@ account's. `pnpm verify:health` is 21 checks that spawn the real command against
 a database put into each bad state in turn. **It is also a page** — "System
 health" in the admin navigation, same rules, read-only, for both roles — and
 `pnpm backup` now records itself so the report can say when the last one was.
+The admin **overview** carries a banner when something needs a person, from a
+deliberately cheap two-query subset of the same rules, plus a permanent card so
+silence is never ambiguous.
 
 The largest left is installing the three cron lines in `DEPLOYMENT.md` §8, and
 the open question — sharpened by corrections — of whether issuing a document

@@ -13,10 +13,13 @@ import {
   roundFindings,
   schedulerFindings,
   serviceModeFindings,
+  overdueFindings,
   stuckClaimFindings,
+  unattendedFindings,
   withoutAddresses,
   worstOf,
   type HealthFacts,
+  type UnattendedFacts,
 } from './rules'
 
 const NOW = new Date('2026-07-26T12:00:00Z')
@@ -124,20 +127,69 @@ describe('is the scheduled job running at all', () => {
   it('distinguishes a dead scheduler from a gate refusing rows one at a time', () => {
     // A recent run plus overdue rows means something is refusing them, and the
     // remedy is to read the reasons rather than to go and look at cron.
-    const findings = schedulerFindings(
+    const findings = overdueFindings(
       withReminders({ lastRunCompletedAt: hoursAgo(0.2), overdue: 4 }),
     )
-    const overdue = findings.find((row) => row.headline.match(/past due/))
-    expect(overdue?.severity).toBe('WRONG')
-    expect(overdue?.remedy).toMatch(/reminders:run/)
+    expect(findings[0]?.severity).toBe('WRONG')
+    expect(findings[0]?.remedy).toMatch(/reminders:run/)
   })
 
   it('does not report overdue rows as a separate fault when the scheduler is the cause', () => {
     // Otherwise a dead scheduler reads as two unrelated problems.
-    const findings = schedulerFindings(
-      withReminders({ lastRunCompletedAt: null, overdue: 4 }),
-    )
-    expect(findings.filter((row) => row.severity === 'WRONG')).toHaveLength(1)
+    for (const lastRunCompletedAt of [null, hoursAgo(RUN_OVERDUE_HOURS + 2)]) {
+      const facts = withReminders({ lastRunCompletedAt, overdue: 4 })
+      expect(overdueFindings(facts)).toHaveLength(0)
+      expect(buildFindings(facts).filter((row) => row.area === 'Scheduled run' && row.severity === 'WRONG')).toHaveLength(1)
+    }
+  })
+})
+
+describe('the cheap subset the overview banner is built from', () => {
+  it('is a strict subset of the full report, so the two can never disagree', () => {
+    const facts = withReminders({
+      lastRunCompletedAt: null,
+      stuck: [{ id: 'rem_1', claimedAt: hoursAgo(9) }],
+    })
+    const full = buildFindings(facts)
+    for (const finding of unattendedFindings(facts)) {
+      expect(
+        full.some(
+          (row) => row.headline === finding.headline && row.severity === finding.severity,
+        ),
+        finding.headline,
+      ).toBe(true)
+    }
+  })
+
+  it('needs only the two facts that cost one query each', () => {
+    // Assignable without `dueNow`, `overdue`, the mail state, the templates,
+    // the round or the backup. If that stops being true the overview starts
+    // paying for the full report on a page nobody opened to read one.
+    const minimal: UnattendedFacts = {
+      now: NOW,
+      reminders: {
+        roundOpen: true,
+        scheduleEnabled: true,
+        lastRunCompletedAt: null,
+        stuck: [],
+      },
+    }
+    expect(unattendedFindings(minimal).some((row) => row.severity === 'WRONG')).toBe(true)
+  })
+
+  it('carries the two findings nothing else in the application surfaces', () => {
+    const areas = unattendedFindings(
+      withReminders({
+        lastRunCompletedAt: hoursAgo(RUN_OVERDUE_HOURS + 2),
+        stuck: [{ id: 'rem_1', claimedAt: hoursAgo(9) }],
+      }),
+    ).map((row) => row.area)
+    expect(areas).toContain('Scheduled run')
+    expect(areas).toContain('Reminders')
+  })
+
+  it('is silent on a healthy system', () => {
+    expect(unattendedFindings(healthy()).filter((row) => row.severity === 'WRONG')).toHaveLength(0)
   })
 })
 

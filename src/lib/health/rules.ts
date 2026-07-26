@@ -42,7 +42,37 @@ export interface Finding {
 
 export type ServiceMode = 'ACTIVE' | 'READ_ONLY' | 'SUNSET' | 'DISABLED'
 
-export interface HealthFacts {
+/**
+ * The subset of the facts that costs two queries to gather.
+ *
+ * It exists because the admin overview wants a banner when something needs a
+ * person, and the overview is loaded far more often than the health page. The
+ * full report reads every template, evaluates the eligibility of every queued
+ * reminder and loads the round summary — right for a page somebody opened *to
+ * look at the health*, wrong for a page they opened to do something else.
+ *
+ * The two rules that take only this are the two nothing else in the application
+ * surfaces at all: whether the scheduled job is running, and whether a run
+ * abandoned a reminder mid-send. Everything else the full report checks already
+ * has a panel of its own on the overview, so the cheap subset is also the
+ * non-duplicating one.
+ *
+ * `HealthFacts` satisfies this, so the same rules produce the same findings on
+ * both surfaces. There is no second set of rules to drift.
+ */
+export interface UnattendedFacts {
+  now: Date
+  reminders: {
+    roundOpen: boolean
+    scheduleEnabled: boolean
+    /** From the audit log: when a run last got to the end. */
+    lastRunCompletedAt: Date | null
+    /** Rows a run took and never finished with. Ids only — never addresses. */
+    stuck: Array<{ id: string; claimedAt: Date }>
+  }
+}
+
+export interface HealthFacts extends UnattendedFacts {
   now: Date
   serviceMode: ServiceMode
   /** This deployment's public URL, and the one permitted to send (§18.1). */
@@ -168,7 +198,7 @@ export function worstOf(findings: Finding[]): Severity {
  * application answers "what would happen if a run occurred"; nothing else
  * anywhere answers "is anything running".
  */
-export function schedulerFindings(facts: HealthFacts): Finding[] {
+export function schedulerFindings(facts: UnattendedFacts): Finding[] {
   const { reminders, now } = facts
 
   if (!reminders.roundOpen) {
@@ -234,8 +264,29 @@ export function schedulerFindings(facts: HealthFacts): Finding[] {
     })
   }
 
-  if (reminders.overdue > 0 && reminders.lastRunCompletedAt !== null) {
-    out.push({
+  return out
+}
+
+/**
+ * Reminders that would send if a run happened, and have not.
+ *
+ * Split from `schedulerFindings` because it costs what that one does not: it
+ * needs every queued reminder's eligibility evaluated against the current state
+ * of the database, which is a query per offer. The overview banner does not pay
+ * that; the full report does.
+ *
+ * Silent when the scheduler is the cause. A dead cron already has a finding, and
+ * reporting its consequence separately would read as two unrelated problems.
+ */
+export function overdueFindings(facts: HealthFacts): Finding[] {
+  const { reminders } = facts
+  if (!reminders.roundOpen) return []
+  if (reminders.overdue === 0) return []
+  if (reminders.lastRunCompletedAt === null) return []
+  if (hoursBetween(reminders.lastRunCompletedAt, facts.now) > RUN_OVERDUE_HOURS) return []
+
+  return [
+    {
       area: 'Scheduled run',
       severity: 'WRONG',
       headline: `${reminders.overdue} reminder${reminders.overdue === 1 ? ' is' : 's are'} past due and unsent.`,
@@ -246,10 +297,8 @@ export function schedulerFindings(facts: HealthFacts): Finding[] {
       remedy:
         'Run `pnpm reminders:run` and read the reasons it prints; they will name the gate ' +
         'that is refusing each one.',
-    })
-  }
-
-  return out
+    },
+  ]
 }
 
 /**
@@ -259,7 +308,7 @@ export function schedulerFindings(facts: HealthFacts): Finding[] {
  * cost of that decision is exactly this: a row that waits for a person. This is
  * the thing that tells the person.
  */
-export function stuckClaimFindings(facts: HealthFacts): Finding[] {
+export function stuckClaimFindings(facts: UnattendedFacts): Finding[] {
   const stuck = facts.reminders.stuck.filter(
     (row) => hoursBetween(row.claimedAt, facts.now) > CLAIM_STUCK_HOURS,
   )
@@ -475,10 +524,23 @@ export function backupFindings(facts: HealthFacts): Finding[] {
   ]
 }
 
+/**
+ * The two findings nothing else in the application surfaces, from the two
+ * queries it takes to know them.
+ *
+ * This is what the admin overview shows a banner from. It is a strict subset of
+ * `buildFindings` — same rules, same wording, fewer of them — so the banner and
+ * the health page can never say different things about the same fact.
+ */
+export function unattendedFindings(facts: UnattendedFacts): Finding[] {
+  return [...schedulerFindings(facts), ...stuckClaimFindings(facts)]
+}
+
 /** Every rule, in the order they are printed. */
 export function buildFindings(facts: HealthFacts): Finding[] {
   return [
     ...schedulerFindings(facts),
+    ...overdueFindings(facts),
     ...stuckClaimFindings(facts),
     ...mailFindings(facts),
     ...complianceFindings(facts),
