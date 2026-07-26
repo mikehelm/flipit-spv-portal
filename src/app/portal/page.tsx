@@ -19,6 +19,8 @@ import { investorDocuments } from '@/lib/documents/data'
 import { shouldShowVideoSection, videoTextAlternative } from '@/lib/media/video'
 import { currentVideo } from '@/lib/media/video-store'
 import { loadInvestorUpdates } from '@/lib/updates/data'
+import { pendingEmailChange } from '@/lib/portal/email-change'
+import { EmailSection } from './email-section'
 import { QaSection } from './qa-section'
 import { RegisterSection } from './register-section'
 import { DocumentsSection } from './documents-section'
@@ -297,6 +299,10 @@ export default async function PortalPage() {
   // readable in `read_only` and `sunset`, which `canView` already allows.
   const documents = canView(view.access) ? await investorDocuments(account.id) : []
 
+  // §13. Keyed on this account, so there is no pending request here but their
+  // own — and nothing is loaded at all for a reader who cannot see their record.
+  const pending = canView(view.access) ? await pendingEmailChange(account.id) : null
+
   return (
     <>
       <main id="main" className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
@@ -354,6 +360,14 @@ export default async function PortalPage() {
         {qa ? <QaSection view={qa} /> : null}
 
         {register ? <RegisterSection view={register} /> : null}
+
+        {canView(view.access) ? (
+          <EmailSection
+            currentEmail={view.email}
+            pending={pending}
+            canChange={view.access.capability === 'FULL'}
+          />
+        ) : null}
 
         {canView(view.access) && view.tiles.length > 0 ? (
           <section className="mt-12">

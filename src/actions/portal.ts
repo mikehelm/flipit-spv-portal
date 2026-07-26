@@ -12,6 +12,15 @@ import { audit } from '@/lib/audit'
 import { canRespond, SIGN_IN_ACCEPTED_MESSAGE } from '@/lib/portal/access'
 import { requestSignInLink, SIGN_IN_TOKEN_TTL_MINUTES } from '@/lib/portal/claim'
 import { deliverSignInLink } from '@/lib/portal/send-sign-in-link'
+import {
+  EMAIL_CHANGE_READ_ONLY_MESSAGE,
+  EMAIL_CHANGE_REQUESTED_MESSAGE,
+  EMAIL_CHANGE_SAME_ADDRESS_MESSAGE,
+  EMAIL_CHANGE_TOKEN_TTL_MINUTES,
+  EMAIL_CHANGE_UNREADABLE_MESSAGE,
+  requestEmailChange,
+} from '@/lib/portal/email-change'
+import { deliverEmailChangeLink } from '@/lib/portal/send-email-change-link'
 import { loadPortalView } from '@/lib/portal/data'
 import { destroyInvestorSession, readInvestorAccount } from '@/lib/portal/session'
 import { isoToday } from '@/lib/money'
@@ -82,6 +91,70 @@ export async function requestSignInLinkAction(
   }
 
   return actionOk(SIGN_IN_ACCEPTED_MESSAGE)
+}
+
+const emailChangeSchema = z.object({ newEmail: z.string().max(320) })
+
+/**
+ * Ask to move the contact address on this account. §13.
+ *
+ * The account comes from the session; the form carries only the address to move
+ * to. Three of the outcomes return the same sentence — issued, address already
+ * held by another record, and account gone — for the reason set out in
+ * `email-change.ts`: a signed-in investor who could tell an available address
+ * from a taken one could walk a list of addresses and learn who else was
+ * invited into a private round.
+ *
+ * The two that get their own sentence are the two that reveal nothing. "That is
+ * already your address" is about a value already on the screen in front of
+ * them, and "that is not an address we can send to" is about what they just
+ * typed.
+ */
+export async function requestEmailChangeAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const account = await readInvestorAccount()
+  if (!account) redirect('/portal/signin')
+
+  const view = await loadPortalView(account.id)
+  if (!view) redirect('/portal/signin')
+
+  const parsed = emailChangeSchema.safeParse({ newEmail: formData.get('newEmail') })
+  if (!parsed.success) {
+    return actionError(EMAIL_CHANGE_UNREADABLE_MESSAGE)
+  }
+
+  const outcome = await requestEmailChange({
+    accountId: account.id,
+    newEmail: parsed.data.newEmail,
+  })
+
+  if (outcome.detail === 'UNREADABLE') return actionError(EMAIL_CHANGE_UNREADABLE_MESSAGE)
+  if (outcome.detail === 'SAME_ADDRESS') return actionError(EMAIL_CHANGE_SAME_ADDRESS_MESSAGE)
+  if (outcome.detail === 'NOT_PERMITTED') return actionError(EMAIL_CHANGE_READ_ONLY_MESSAGE)
+
+  if (outcome.issued && outcome.token && outcome.requestId) {
+    // `after`, so the sentence goes back immediately and identically whether or
+    // not there was an email to send. Awaiting an SMTP round trip on the issued
+    // path and not on the collision path would tell the two apart by latency,
+    // which is the leak the identical sentence exists to close.
+    //
+    // The token is passed straight through: never returned to the browser,
+    // never logged, and never written anywhere but the email itself.
+    const token = outcome.token
+    const requestId = outcome.requestId
+    after(async () => {
+      await deliverEmailChangeLink({
+        requestId,
+        token,
+        expiresInMinutes: EMAIL_CHANGE_TOKEN_TTL_MINUTES,
+      })
+    })
+  }
+
+  revalidatePath('/portal')
+  return actionOk(EMAIL_CHANGE_REQUESTED_MESSAGE)
 }
 
 export async function portalSignOutAction(): Promise<void> {

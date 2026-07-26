@@ -575,6 +575,19 @@ export const portalTokens = pgTable(
 /**
  * A change of contact address only takes effect once the NEW address is
  * verified. BUILD_SPEC §13.
+ *
+ * `previousEmail` is the address the record carried when the change was asked
+ * for, and it is here for two reasons rather than as a convenience. It is the
+ * address the "your contact address has changed" notice goes to, and holding it
+ * on the row means that function can take a request id and look the recipient
+ * up — the same invariant as `send-sign-in-link.ts`, where no argument anywhere
+ * can be pointed at somebody else's mailbox. And it is checked at confirmation:
+ * if the record no longer carries it, the world moved under the request and the
+ * confirmation is refused rather than applied to a state nobody asked about.
+ *
+ * `revokedAt` supersedes an outstanding request when a second one is made, so
+ * asking twice never leaves two live ways to move the address. Revoked rather
+ * than deleted: what somebody asked for is part of the record.
  */
 export const emailChangeRequests = pgTable(
   'email_change_requests',
@@ -584,9 +597,11 @@ export const emailChangeRequests = pgTable(
       .notNull()
       .references(() => investorAccounts.id, { onDelete: 'cascade' }),
     newEmail: text('new_email').notNull(),
+    previousEmail: text('previous_email'),
     tokenHash: text('token_hash').notNull().unique(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [index('email_change_requests_account_idx').on(t.accountId)],

@@ -30,6 +30,7 @@ import {
 } from '@/db/schema'
 import { audit, type Actor } from '@/lib/audit'
 import { SERVICE_CONFIG_ID } from '@/lib/auth/service-config'
+import { confirmedEmailChangeFor } from '@/lib/portal/email-change'
 import type { RecipientExportRow } from './schema'
 
 const iso = (value: Date | null | undefined): string | null =>
@@ -167,7 +168,13 @@ export async function loadRecipientExportRows(
         : [],
       investorQuestions,
       adminReplies,
-      updatedContactEmail: null,
+      // §20's "updated contact email", and §13's half of it. The newest
+      // *confirmed* change for this account, so the column carries an address
+      // the investor proved they could receive at — an outstanding request is
+      // not a changed address and reporting one would be reporting something
+      // that has not happened. Null when the address on the record is the one
+      // it was invited with, which is the ordinary case.
+      updatedContactEmail: await confirmedEmailChangeFor(row.account.id),
       internalNotes: row.internalNotes ?? null,
     })
   }

@@ -34,6 +34,7 @@
     "verify:documents": "tsx scripts/verify-documents.ts",
     "verify:lifecycle": "tsx scripts/verify-lifecycle.ts",
     "verify:roadmap": "tsx scripts/verify-roadmap.ts",
+    "verify:email-change": "tsx scripts/verify-email-change.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
   },
   "dependencies": {

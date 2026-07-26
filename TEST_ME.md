@@ -410,6 +410,57 @@ Related, and worth knowing: the currency on that line used to be the word "USD" 
 
 ---
 
+## Changing the address on a record
+
+An investor's only way back into the portal is a link emailed to the address on
+their record. Until now there was no way to move that address — so a mailbox
+that stopped working was a record that could not be reached, and the export
+column meant to report a changed address was always empty.
+
+Sign in as an investor and scroll to **Your contact address**. It shows the
+address everything is sent to. Enter a different one and press **Send a
+confirmation link**.
+
+**Nothing happens yet, and that is the feature.** The record still shows the old
+address, with a line underneath saying what you asked for and that it is waiting
+on the link. The change happens when that link is opened in the new mailbox —
+which is the only proof there is that the new address actually reaches you.
+
+Things worth trying, because they are meant to behave oddly:
+
+- **Type an address that belongs to another investor.** You get the same message
+  as a successful request, word for word. No link is sent, nothing is written,
+  and the other person hears nothing. If it said "that address is taken", anyone
+  with an account could type addresses one at a time and work out who else was
+  invited into the round.
+- **Ask twice.** The first link stops working. There is never more than one live
+  way to move an address.
+- **Open the same link twice.** It works once.
+- **Open a link an hour later.** It has expired.
+- **Confirm, then look at where you were signed in.** You are signed out
+  everywhere, and any older sign-in link in the old mailbox has stopped working.
+  This is deliberate — the usual reason to move an address in a hurry is that
+  the old mailbox is not yours any more, and the links sitting in it are exactly
+  what somebody holding it would use. The form says so before you start.
+- **Check the old mailbox after confirming.** It gets a message saying the
+  address was changed and to say so straight away if that was not them. It does
+  not say what the new address is, and it has no "undo" button — undoing it is a
+  conversation with a person, on purpose. A button in an email is a key, and
+  this is exactly the email that gets sent when a mailbox may be in the wrong
+  hands.
+
+Then open **Export** and look at the **updated contact email** column. It was
+hard-coded empty in every export ever produced. It now carries the new address
+for anybody who has confirmed a change, and stays empty for everybody else. The
+**email** column still shows the address they were originally invited at — those
+are two different facts and the spreadsheet asks for both.
+
+**What is not there yet:** you cannot see or reverse a change from any screen.
+The audit log records that one happened, deliberately without recording the
+addresses, and putting it right today means somebody with database access.
+
+---
+
 ## The four filters you could not reach
 
 The **Recipients** screen has always been able to filter by account status, by where somebody is on the timeline, by how they answered, and by deadline. It has been able to since the day it was built. There was simply no box on the screen for any of them — they worked only if you typed the right thing into the address bar, which nobody does.
@@ -692,6 +743,7 @@ Worth trying, because these are all meant to work:
 
 ## What is not built yet
 
+- **A screen for reversing a contact-address change.** An investor can now move the address on their record (see "Changing the address on a record"), and you can see in the audit log that one happened — but there is no operator screen showing what it was or putting it back.
 - **A note saying what changed in a correction.** A corrected document is versioned and both versions stay readable, but nothing records what was different — only the description, if somebody writes one.
 - **An email when a document is issued or corrected.** Deliberate, but somebody will expect it. Send a message or an update alongside.
 - **A real storage bucket, actually connected.** The code to use one is now written and tested (see "The media library"), but only against a stand-in on the same machine. Pointing it at a real Amazon or Cloudflare bucket and uploading one image is the last step, and it is minutes rather than work.

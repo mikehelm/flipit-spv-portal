@@ -61,6 +61,13 @@ export const VERIFICATION_PATH = '/verify'
  */
 export const PRIVACY_PATH = '/privacy'
 
+/**
+ * Where a contact-address confirmation link points (§13). The route redeems the
+ * token and moves the address; it establishes no session, which is what keeps
+ * this from being a second, quieter way into a portal.
+ */
+export const EMAIL_CHANGE_PATH = '/portal/email-change'
+
 /** Absolute URL for a path under this deployment. `APP_URL` includes basePath. */
 export function absoluteUrl(path: string): string {
   const base = env().APP_URL.replace(/\/+$/, '')
@@ -74,6 +81,11 @@ export function buildPortalLink(claimToken: string): string {
 
 export function buildVerificationLink(): string {
   return absoluteUrl(VERIFICATION_PATH)
+}
+
+/** The confirmation link carried by a contact-address change (§13). */
+export function buildEmailChangeLink(confirmToken: string): string {
+  return absoluteUrl(`${EMAIL_CHANGE_PATH}/${encodeURIComponent(confirmToken)}`)
 }
 
 /**

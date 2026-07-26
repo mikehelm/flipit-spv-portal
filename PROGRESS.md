@@ -3923,3 +3923,173 @@ are green. `pnpm verify:health` 31 of 31, `verify-qa` 51 of 51, `verify-register
 - *Nothing stops somebody adding a fifth row to the table by hand.* It would be
   ignored, which is the safe outcome, and it would also be silent — the report
   says nothing about a row naming something no code consults.
+
+## The address on the record, and the half of §13 that was a table
+
+`email_change_requests` was a complete table — account, new address, hashed
+token, expiry, confirmation timestamp, a foreign key and an index — with no
+reader and no writer anywhere in the application. §13 asks for *"change of
+contact email, effective only after the new address is verified"*, and the
+schema for it shipped in migration 0000. Nothing else did.
+
+Two consequences, and the second is the one that made this worth doing first.
+An investor whose address stopped working had no way to say so, on a portal
+whose only route back in is a link emailed to that address — a lost mailbox was
+a lost record. And §20's export column `updated contact email` was hard-coded
+`null` in `lib/export/data.ts`, so every export ever produced shipped that
+column empty by construction, which is not an empty column but a wrong one.
+
+**Built.**
+
+- **`src/lib/portal/email-change.ts`** — request and confirm. The address does
+  not move when it is typed; it moves when a single-use link is opened in the
+  new mailbox, which is the only evidence this application can have that the
+  address reaches the person.
+- **`src/lib/portal/email-change-email.ts`** — two messages. One to the new
+  address carrying the link; one to the old address once the change has taken
+  effect.
+- **`src/lib/portal/send-email-change-link.ts`** — delivery, through the same
+  gate as everything else that sends.
+- **`/portal/email-change/[token]`** — a route handler, and
+  **`/portal/email-confirmed`** — the neutral receipt.
+- **`EmailSection`** on the portal, showing the address in use, any outstanding
+  request, and the form.
+- **Two columns**: `previous_email` and `revoked_at`, migration
+  `0009_certain_masked_marvel.sql`.
+- **`pnpm verify:email-change`** — 33 database-backed checks.
+
+**Decisions.**
+
+- ***A collision is invisible.*** Asking to move to an address another record
+  holds returns the success sentence, writes no request row, and sends nothing
+  to that address. A signed-in investor who could tell an available address from
+  a taken one could walk a list and learn who else was invited into a private
+  round, one guess at a time — §15, and the reason the sentence has no variant.
+  Sending the confirmation anyway was considered and rejected: it would tell the
+  *other* investor that somebody is trying to move onto their address, which is
+  the same leak pointed the other way.
+- ***The refusal for a read-only portal, and for an address that is already
+  yours, do get their own sentences.*** Both are about something already on the
+  screen in front of the reader, so neither reveals anything. Everything else
+  shares one sentence.
+- ***The confirmation link establishes no session.*** A sign-in link proves
+  mailbox control in order to hand over a session; this one proves mailbox
+  control in order to record an address. Doing both would make an
+  address-change confirmation a second, quieter way into a portal — and the
+  mailbox it lands in is by definition one this application has not previously
+  trusted.
+- ***Confirming revokes every session and every outstanding link.*** The
+  commonest reason to move an address in a hurry is that the old mailbox is no
+  longer yours, and the sign-in links sitting in it are exactly what somebody
+  holding it would use. §4.2 already pairs "sessions terminated" with
+  "outstanding links revoked" for suspension; the same pair applies here, at the
+  cost of one sign-in. It is said plainly on the form beforehand and on the
+  receipt afterwards.
+- ***The old address is told, and is not told the new one.*** Moving a contact
+  address is what an account takeover looks like from the inside, and the holder
+  of the old mailbox is the only person positioned to notice. The notice names
+  no new address: that address now belongs to whoever performed the change, and
+  printing it in a message to a mailbox that may be compromised is a second fact
+  for free. It carries no undo link either — an undo link in a mailbox is a
+  credential, and this is precisely the message sent when a mailbox may be in
+  the wrong hands. It offers a person.
+- ***Told on confirmation, not on request.*** A warning at request time can
+  still stop it, which is the argument for it; it also means a mistyped address
+  produces an alarming message about a change that never happens. The notice
+  goes when something has actually changed.
+- ***`previous_email` is a column so that the notice function can take a
+  request id.*** Neither delivery function accepts an address. Every recipient
+  is read off a row — the same invariant as `send-sign-in-link.ts`, and sharper
+  here, because this path is reachable by an authenticated investor typing into
+  a form. An address parameter would be an open relay with extra steps.
+- ***Confirmation is refused if the record no longer carries
+  `previous_email`.*** A link in flight does not get to apply to a state nobody
+  asked about.
+- ***The address is lower-cased on write.*** `requestSignInLink` matches on a
+  lower-cased address and nothing had ever written `investor_accounts.email` —
+  this is the first writer, so it is the first place the two could disagree. An
+  address stored with a capital letter is a record its owner cannot sign in to,
+  which is a locked door rather than a typo.
+- ***`recipients.email` is not touched, and neither is any email snapshot.***
+  The recipient row is the record of who was invited and the snapshot is the
+  message as sent. Both are history. The export therefore carries the invited
+  address in `recipientEmail` and the current one in `updatedContactEmail`,
+  which is what §20 asks for by listing them separately.
+- ***Changing the address is refused outside a fully open portal.*** §7. Checked
+  twice — when asked for and again when confirmed — because an account can be
+  suspended in between.
+- ***An outstanding request is not an updated contact email.*** The export
+  column reports the newest *confirmed* change and nothing else.
+- ***One hour.*** Longer than the 45-minute sign-in link would be wrong for the
+  same reason it is right there; the claim link's fourteen days is for a message
+  that arrives unrequested, and this one is asked for by somebody sitting in
+  front of the portal.
+- ***The address validator is narrow rather than clever.*** No whitespace, no
+  commas, semicolons, angle brackets, quotes or backslashes; one `@`; a dot in
+  the domain. RFC 5322 permits far stranger things. A securities portal refusing
+  an exotic but legal address is a conversation; an address that splits into a
+  second recipient in a header is an incident.
+
+**Deviations.** None. §13 asked for this and the table was already there.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here touches an amount.
+2. *A send path bypassing a gate?* No. Both messages go through `sendOneEmail`
+   and are refused by the §8.1, §7 and §18.1 gates like everything else; a test
+   asserts the module names no transport of its own. The compliance approval
+   does not apply, for the reason set out at the head of `sign-in-email.ts` —
+   §8.2 covers the two emails that communicate an offer of securities, and
+   registering these would mean an edit to an address-change notice voiding the
+   approval that lets invitations go out.
+3. *One recipient or the whole batch?* One, and it cannot be otherwise: neither
+   delivery function has a parameter that takes an address.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* This was the design problem. A
+   collision produces the success sentence, no row, and no mail; the outcome
+   object carries no address; no metadata anywhere in the module carries one
+   either. Asserted in the unit tests and again in `verify:email-change` with a
+   second account present whose address is the one being reached for.
+6. *Tokens?* 256 bits from `issueToken`, stored as a SHA-256 digest, compared in
+   constant time as well as looked up by hash, expiring in an hour, spent by a
+   conditional UPDATE inside the transaction that moves the address — so two
+   simultaneous redemptions cannot both win, and a failure to move the address
+   cannot leave the request marked as spent. Replay is asserted against a real
+   database.
+7. *Suspension?* Strengthened. Confirming an address change now revokes every
+   session and every outstanding link, and a suspended account cannot confirm a
+   link that was in flight when it was suspended.
+8. *Does any log line contain a token, a body or a key?* No. A test reads every
+   `metadata: { … }` literal in both modules and asserts none mentions a token,
+   a hash, an address, a subject or a body. The catch around the transaction
+   drops the error object deliberately: a Postgres unique-violation message
+   contains the value that collided, which is another investor's address.
+9. *Indexable routes?* No. Both new pages are `noindex`, asserted.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched, and it applies — a testing deployment cannot
+    send either of these, which is correct: the confirmation link embeds the
+    domain it was issued from.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (2171, up from 2120) are green.
+`pnpm verify:email-change` is 33 of 33.
+
+**Uncertain.**
+
+- *The confirmation email says what the link is for, which is a small fact about
+  a stranger's mailbox.* It reads "a private Flipit investor portal record", and
+  a mistyped address means somebody learns that much. It is not possible to ask
+  a person to confirm an address without saying what for, and it names no
+  record, no person and no figure — but it is not nothing.
+- *There is no rate limit on requesting a change.* An investor could ask
+  repeatedly and cause repeated mail to addresses they choose, one at a time,
+  each superseding the last. The transport gate and the fact that every request
+  revokes the previous one bound it, but nothing counts.
+- *An operator cannot see or reverse a change.* The notice to the old address
+  tells the reader to write to a person, and that person has no screen showing
+  what happened — only the audit log, which records that a change was confirmed
+  and deliberately not to what. Reversing it today means asking somebody with
+  database access. That is the next thing this feature needs.
+- *A confirmed change does not re-run the import matcher.* Re-importing the
+  original spreadsheet will match on the invited address, find nothing, and
+  create a second account. §9's matching is by address and nothing else.
