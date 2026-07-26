@@ -63,8 +63,32 @@ export interface CspOptions {
  * streaming, and a `style` *attribute* is governed by `style-src-attr`, which a
  * nonce cannot reach. Removing it means removing every inline style attribute
  * in the application first.
+ *
+ * ---
+ *
+ * **That is what the entry before this one said, and it was wrong about the
+ * size of the job.** Removing every inline style attribute meant removing one:
+ * `text-transform: uppercase` on the jurisdiction box, which is a class. Nothing
+ * here uses `next/font` or `next/image`, no route sets a style at runtime, and
+ * Next inlines no critical CSS in this configuration — the served HTML of every
+ * screen contains no `<style>` element and no `style` attribute at all. So the
+ * directive is now `'self'`, and both `'unsafe-inline'` keywords are gone from
+ * this policy.
+ *
+ * **What it costs to break.** `style-src-attr` falls back to this directive and
+ * a nonce cannot reach an attribute, so an inline style added anywhere from now
+ * on is *refused*: the element renders with that one rule missing and nothing
+ * says so. `auditScreen` in `pnpm verify:viewport` therefore fails on any
+ * element carrying a `style` attribute, on every screen, and names the offender
+ * — which is what makes this directive maintainable rather than a trap for
+ * whoever writes the next component.
+ *
+ * The email templates in `lib/updates/notification.ts` and `lib/qa/messages.ts`
+ * are full of inline styles and always will be, because a mail client accepts
+ * nothing else. This policy does not reach them: it governs documents this
+ * application serves, and an email is rendered by somebody else's program.
  */
-export const STYLE_SRC = "style-src 'self' 'unsafe-inline'"
+export const STYLE_SRC = "style-src 'self'"
 
 /**
  * Build the policy.

@@ -671,7 +671,7 @@ Issuing an offer does not send anything and does not take anybody off the regist
 pnpm build && pnpm verify:viewport
 ```
 
-254 checks across every screen, admin and investor, in a real browser. If your machine has a Chromium that Playwright did not install, put its path in `CHROMIUM_PATH` and it will use that rather than asking you to download another.
+323 checks across every screen, admin and investor, in a real browser. If your machine has a Chromium that Playwright did not install, put its path in `CHROMIUM_PATH` and it will use that rather than asking you to download another.
 
 The run also now *uses* the camera, rather than only reading the header that permits it. Two lines in the security policy were written the awkward way on purpose — the camera is allowed for this site rather than blocked outright, because blocking it would break the video recorder with no error message anywhere — and until now the evidence for that was somebody having read the file. The run asks the browser for a camera and plays back a recording, and both were checked by deliberately breaking the policy, rebuilding, and confirming the run went red before putting it back.
 
@@ -692,6 +692,10 @@ pnpm build && pnpm verify:viewport
 ```
 
 Look for the section headed *The nonce, proved by injecting what it refuses*. It writes a script into a live page three times: once with no password, once with the wrong one, once with the right one. The first two must not run. The third must — because a policy that blocks *everything* would leave every page in the application dead, and looking correct while being dead is exactly the failure this had to be tested for. It also checks the password is genuinely different on the next page load, since one that never changes could simply be copied.
+
+**A second hole, in the same policy, closed the same way.** The rules also used to allow styling to be written straight into a page — a smaller problem than a script, but not nothing: a rule that covers a figure with a block of colour is styling, and this is an application whose job is to state amounts. That is now closed too, and the run has a section headed *The style policy, proved by injecting what it refuses* which does the same thing to it.
+
+> **The first version of that check was wrong on every screen, which is worth saying.** It flagged an invisible element Next.js adds for screen readers, on all thirty-one pages, and looked like a real finding. It was not: the browser rule covers styling written into the page's text, and this one is set afterwards by the page's own code, which no such rule inspects. Nothing was broken and nothing needed fixing. The check was corrected to look at what the rule actually covers — and a test was added that deliberately asserts the exempt case still works, so that the next person to see it does not spend an afternoon on it.
 
 > **And this found a real fault, on a part of the site nobody had been able to test until now.** The application will eventually be served under a sub-path — `mikehelm.com/SPV` rather than a domain of its own — and there is a separate run, `pnpm verify:deployment`, that stands it up that way and asks a live server questions. It now checks the security headers, and it reported that the **front page had no security policy at all** under a sub-path. Not a weak one — none. Every equivalent check on a plain domain passed, which is why nothing had caught it: the rule that decides which addresses the policy applies to has a quirk where an address with nothing after the prefix falls through the gap. One line fixed it. The same trap had been sprung once before in this project, in a different file, and was found the same way — by asking a running server rather than by reading the code.
 
@@ -721,7 +725,7 @@ pnpm build
 pnpm verify:viewport
 ```
 
-That starts the application, opens a real browser at phone size, signs itself in as both an administrator and an investor, and walks every screen measuring each one — 254 checks. It needs a database and takes a few minutes.
+That starts the application, opens a real browser at phone size, signs itself in as both an administrator and an investor, and walks every screen measuring each one — 323 checks. It needs a database and takes a few minutes.
 
 ## The forty-eight things this was meant to do
 

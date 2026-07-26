@@ -142,13 +142,22 @@ describe('Content-Security-Policy', () => {
     expect(policySource).not.toMatch(/nonce\?\s*:/)
   })
 
-  it('leaves style-src as the remaining unsafe-inline, and says so', () => {
-    // Honesty about what was not fixed. An injected style can reposition or
-    // hide things; it cannot read a token or call a server action. A nonce
-    // cannot reach it either — React writes `style` attributes, which are
-    // governed by style-src-attr.
-    expect(directive('style-src')).toContain("'unsafe-inline'")
-    expect(policySource).toContain('style-src` still carries')
+  it("has no 'unsafe-inline' anywhere in a production policy", () => {
+    // Both of them are gone: script-src in one entry, style-src in the next.
+    // The style one was expected to be a project — every inline style attribute
+    // found and moved into a class first — and turned out to be a single
+    // `text-transform: uppercase` on the jurisdiction box.
+    expect(directive('style-src')).toBe("style-src 'self'")
+    expect(policy).not.toContain('unsafe-inline')
+  })
+
+  it('refuses an inline style attribute, which a nonce cannot rescue', () => {
+    // `style-src-attr` falls back to `style-src`, and an attribute has nowhere
+    // to carry a nonce. So the failure mode is an element rendering with one
+    // rule missing and nothing saying so — which is why `verify:viewport` fails
+    // on any element carrying a `style` attribute and names it.
+    expect(policy).not.toContain('style-src-attr')
+    expect(policySource).toContain('style-src-attr')
   })
 
   it('widens for the development server only when asked, and never by default', () => {

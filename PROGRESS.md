@@ -5340,3 +5340,119 @@ are green. `pnpm verify:viewport` is 254 of 254 in a real browser;
   should exist at all, against the sign-in page's own recorded argument that it
   should not — is a decision for Michael, not something to build over him. It
   belongs in OPEN_DECISIONS.md rather than in another Uncertain list.
+
+## The other unsafe-inline, and a check that was wrong on every screen
+
+The previous entry named `style-src 'unsafe-inline'` as the weakest line left in
+the policy and said it had no one-file fix — that it needed *"every inline
+`style` attribute in the application found and moved into a class, and only then
+can the directive be narrowed. That is a real piece of work."*
+
+There was one. `text-transform: uppercase` on the jurisdiction box.
+
+**Built.**
+
+- `style-src 'self'`. Both `'unsafe-inline'` keywords are now gone from the
+  policy.
+- The one inline style is a class. `TextInput` appends a caller's `className`
+  to the shared control class rather than ignoring it, which is what made the
+  class possible.
+- `verify:viewport` fails on any `style` attribute **in the delivered markup**,
+  on every screen, naming the element — and on any `<style>` element without the
+  nonce.
+- A section that injects a style three ways and watches two of them be refused.
+  323 checks, up from 254.
+
+**The check that was wrong.** The first version of the per-screen check walked
+`document.querySelectorAll('[style]')` in the live page. It failed on all
+thirty-one screens, naming `<next-route-announcer style="position: absolute;">`
+— the off-screen element Next adds so a screen reader is told the page changed.
+
+It looked like a real find and it was not one. **A Content-Security-Policy does
+not govern the CSSOM.** Next writes `element.style.position = 'absolute'` from
+JavaScript; that serialises into a `style` attribute the DOM will happily show
+you, and no policy inspects it. What CSP refuses is a style *parsed from markup*
+— an attribute in the HTML, `setAttribute('style', …)`, or a `<style>` element
+without the nonce.
+
+It was checked rather than reasoned about: the announcer's computed `position` is
+`absolute`, so the rule applied, and no violation was reported anywhere. Had that
+check been "fixed" by making Next stop doing it, or by widening the directive, the
+result would have been a change to the application to satisfy a check that was
+measuring the wrong thing.
+
+**Decisions.**
+
+- ***The per-screen check reads the response body, not the DOM.*** The delivered
+  markup is exactly the set of styles CSP inspects, so it is exactly the right
+  thing to search — and it catches the case that matters, a component written
+  with `style={{…}}`, which arrives in the HTML, is refused, and renders one
+  rule short of correct with nothing to show for it.
+- ***The CSSOM exemption is asserted, not merely avoided.*** A check states that
+  `element.style.width = '234px'` still applies. It looks like a check that
+  something *insecure* works, and it is there so the next person to see
+  `style="position: absolute"` in a browser and reach for the policy finds the
+  answer written down with a test beside it.
+- ***`TextInput` appends `className`, never substitutes it.*** A caller that
+  replaced the class would drop `min-h-11` — the 44px tap target §13.2 requires
+  — on a control where too small is hard to notice.
+- ***The email templates keep their inline styles and always will.***
+  `lib/updates/notification.ts` and `lib/qa/messages.ts` are full of them
+  because a mail client accepts nothing else. This policy does not reach them:
+  it governs documents this application serves, and an email is rendered by
+  somebody else's program. Nothing was changed there, and nothing should be.
+- ***Proved by breaking it.*** `'unsafe-inline'` was put back into `style-src`,
+  rebuilt, and run: all four behavioural checks failed and the CSSOM one stayed
+  green, which is the right shape. Restored, `git status` clean, full run green.
+
+**Deviations.** None.
+
+**Checklist.**
+
+1. *Money as a `number`?* No.
+2. *A send path bypassing a gate?* No. Nothing here touches the transport or
+   either gate.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No. Re-proved in a browser across
+   every screen.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The new checks
+   print an element's tag and the first 60 characters of a `style` attribute,
+   and only on failure.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* Untouched. Worth one line: `lib/qa/messages.ts` is the file
+    with the most inline styles in the repository and none of it changed — it
+    builds an email, not a page.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched; `verify:deployment` is 97 of 97.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2415) and `pnpm build` are green.
+`pnpm verify:viewport` is 323 of 323; `pnpm verify:deployment` 97 of 97;
+`pnpm verify:account-access` 42 of 42.
+
+**Uncertain.**
+
+- ***The policy has nothing obvious left to tighten, and that is the point at
+  which to stop trusting it.*** Every directive is now `'self'` or `'none'` bar
+  the three that name `data:` or `blob:` for a stated feature. What has never
+  been done is the opposite exercise: take each of those three and ask what an
+  attacker could do with it. `img-src data:` in particular is the one that
+  usually survives an audit and should not.
+- ***`verify:viewport` now takes several minutes and runs three sections that
+  are really a security suite,*** not a viewport one. It is the only place a
+  browser runs, so everything browser-shaped lands in it. Splitting the policy
+  sections into their own script would let them run without the thirty-one
+  screen sweep, which is what would make them run often.
+- *The recorder component is still driven by nobody.* Arm, start, stop, review,
+  discard, upload has never been exercised. Needs `MEDIA_STORE` and an onboarded
+  operator. Still the largest untested surface in the application.
+- *The image upload preview and the email template preview are still
+  unexercised.*
+- *`/admin/onboarding` is still audited by nobody,* because `verify:viewport`
+  signs in as the owner and that page is operator-only.
+- *Nothing measures bundle size, and nothing measures what the middleware
+  costs.* Both are guesses stated as facts in these notes.
+- *The password-reset journey is still not built,* and is a decision for Michael
+  rather than a thing to build over him. It belongs in OPEN_DECISIONS.md.

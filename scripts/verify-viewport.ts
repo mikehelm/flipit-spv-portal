@@ -318,6 +318,49 @@ function isEnvironmental(complaint: string): boolean {
   )
 }
 
+/**
+ * Nothing in the delivered markup that `style-src 'self'` will refuse.
+ *
+ * **Why the markup and not the live DOM.** The first version of this walked
+ * `document.querySelectorAll('[style]')` and failed on all thirty-one screens,
+ * naming `<next-route-announcer style="position: absolute;">` — the off-screen
+ * element Next adds so a screen reader is told the page changed. It looked like
+ * a real find and it was not one: **the Content-Security-Policy does not govern
+ * the CSSOM.** Next writes `element.style.position = 'absolute'` from
+ * JavaScript, which serialises into a `style` attribute the DOM will show you
+ * and which no policy inspects. Checked rather than assumed: the computed
+ * position is `absolute`, so the rule applied, and no violation was reported.
+ *
+ * What CSP *does* refuse is a style parsed from markup — a `style` attribute in
+ * the HTML, `setAttribute('style', …)`, or a `<style>` element without the
+ * nonce. So the delivered document is the thing to search, and searching it
+ * catches the case that matters: a component written with `style={{…}}`, which
+ * arrives in the HTML, is refused, and renders one rule short of correct with
+ * nothing to show for it.
+ *
+ * The behavioural half — that the policy really does refuse one — is
+ * `verifyTheStylePolicy`, which injects one and watches it fail.
+ */
+async function checkNothingInlineStyled(label: string, html: string): Promise<void> {
+  const attributes = [...html.matchAll(/<([a-zA-Z][\w-]*)[^>]*\sstyle="([^"]*)"/g)].map(
+    (m) => `<${m[1]!.toLowerCase()} style="${m[2]!.slice(0, 60)}">`,
+  )
+  check(
+    `${label}: the markup carries no inline style the policy will refuse`,
+    attributes.length === 0,
+    attributes.slice(0, 4).join(' | '),
+  )
+
+  const unnonced = [...html.matchAll(/<style(\s[^>]*)?>/g)]
+    .map((m) => m[1] ?? '')
+    .filter((attrs) => !/\snonce="/.test(attrs))
+  check(
+    `${label}: every <style> element in the markup carries the nonce`,
+    unnonced.length === 0,
+    `${unnonced.length} without a nonce`,
+  )
+}
+
 async function auditScreen(page: Page, label: string, path: string): Promise<void> {
   complaints.length = 0
 
@@ -364,6 +407,8 @@ async function auditScreen(page: Page, label: string, path: string): Promise<voi
     result.smallTargets.length === 0,
     result.smallTargets.map((t) => `<${t.tag}> ${t.height}px "${t.text}"`).join(' | '),
   )
+
+  await checkNothingInlineStyled(label, await response!.text())
 
   // Contrast, on what the browser actually painted.
   const failures: string[] = []
@@ -692,6 +737,8 @@ async function main(): Promise<void> {
 
     await verifyTheNonce(page)
 
+    await verifyTheStylePolicy(page)
+
     await verifyTheBannerWithAFaultBehindIt(page)
   } catch (error) {
     console.error('\nThe run stopped early. The application said:\n')
@@ -969,6 +1016,97 @@ async function verifyTheNonce(page: Page): Promise<void> {
     'and nothing else was refused along the way',
     stray.length === 0,
     stray.slice(0, 3).join(' | '),
+  )
+}
+
+/**
+ * `style-src 'self'`, proved the same way as the nonce: by injecting one.
+ *
+ * The style directive lost its `'unsafe-inline'` after the script one did. It
+ * is the smaller of the two — an injected style can move or hide things, it
+ * cannot read a claim token — but hiding things is not nothing on a page whose
+ * job is to state an amount, and a rule that covers the figure with a block of
+ * colour is a style rather than a script.
+ *
+ * Three claims, and the third is the one that stops this check being a lie:
+ *
+ *   1. **A `style` attribute set from markup is refused.** `setAttribute` is
+ *      what the parser does, so this is the injected-HTML case exactly.
+ *   2. **A `<style>` element with no nonce is refused.**
+ *   3. **A style set through the CSSOM still applies** — and CSP does not
+ *      govern it. This is not a hole being papered over; it is the
+ *      specification. Next itself relies on it for the route announcer, and a
+ *      check written without knowing it fails on every screen for no reason.
+ *      Recording it here is what stops the next person "fixing" that.
+ */
+async function verifyTheStylePolicy(page: Page): Promise<void> {
+  console.log('\nThe style policy, proved by injecting what it refuses')
+
+  complaints.length = 0
+  await page.goto(`${ORIGIN}/signin`, { waitUntil: 'networkidle' })
+
+  const fromMarkup = await page.evaluate(() => {
+    const el = document.createElement('div')
+    el.id = 'wp18-style-probe'
+    // What a parser does with an injected `style="…"`, and what CSP inspects.
+    el.setAttribute('style', 'position: fixed; width: 123px')
+    document.body.appendChild(el)
+    const applied = getComputedStyle(el).width
+    el.remove()
+    return applied
+  })
+  await page.waitForTimeout(200)
+  check(
+    'a style attribute set from markup does not apply',
+    fromMarkup !== '123px',
+    `the element measured ${fromMarkup} — style-src is not enforcing`,
+  )
+  check(
+    'and the policy says so, naming style-src',
+    complaints.some((c) => /CSP refused style-src/.test(c)),
+    complaints.filter((c) => /CSP refused/.test(c)).slice(0, 2).join(' | ') ||
+      'no violation was reported at all',
+  )
+
+  const before = complaints.length
+  const fromStyleElement = await page.evaluate(() => {
+    const style = document.createElement('style')
+    style.textContent = '#wp18-style-probe-2 { width: 321px }'
+    document.head.appendChild(style)
+    const el = document.createElement('div')
+    el.id = 'wp18-style-probe-2'
+    document.body.appendChild(el)
+    const applied = getComputedStyle(el).width
+    el.remove()
+    style.remove()
+    return applied
+  })
+  await page.waitForTimeout(200)
+  check(
+    'a <style> element with no nonce does not apply',
+    fromStyleElement !== '321px',
+    `the element measured ${fromStyleElement}`,
+  )
+  check(
+    'and that was refused too',
+    complaints.slice(before).some((c) => /CSP refused style-src|Refused to apply inline style/.test(c)),
+    complaints.slice(before).slice(0, 2).join(' | ') || 'no violation was reported',
+  )
+
+  // The exemption, stated rather than discovered. Next's route announcer
+  // depends on it, and a check that does not know this fails everywhere.
+  const throughTheCssom = await page.evaluate(() => {
+    const el = document.createElement('div')
+    el.style.width = '234px'
+    document.body.appendChild(el)
+    const applied = getComputedStyle(el).width
+    el.remove()
+    return applied
+  })
+  check(
+    'a style set through the CSSOM still applies, because no policy governs it',
+    throughTheCssom === '234px',
+    `the element measured ${throughTheCssom}`,
   )
 }
 

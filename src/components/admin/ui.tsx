@@ -126,8 +126,29 @@ const controlClass =
   'w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext ' +
   'placeholder:text-muted focus:border-orange'
 
-export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} id={props.id ?? props.name} className={controlClass} />
+/**
+ * `className` is appended to the shared control class, never allowed to replace
+ * it.
+ *
+ * It exists so that a caller needing one extra rule — the jurisdiction box wants
+ * `uppercase` — can ask for it without an inline `style` attribute. That matters
+ * beyond tidiness: `style-src` no longer carries `'unsafe-inline'`, so a `style`
+ * attribute is now *refused by the browser*. The element renders unstyled, which
+ * on a two-letter country code means it silently stops looking like a country
+ * code. A class cannot fail that way.
+ *
+ * Appended rather than substituted, because a caller that accidentally dropped
+ * `min-h-11` would drop the 44px tap target §13.2 requires, on a control it is
+ * hard to notice is too small.
+ */
+export function TextInput({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      id={props.id ?? props.name}
+      className={className ? `${controlClass} ${className}` : controlClass}
+    />
+  )
 }
 
 export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {

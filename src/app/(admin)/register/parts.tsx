@@ -159,7 +159,11 @@ export function IssueOfferForm({
             maxLength={2}
             required
             autoComplete="off"
-            style={{ textTransform: 'uppercase' }}
+            // A class, not `style={{ textTransform: 'uppercase' }}`. `style-src`
+            // no longer allows an inline style, so the attribute would be
+            // refused and this box would quietly stop uppercasing a country
+            // code — with the compliance gate reading whatever was typed.
+            className="uppercase"
           />
         </Field>
 
