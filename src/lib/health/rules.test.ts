@@ -9,6 +9,7 @@ import {
   backupFindings,
   storageFindings,
   buildFindings,
+  contactFindings,
   complianceFindings,
   describeAreas,
   deploymentFindings,
@@ -70,6 +71,7 @@ function healthy(overrides: Partial<HealthFacts> = {}): HealthFacts {
       problems: 0,
     },
     lastBackupAt: hoursAgo(20),
+    contact: { hasOperatorAddress: true, hasStandingAddress: true },
     ...overrides,
   }
 }
@@ -654,6 +656,88 @@ describe('stored files against the records that name them', () => {
     )[0]!
     const text = `${finding.headline} ${finding.detail} ${finding.remedy}`
     expect(text).not.toMatch(/img_|doc_|vid_/)
+  })
+})
+
+describe('the contact route on a notice', () => {
+  function contact(patch: Partial<HealthFacts['contact']>, mode: HealthFacts['serviceMode'] = 'ACTIVE') {
+    return contactFindings(
+      healthy({
+        serviceMode: mode,
+        contact: { hasOperatorAddress: true, hasStandingAddress: true, ...patch },
+      }),
+    )
+  }
+
+  it('is fine when both addresses are set', () => {
+    expect(contact({})[0]?.severity).toBe('OK')
+  })
+
+  it('is worth knowing when only the operator address is set', () => {
+    // §7: the standing address is "shown once the portal is closed and after
+    // the operator's own address stops being monitored". Having only his is a
+    // plan that works until the day it is needed — Open Decision 7, as a
+    // finding rather than a line in a file.
+    const findings = contact({ hasStandingAddress: false })
+    expect(findings[0]?.severity).toBe('ATTENTION')
+    expect(findings[0]?.area).toBe('Contact route')
+  })
+
+  it('is worth knowing when only the standing address is set', () => {
+    expect(contact({ hasOperatorAddress: false })[0]?.severity).toBe('ATTENTION')
+  })
+
+  it('is worth knowing when neither is set and the portal is running', () => {
+    const findings = contact({ hasOperatorAddress: false, hasStandingAddress: false })
+    expect(findings[0]?.severity).toBe('ATTENTION')
+  })
+
+  it.each(['SUNSET', 'DISABLED'] as const)(
+    'needs a person in %s, where the notice is the only route left',
+    (mode) => {
+      // Every investor is now looking at a closing or closed notice, and in
+      // these modes there is nothing else on the page to act on.
+      expect(contact({ hasOperatorAddress: false, hasStandingAddress: false }, mode)[0]?.severity).toBe(
+        'WRONG',
+      )
+      expect(contact({ hasStandingAddress: false }, mode)[0]?.severity).toBe('WRONG')
+    },
+  )
+
+  it('stays worth-knowing in read-only, where the record is still on the screen', () => {
+    expect(contact({ hasStandingAddress: false }, 'READ_ONLY')[0]?.severity).toBe('ATTENTION')
+  })
+
+  it('says exactly one thing however many addresses are missing', () => {
+    // Two findings about the same absence would be two lines in a log about
+    // one setting.
+    expect(contact({ hasOperatorAddress: false, hasStandingAddress: false })).toHaveLength(1)
+  })
+
+  it('is on the full report and not on the overview banner', () => {
+    // The banner is for things a run left behind. A setting that was never
+    // filled in is not urgent in that sense, and the banner's own rule is that
+    // it carries only what nothing else surfaces.
+    const facts = healthy({ contact: { hasOperatorAddress: false, hasStandingAddress: false } })
+    expect(buildFindings(facts).some((row) => row.area === 'Contact route')).toBe(true)
+    expect(unattendedFindings(facts).some((row) => row.area === 'Contact route')).toBe(false)
+  })
+
+  it('never names either address', () => {
+    // It only ever sees booleans, which is the point of the fact shape.
+    for (const mode of ['ACTIVE', 'READ_ONLY', 'SUNSET', 'DISABLED'] as const) {
+      for (const operator of [true, false]) {
+        for (const standing of [true, false]) {
+          for (const finding of contact(
+            { hasOperatorAddress: operator, hasStandingAddress: standing },
+            mode,
+          )) {
+            const text = `${finding.headline} ${finding.detail} ${finding.remedy}`
+            expect(text).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/)
+          }
+        }
+      }
+    }
   })
 })
 

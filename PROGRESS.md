@@ -3518,3 +3518,112 @@ are green. `pnpm verify:deployment` is 75 of 75, up from 67.
 - *There is no rate limit in front of it.* The defence is the token's length
   and that a wrong one costs a hash and no connection. A deployment behind a
   proxy that can rate-limit should, and the runbook does not say so.
+
+## The address on a notice — §4.2's "contact route", which was a sentence
+
+Six notice pages, and every one of them ended the same way: *"Please contact
+David."* None of them carried an address.
+
+§4.2 gives a suspended account *"a neutral notice page with a contact route"*.
+§7 gives a disabled service *"a neutral closed page with a contact address"*.
+Both were built as far as the notice and no further. The reader of one of those
+pages has just been locked out of the only screen that ever named David, and was
+being told to write to somebody they had no way to reach — which is worse than
+saying nothing, because it reads as a route and is not one.
+
+`service_contact_email` had a column, a settings field, a validation rule making
+it mandatory in sunset and disabled, and no reader anywhere. The gate was built
+and the thing it gated was not.
+
+**Built.**
+
+- **`src/lib/portal/contact.ts`** — which address appears, and where. Pure, and
+  it never invents: with nothing configured it returns nothing.
+- **The notices carry it**, as a `mailto:` under a rule, on `SUSPENDED`,
+  `CLOSED`, `SUNSET`, `SERVICE_CLOSED` and `ARCHIVED`.
+- **The copy no longer says "David"** anywhere. The address makes the name
+  unnecessary.
+- **A health rule, `Contact route`** — `ATTENTION` when an address is missing
+  while the portal runs, `WRONG` in sunset and disabled, where the notice is the
+  only thing an investor has left.
+- **`pnpm verify:lifecycle`** now suspends an account, reads the view it is
+  actually served, switches the service to sunset, clears both settings, asks
+  the real health report what it makes of that, and puts the configuration back.
+  50 checks, up from 39.
+
+**Decisions.**
+
+- ***Which address leads depends on whether the portal is still running.***
+  While it is, the operator leads and the standing address is offered underneath
+  — that second line is Open Decision 7, *"fallback contact if David is
+  unavailable"*, and the reason it was a decision is that being suspended by a
+  person and being unable to reach that person are the same experience from
+  outside. Once the portal is closing or closed, the standing address leads and
+  **his is not shown at all**: §7 says the second address exists precisely
+  because the first has stopped being monitored, so offering it underneath would
+  reintroduce the dead end one state later.
+- ***`READ_ONLY` gets no contact line.*** The portal is open and the record is
+  on the screen. There is nothing for a contact line to rescue, and a standing
+  invitation to write during a deliberate quiet period is an invitation to be
+  written to.
+- ***Nothing configured means nothing rendered.*** The conservative reading of a
+  silent spec: an absent address is better than an invented one or a sentence
+  naming a person with no way to reach them. The absence is a health finding
+  instead, where somebody can act on it.
+- ***A `mailto:`, not a contact form.*** A form is a channel that only works
+  while the application is up, on notices whose whole subject is this
+  application being unavailable to the person reading them.
+- ***The health rule takes two booleans, never the addresses.*** Same reason the
+  reminder job prints no address: this report is appended to a log file.
+- ***One finding, however many settings are missing.*** Two lines in a log about
+  one setting is one line too many.
+- ***Whitespace is unset, in both the renderer and the report.*** Otherwise a
+  field holding a stray space reads as configured on the health page and renders
+  as nothing on the notice — the two disagreeing about the same row is the whole
+  class of defect this package is fixing.
+
+**Deviations.** None. §4.2 and §7 both asked for this and neither had it.
+
+**Checklist.**
+
+1. *Money as a `number`?* No — nothing here touches an amount.
+2. *A send path bypassing a gate?* No. Nothing sends; a `mailto:` is the
+   reader's own mail client.
+3. *One recipient or the whole batch?* Not applicable.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No, and this is the rule that
+   shaped the input type: `portalContacts` takes a notice and two configuration
+   values and nothing from any account, so there is no field through which
+   another investor could arrive. Asserted in the unit test and again in
+   `verify:lifecycle` with two accounts present.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched — and the notice a suspended reader lands on is what
+   this improves.
+8. *Does any log line contain a token, a body or a key?* No. The health rule
+   sees booleans, and every one of its sixteen possible outputs is asserted to
+   carry no address.
+9. *Indexable routes?* No route added. The portal is `noindex` as it was.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2071, up from 2035) and `pnpm build`
+are green. `pnpm verify:lifecycle` is 50 of 50, up from 39.
+
+**Uncertain.**
+
+- *Nothing verifies that either address is monitored.* The report can say both
+  are set; it cannot say anybody is reading them. The honest version of that
+  check is somebody replying to a test message, which is a person's job rather
+  than a rule's.
+- *The `mailto:` is the only channel offered.* An investor without a working
+  mail client on the device they opened the notice on can read the address and
+  copy it, which is the reason it is rendered as text as well as a link — but
+  there is no second route, and §4.2 does not ask for one.
+- *`ARCHIVED` is treated as a closing state.* §4.2 does not say whether an
+  archived record's notice should point at the operator or the standing
+  address. Standing was chosen because archiving happens after everything else
+  is over, which is exactly when §7 says his address has stopped being read.
+- *Open Decision 7 is answered mechanically, not organisationally.* The
+  application now has somewhere to put a fallback address and says so when it is
+  empty. Whose address it should be is still a question for Michael and David.

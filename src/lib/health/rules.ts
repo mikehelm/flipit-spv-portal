@@ -153,6 +153,19 @@ export interface HealthFacts extends UnattendedFacts {
   }
   /** When `pnpm backup` last recorded a successful dump. Null when never. */
   lastBackupAt: Date | null
+  /**
+   * Whether an investor stuck on a notice has anywhere to write. §4.2, §7.
+   *
+   * Booleans, never the addresses themselves — this report is appended to a log
+   * file by a scheduler, and the reminder job prints no address for the same
+   * reason.
+   */
+  contact: {
+    /** `default_sender_email` — the operator's own, read while the portal runs. */
+    hasOperatorAddress: boolean
+    /** `service_contact_email` — the one shown once the portal has closed. */
+    hasStandingAddress: boolean
+  }
 }
 
 /** The audit action `pnpm backup` writes. The only record that one happened. */
@@ -524,6 +537,90 @@ export function deploymentFindings(facts: HealthFacts): Finding[] {
   ]
 }
 
+/**
+ * Is there a way to reach anybody, on the pages where that is all there is?
+ *
+ * §4.2 gives a suspended account *"a neutral notice page with a contact
+ * route"*; §7 gives a disabled service *"a neutral closed page with a contact
+ * address"*. Those notices are the last thing an investor sees and the only
+ * thing they can act on, and nothing else in the application would ever notice
+ * that they are blank — the operator reading his own settings sees two empty
+ * optional fields, not a locked-out reader looking at a dead end.
+ *
+ * Two settings, and they are not interchangeable. §7 is explicit that
+ * `service_contact_email` is *"shown once the portal is closed and after the
+ * operator's own address stops being monitored"* — so having only the
+ * operator's address is a plan that works until the day it is needed, which is
+ * Open Decision 7 as a finding rather than a line in a file.
+ *
+ * Booleans in, never addresses. This report is appended to a log by a scheduler.
+ */
+export function contactFindings(facts: HealthFacts): Finding[] {
+  const { hasOperatorAddress, hasStandingAddress } = facts.contact
+  const ending = facts.serviceMode === 'SUNSET' || facts.serviceMode === 'DISABLED'
+
+  if (!hasOperatorAddress && !hasStandingAddress) {
+    return [
+      {
+        area: 'Contact route',
+        severity: ending ? 'WRONG' : 'ATTENTION',
+        headline: 'A locked-out investor is given no way to reach anybody.',
+        detail: ending
+          ? 'The service mode means every investor now sees a closing or closed notice, and ' +
+            'neither the sending address nor the standing contact address is set — so those ' +
+            'notices name nobody. It is the only route those readers have.'
+          : 'Neither the sending address nor the standing contact address is set. A suspended ' +
+            'or closed account sees a notice with no address on it, and the page deliberately ' +
+            'says nothing rather than naming a route that is not one.',
+        remedy: 'Settings → the sending address, and the contact address below it.',
+      },
+    ]
+  }
+
+  if (!hasStandingAddress) {
+    return [
+      {
+        area: 'Contact route',
+        severity: ending ? 'WRONG' : 'ATTENTION',
+        headline: ending
+          ? 'The closing notice points at an address that is about to stop being read.'
+          : 'There is no address for after the operator stops reading his.',
+        detail:
+          'The sending address is the only one configured. Once the portal closes it stops ' +
+          'being monitored, and a notice offering an unread address is a dead end dressed ' +
+          'as a route.',
+        remedy: 'Settings → contact address. It is the one shown once the portal has closed.',
+      },
+    ]
+  }
+
+  if (!hasOperatorAddress) {
+    return [
+      {
+        area: 'Contact route',
+        severity: 'ATTENTION',
+        headline: 'A suspended investor is sent to the standing address rather than the operator.',
+        detail:
+          'The contact address is set and the sending address is not, so a notice raised while ' +
+          'the portal is still running points past the person who could act on it.',
+        remedy: 'Settings → the sending address.',
+      },
+    ]
+  }
+
+  return [
+    {
+      area: 'Contact route',
+      severity: 'OK',
+      headline: 'Both contact addresses are set.',
+      detail:
+        'A suspended or closed account is given the sending address with the standing one ' +
+        'underneath; a closing or closed portal is given the standing one alone.',
+      remedy: 'Nothing to do.',
+    },
+  ]
+}
+
 /** Deadlines that have passed with people still to answer (§6.6). */
 export function roundFindings(facts: HealthFacts): Finding[] {
   if (!facts.round || !facts.round.open) return []
@@ -806,6 +903,7 @@ export function buildFindings(facts: HealthFacts): Finding[] {
     ...complianceFindings(facts),
     ...serviceModeFindings(facts),
     ...deploymentFindings(facts),
+    ...contactFindings(facts),
     ...roundFindings(facts),
     ...storageFindings(facts),
     ...backupFindings(facts),

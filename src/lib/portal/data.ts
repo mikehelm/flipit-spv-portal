@@ -35,6 +35,7 @@ import { forbiddenWordsInTileLabel } from './roadmap'
  * siblings are named for it.
  */
 const money = (value: string) => formatMoney(value, { currencyCode: 'USD' })
+import { portalContacts, type PortalContact } from './contact'
 import { portalAccess, type AccountStatus, type PortalAccess } from './access'
 import { buildTimeline, showsPaymentSafetyNotice, type OfferStage, type TimelineStep } from './timeline'
 
@@ -81,6 +82,14 @@ export interface PortalView {
   offers: PortalOffer[]
   tiles: Array<{ label: string; isLive: boolean }>
   roundName: string | null
+  /**
+   * The addresses to show on a notice, when there is a notice. §4.2, §7.
+   *
+   * Empty for the normal case, and empty when nothing is configured — the page
+   * renders nothing rather than naming a route that is not one. Derived from
+   * service configuration alone; nothing here comes from an account.
+   */
+  contacts: PortalContact[]
 }
 
 function formatDate(value: Date | string | null): string | null {
@@ -211,5 +220,12 @@ export async function loadPortalView(accountId: string): Promise<PortalView | nu
     offers: portalOffers,
     tiles: tiles.map((tile) => ({ label: tile.label, isLive: tile.isLive })),
     roundName: rows[0]?.roundName ?? null,
+    contacts: access.notice
+      ? portalContacts({
+          notice: access.notice,
+          operatorEmail: config.defaultSenderEmail,
+          serviceContactEmail: config.serviceContactEmail,
+        })
+      : [],
   }
 }

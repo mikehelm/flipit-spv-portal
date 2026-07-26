@@ -80,7 +80,7 @@ export default async function SettingsPage() {
             <Field
               label="Service contact address"
               name="serviceContactEmail"
-              hint="Shown once the portal is closed, after the operator's own address stops being monitored. Required for sunset and disabled."
+              hint="Shown once the portal is closed, after the operator's own address stops being monitored — and offered underneath the sending address on a suspended or concluded account, for the case where nobody answers. Required for sunset and disabled."
             >
               <TextInput
                 name="serviceContactEmail"

@@ -191,6 +191,14 @@ export async function gatherFacts(now: Date = new Date()): Promise<HealthFacts> 
         }
       : null,
     lastBackupAt: await lastActionAt(BACKUP_COMPLETED_ACTION),
+    // Booleans, not the addresses. The rules never see them, so no rule can
+    // put one in a log line. Whitespace counts as unset, exactly as
+    // `portalContacts` treats it — otherwise a field holding a stray space
+    // reads as configured here and renders as nothing on the notice.
+    contact: {
+      hasOperatorAddress: (config.defaultSenderEmail ?? '').trim() !== '',
+      hasStandingAddress: (config.serviceContactEmail ?? '').trim() !== '',
+    },
   }
 }
 

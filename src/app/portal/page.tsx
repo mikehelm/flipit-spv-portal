@@ -6,6 +6,7 @@ import { ActionForm } from '@/components/admin/action-form'
 import { PageCurl } from '@/components/page-curl'
 import { SiteFooter } from '@/components/site-footer'
 import { canRespond, canView, type PortalNotice } from '@/lib/portal/access'
+import { CONTACT_COPY, type PortalContact } from '@/lib/portal/contact'
 import { loadPortalView, type PortalOffer } from '@/lib/portal/data'
 import { PAYMENT_SAFETY_NOTICE, type TimelineStep } from '@/lib/portal/timeline'
 import { readInvestorAccount } from '@/lib/portal/session'
@@ -37,14 +38,24 @@ export const dynamic = 'force-dynamic'
  * those exist — §15.
  */
 
+/**
+ * The notice copy. §4.2, §7.
+ *
+ * None of these says "contact David" any more. Each of those sentences was an
+ * instruction with no way to follow it — the reader has just been locked out of
+ * the only page that ever named him — and the address now comes from
+ * configuration, underneath, through `portalContacts`. A first name written
+ * into a notice is also the thing that goes wrong quietly on the day somebody
+ * else is answering.
+ */
 const NOTICES: Record<PortalNotice, { title: string; body: string }> = {
   SUSPENDED: {
     title: 'Access temporarily unavailable',
-    body: 'Access to this portal is temporarily unavailable. Please contact David if you have any questions.',
+    body: 'Access to this portal is temporarily unavailable.',
   },
   CLOSED: {
     title: 'This process has concluded',
-    body: 'This process has concluded for your record. If you need a copy of your documents or correspondence, please contact David.',
+    body: 'This process has concluded for your record. A copy of your documents and correspondence remains available on request.',
   },
   READ_ONLY: {
     title: 'Read-only',
@@ -56,12 +67,38 @@ const NOTICES: Record<PortalNotice, { title: string; body: string }> = {
   },
   SERVICE_CLOSED: {
     title: 'The portal is no longer available',
-    body: 'The Flipit investor portal is no longer available. For any questions about your record, please contact David.',
+    body: 'The Flipit investor portal is no longer available.',
   },
   ARCHIVED: {
     title: 'This record is closed',
-    body: 'This record is retained for our files and is no longer available here. Please contact David for anything you need.',
+    body: 'This record is retained for our files and is no longer available here.',
   },
+}
+
+/**
+ * The contact route, rendered. §4.2 asks for one on a suspended account and §7
+ * asks for one on a closed portal; which address leads is `portalContacts`.
+ *
+ * A `mailto:` rather than a form. A form would be a message channel that only
+ * works while the application is up, on notices whose whole subject is this
+ * application being unavailable to the person reading them.
+ */
+function ContactRoute({ contacts }: { contacts: PortalContact[] }) {
+  if (contacts.length === 0) return null
+
+  return (
+    <div className="mt-3 border-t border-orange/25 pt-3">
+      {contacts.map((contact) => (
+        <p key={contact.address} className="text-sm leading-relaxed text-silver2">
+          {CONTACT_COPY[contact.use].before}
+          <a href={`mailto:${contact.address}`} className="break-words text-orange underline">
+            {contact.address}
+          </a>
+          {CONTACT_COPY[contact.use].after}
+        </p>
+      ))}
+    </div>
+  )
 }
 
 function Step({ step }: { step: TimelineStep }) {
@@ -308,6 +345,7 @@ export default async function PortalPage() {
           <div className="mt-6 rounded-sm border border-orange/40 bg-orange/6 p-4">
             <p className="text-sm font-semibold text-orange">{notice.title}</p>
             <p className="mt-1 text-sm leading-relaxed text-silver2">{notice.body}</p>
+            <ContactRoute contacts={view.contacts} />
           </div>
         ) : null}
 

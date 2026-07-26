@@ -67,6 +67,8 @@ No longer required for Gmail verification, but still worth having given the pers
 
 The portal's closed and suspended states need an address someone will still be reading.
 
+**Half-answered by the build.** There is now a place to put it — the *service contact address* in settings — and it is rendered where it is needed: underneath the sending address on a suspended or concluded account, and *alone* once the portal is closing or closed, because that is the point at which the sending address stops being monitored. The health report says so when it is empty, and refuses in the settings form for sunset and disabled. **What is still open is whose address it should be.**
+
 ### 8. Ask David whether he wants to do a video
 
 Optional, and entirely his call — but it is the highest-impact thing on the list and costs him ten minutes with a phone. Worth asking before the build finishes so there is a slot for it.

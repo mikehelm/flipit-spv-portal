@@ -370,6 +370,30 @@ Put a long random value in `HEALTH_TOKEN` (`openssl rand -base64 32` gives you o
 
 ---
 
+## If somebody cannot get in
+
+Suspend an investor's account, or switch the service to sunset or disabled, and they see a short notice instead of their record. Those notices used to end "please contact David" — with no address anywhere on the page. Somebody locked out of the one page that ever named him was being told to write to a person they had no way to reach.
+
+They now carry the address itself, and which address depends on what has happened:
+
+- **The account is suspended or concluded, and the portal is still running.** They get the sending address — David's — with the service contact address underneath it, introduced as the one to try if nobody comes back. That second line is the answer to the question the build notes had been carrying for weeks: *what if David is unavailable?*
+- **The portal itself is closing or closed.** They get the service contact address **only**. This is the whole reason that second setting exists: once the portal closes, David's address stops being read, and offering an address nobody reads is worse than offering none.
+- **Read-only** carries no contact line at all. The record is right there on the screen; there is nothing to rescue.
+
+Both addresses are in **Settings**. The sending address is the one invitations go out from; the service contact address is the field below it.
+
+**It never invents one.** If neither is set, the notice says nothing rather than pointing at a route that is not one — and the health report tells you, in those words. Try it: clear both, run `pnpm check:health`, and there is a new line under **Contact route**. In sunset or disabled it goes red, because then the notice is the only thing an investor has.
+
+To see it all proved against a real database — suspended, closing, and with both addresses cleared — run:
+
+```bash
+pnpm verify:lifecycle
+```
+
+Fifty checks, and it puts your settings back exactly as they were.
+
+---
+
 ## Updates
 
 Sign in as the operator and open **Updates**. Write one, choose who it goes to, and save it as a draft. Nothing has reached anybody: no portal shows it, no email exists, and the recipient list is empty because the audience is only worked out at the moment you publish.

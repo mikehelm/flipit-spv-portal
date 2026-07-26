@@ -20,9 +20,12 @@ import {
   investorAccounts,
   investorSessions,
   portalTokens,
+  serviceConfig,
   users,
 } from '@/db/schema'
-import { readServiceConfig } from '@/lib/auth/service-config'
+import { readServiceConfig, SERVICE_CONFIG_ID } from '@/lib/auth/service-config'
+import { buildHealthReport } from '@/lib/health/report'
+import { loadPortalView } from '@/lib/portal/data'
 import { issueToken } from '@/lib/crypto'
 import { portalAccess } from '@/lib/portal/access'
 import { loadAdminAccounts } from '@/lib/portal/accounts-data'
@@ -375,6 +378,121 @@ async function main(): Promise<void> {
   check(
     'no token is stored in the clear — only its hash',
     spentRows.every((row) => row.hash !== fresh.token && row.hash !== raced.token),
+  )
+
+  // -------------------------------------------------------------------------
+  // The contact route on a notice. §4.2, §7.
+  //
+  // §4.2 gives a suspended account "a neutral notice page with a contact
+  // route" and §7 gives a closed portal "a neutral closed page with a contact
+  // address". Both notices existed for months carrying the sentence "please
+  // contact David" and no address at all — an instruction with no way to
+  // follow it, to somebody who has just been locked out of the only page that
+  // ever named him.
+  //
+  // `contact.test.ts` proves the rules. What only a database shows is that the
+  // configured addresses actually reach the view an investor is served, and
+  // that clearing them produces nothing rather than a broken sentence.
+  // -------------------------------------------------------------------------
+
+  console.log('\nThe contact route on a notice')
+
+  const configBefore = await readServiceConfig()
+
+  try {
+    await db
+      .update(serviceConfig)
+      .set({
+        defaultSenderEmail: `${PREFIX}-operator@example.test`,
+        serviceContactEmail: `${PREFIX}-standing@example.test`,
+      })
+      .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
+
+    const suspension = await changeAccountStatus({
+      accountId: bob.id,
+      to: 'SUSPENDED',
+      reason: 'Verifying the contact route on the notice.',
+      actor: ownerActor,
+      investorNotified: false,
+    })
+    check('the account can be suspended for this check', suspension.ok)
+
+    const suspendedView = await loadPortalView(bob.id)
+    check('a suspended account is served a notice', suspendedView?.access.notice === 'SUSPENDED')
+    check(
+      'and the notice carries the operator address first',
+      suspendedView?.contacts[0]?.address === `${PREFIX}-operator@example.test` &&
+        suspendedView?.contacts[0]?.use === 'PRIMARY',
+      JSON.stringify(suspendedView?.contacts),
+    )
+    check(
+      'with the standing address underneath it — Open Decision 7',
+      suspendedView?.contacts[1]?.address === `${PREFIX}-standing@example.test` &&
+        suspendedView?.contacts[1]?.use === 'FALLBACK',
+    )
+    check(
+      'and nothing that came from any account',
+      (suspendedView?.contacts ?? []).every((row) => !row.address.includes('alice')),
+    )
+
+    // §7: once the portal is closing, the operator's address has stopped being
+    // monitored and must not be offered underneath a live one.
+    await db
+      .update(serviceConfig)
+      .set({ serviceMode: 'SUNSET' })
+      .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
+
+    const aliceView = await loadPortalView(alice.id)
+    check('a closing portal shows every account the sunset notice', aliceView?.access.notice === 'SUNSET')
+    check(
+      'and offers the standing address alone',
+      aliceView?.contacts.length === 1 &&
+        aliceView.contacts[0]!.address === `${PREFIX}-standing@example.test`,
+      JSON.stringify(aliceView?.contacts),
+    )
+
+    // Nothing configured. The page must say nothing rather than name a route
+    // that is not one — and the health report must call that out.
+    await db
+      .update(serviceConfig)
+      .set({ defaultSenderEmail: null, serviceContactEmail: null })
+      .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
+
+    const bare = await loadPortalView(alice.id)
+    check('with nothing configured the notice names nobody', bare?.contacts.length === 0)
+
+    // The real report, against the real row — not the rule with facts handed
+    // to it. The gap this closes is the one where the rule is right and
+    // nothing ever gives it the truth.
+    const report = await buildHealthReport()
+    const finding = report.findings.find((row) => row.area === 'Contact route')
+    check(
+      'and the health report calls that a fault while the portal is closing',
+      finding?.severity === 'WRONG',
+      JSON.stringify(finding),
+    )
+    check(
+      'without naming either address in a line bound for a log file',
+      finding !== undefined &&
+        !/[\w.+-]+@[\w-]+\.[\w.]+/.test(`${finding.headline} ${finding.detail} ${finding.remedy}`),
+    )
+  } finally {
+    await db
+      .update(serviceConfig)
+      .set({
+        defaultSenderEmail: configBefore.defaultSenderEmail,
+        serviceContactEmail: configBefore.serviceContactEmail,
+        serviceMode: configBefore.serviceMode,
+      })
+      .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
+  }
+
+  const configAfter = await readServiceConfig()
+  check(
+    'the service configuration is exactly as it was',
+    configAfter.serviceMode === configBefore.serviceMode &&
+      configAfter.defaultSenderEmail === configBefore.defaultSenderEmail &&
+      configAfter.serviceContactEmail === configBefore.serviceContactEmail,
   )
 
   console.log('\nCleaning up')
