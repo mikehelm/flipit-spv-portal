@@ -2,9 +2,9 @@
 
 The software is finished. Nothing below is a coding job.
 
-**Cost: about $5/month.** One small server running the app, the database and the
-scheduled jobs together. The database is free — it lives on that same server.
-(Why, and the alternatives, are in `HOSTING.md`.)
+**Cost: $0.** It runs on your Mac — the page and the database both — with
+Cloudflare putting your own domain in front of it. No server to rent.
+(Alternatives, and when you'd move off the Mac, are in `HOSTING.md`.)
 
 ---
 
@@ -21,48 +21,37 @@ Everything else waits on them, and both involve other people.
 
 # Michael — 13 steps
 
-### 1. Get it on a server
+### 1. Set it up on your Mac
 
-Rent a small VPS. Install Node 22, pnpm, PostgreSQL 16, nginx.
+**Hand `CODEX_DEPLOY_PROMPT.md` to Codex.** It installs everything, starts the
+database, gets the app running, sets up the Cloudflare tunnel, adds the
+scheduled jobs and the backups, and reboots the Mac to prove it all comes back.
 
-Set up at **`mikehelm.com/SPV`** first. The app physically refuses to send from
-any address that isn't the production one, so you can set everything up and try
-everything with no risk of reaching a real investor.
+Full manual steps, if you'd rather do it yourself: `MAC_SETUP.md`.
 
-Environment variables:
+Two things you'll be asked for along the way:
 
-```
-DATABASE_URL        your Postgres connection string
-BASE_PATH           /SPV
-APP_URL             https://mikehelm.com/SPV
-PRODUCTION_APP_URL  https://spv.flipit.com
-ENCRYPTION_KEY      openssl rand -base64 32
-AUTH_SECRET         openssl rand -base64 32   ← a different one
-OWNER_EMAILS        mike@flipthepage.com,mike@flipit.com
-OPERATOR_EMAILS     serenedavid@gmail.com
-```
+- **The GitHub token**, when it clones the repository
+- **Which domain** — it shows you ten options from the domains you own and waits
+  for you to pick
 
-**Keep `ENCRYPTION_KEY` safe.** It encrypts the Gmail password and OpenAI key.
+**Keep `ENCRYPTION_KEY` safe** when it reports back. It encrypts the Gmail
+password and OpenAI key.
 
-*Or hand `CODEX_DEPLOY_PROMPT.md` to Codex and it does steps 1 and 2 for you.*
+✅ Your domain loads the site — check it on your phone on mobile data, not the
+house wifi.
 
-✅ The site loads.
+### 2. Take the three links
 
-### 2. Create the accounts
+Codex reports **three one-time setup links** — two for you, one for David. Each
+works once and can't be recovered.
 
-```
-pnpm db:migrate
-pnpm db:seed
-```
-
-Prints **three one-time links** — two for you, one for David.
-
-✅ You have the three links. (Lost one? `pnpm setup-link`.)
+✅ You have all three. (Lost one? `pnpm setup-link`.)
 
 ### 3. Set your password
 
 Open one of your links. It signs you in, asks for a password, then signs you
-back out — deliberately. Sign back in at `/SPV/signin`.
+back out — deliberately. Sign back in at your domain, `/signin`.
 
 ✅ Signed in as owner.
 
@@ -80,24 +69,26 @@ password) and **D4** (the approval) — those two have lead times.
 
 ✅ System health stops flagging a missing contact route.
 
-### 6. File storage *(optional)*
+### 6. Check the scheduled jobs are really running
 
-Only if you want images, documents or David's video. Set
-`MEDIA_STORE=filesystem` and `MEDIA_DIR` to a folder on the server.
+Codex set these up. Confirm the first one actually fired — without it,
+**reminders never send**, which is a feature silently not working.
 
-✅ You can upload an image on the Media page. Or skip — the portal works without.
-
-### 7. Three cron jobs
-
-```
-0  *  * * *  cd /srv/spv && pnpm reminders:run  >> /var/log/spv/reminders.log 2>&1
-15 8  * * *  cd /srv/spv && pnpm check:health   >> /var/log/spv/health.log    2>&1
-30 8  * * 1  cd /srv/spv && pnpm media:check    >> /var/log/spv/media.log     2>&1
+```bash
+cat /tmp/spv-reminders.log
 ```
 
-**Without the first line, reminders never send.**
+✅ There's a line in it from within the last hour.
 
-✅ A line appears in `reminders.log` after the next hour.
+### 7. Check backups land off the Mac
+
+Codex ran `pnpm backup` and `pnpm verify:restore`. Confirm the backup folder is
+syncing somewhere else — iCloud, Dropbox, an external drive.
+
+**A backup on the same disk as the database is not a backup.** This is the one
+place running on your own machine raises the stakes.
+
+✅ You can see a backup file somewhere that isn't this Mac.
 
 ### 8. Record the compliance approval ← THE GATE
 
@@ -137,19 +128,22 @@ amounts and percentages.
 
 ✅ The totals reconcile. If they don't, stop.
 
-### 12. Move to `spv.flipit.com` ← BEFORE the first invitation
+### 12. Turn sending on ← the last thing, not the first
 
-Portal links have the domain baked in. Move after sending and every investor's
-link dies.
+Until now `APP_URL` in `.env` has been `http://localhost:3000` while
+`PRODUCTION_APP_URL` is your real domain. Because they differ, **the app refuses
+to send anything at all.** That's the safety catch, and it's been on the whole
+time.
 
-1. Point DNS at the app
-2. `APP_URL` → `https://spv.flipit.com`, `BASE_PATH` → empty
-3. Move the database, or point the new deployment at the same one
-4. Turn off the old deployment
+When the approval is recorded and pre-flight passes:
 
-Full runbook: `DEPLOYMENT.md` §4.
+1. Change `APP_URL` to match `PRODUCTION_APP_URL`
+2. Restart the app
 
 ✅ The review screen stops saying sending is refused. That's the confirmation.
+
+**Don't do this early.** It's the one line standing between a test setup and
+real securities invitations going to real people.
 
 ### 13. Hand over to David
 
@@ -286,4 +280,5 @@ for a fresh one.
 exits non-zero when something needs a person.
 
 **Everything else:** `TEST_ME.md` (plain English, what to try),
-`DEPLOYMENT.md` (for whoever's on the server), `HOSTING.md` (what it costs).
+`MAC_SETUP.md` (the manual version of step 1), `HOSTING.md` (what it costs and
+when you'd move off the Mac), `DEPLOYMENT.md` (if it ever goes on a server).

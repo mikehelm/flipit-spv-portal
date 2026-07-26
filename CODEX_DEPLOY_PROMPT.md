@@ -1,227 +1,273 @@
-# Prompt for Codex — deploy the Flipit SPV portal
+# Prompt for Codex — set it up on Michael's Mac
 
-Paste everything inside the fenced block below into Codex.
+Paste everything inside the fenced block into Codex.
 
-**Fill in the four values at the top first.** Leave the rest exactly as it is —
-in particular the "Rules that do not bend" and "Where you stop" sections, which
-are there because this application sends solicitations to real people about a
-real securities offering.
+**Nothing to fill in.** It runs on this Mac, uses the domains already in the
+Cloudflare account, and pauses once to let Michael pick one.
 
-**What this gets you:** a working, running, secured deployment with the database,
-the scheduled jobs and the backups in place, and the three one-time setup links
-in hand. It stops before anything can reach an investor.
+**Two things it cannot do**, because both need accounts it doesn't have:
 
-**What it cannot do**, because both need accounts it does not have:
-
-- David's Gmail app password — his account, his 2-Step Verification.
-- The compliance approval — a human being reading the email and saying yes.
+- David's Gmail app password — his account, his 2-Step Verification
+- The compliance approval — a person reading the email and saying yes in writing
 
 ---
 
 ```
-Deploy a finished Next.js application to a server, end to end. It is a private
-investor portal for a securities raise. It is complete and tested — you are not
-writing features, you are standing it up and making it stay up.
+Set up a finished Next.js application on this Mac and put it on the internet
+behind a Cloudflare Tunnel. It is a private investor portal for a securities
+raise. It is complete and tested — you are not writing features, you are
+installing it and making it stay up.
 
-FILL THESE IN BEFORE STARTING
-  GITHUB TOKEN:   <fine-grained token for mikehelm/flipit-spv-portal, Contents read/write>
-  SERVER:         <IP or "create one" — a small VPS, 2GB RAM is plenty>
-  SSH ACCESS:     <key path or how to log in>
-  TEST DOMAIN:    mikehelm.com/SPV
+There is no server to rent. This Mac serves the page and holds the database.
 
 RULES THAT DO NOT BEND
 
-These are not preferences. Breaking any of them is worse than not finishing.
+Breaking any of these is worse than not finishing.
 
-1. DO NOT SEND ANY EMAIL. Not a test, not to yourself, not to check something
-   works. The application refuses to send from a non-production URL and you are
-   deploying to the test URL — leave that refusal in place. It is a feature.
-2. DO NOT TOUCH the compliance gate, the mail-connection gate, or the base-URL
-   guard. Not to "unblock" anything, not temporarily. If something is blocked,
-   that is the application working. Report it, do not route around it.
-3. DO NOT SET PRODUCTION_APP_URL to the same value as APP_URL. That single
-   change is what would allow real invitations to be sent from a test
-   deployment, and every portal link issued from there would die on migration.
-4. DO NOT COMMIT .env or any credential. .gitignore already excludes .env — do
-   not weaken it. Do not echo the GitHub token into any log, file or commit.
-5. DO NOT MODIFY application code. If something does not build or does not run,
-   report it. Do not fix it by changing behaviour.
-6. DO NOT import any real recipient data. Do not create any investor account.
-7. If any step fails twice, stop and report. Do not improvise around a failure
-   in an application that handles other people's money.
+1. DO NOT SEND ANY EMAIL. Not a test, not to yourself, not to prove something
+   works. The application refuses to send while APP_URL and PRODUCTION_APP_URL
+   differ. You will set them to differ. LEAVE THEM THAT WAY. That refusal is
+   the safety catch and Michael turns it off himself when he is ready.
+2. DO NOT SET APP_URL EQUAL TO PRODUCTION_APP_URL. This is the single most
+   important line in this prompt. Making them match is what allows real
+   invitations to be sent, and doing it before the compliance approval exists
+   would send a securities solicitation to real people prematurely.
+3. DO NOT TOUCH the compliance gate, the mail-connection gate, or the base-URL
+   guard in the code. Not to "unblock" anything, not temporarily. If something
+   is blocked, that is the application working correctly. Report it.
+4. DO NOT MODIFY application code. If it does not build or run, report it. Do
+   not fix it by changing behaviour.
+5. DO NOT COMMIT anything, and do not put any credential in a file inside the
+   repository. .gitignore already excludes .env — do not weaken it.
+6. DO NOT REGISTER a domain or buy anything. Use only what is already in the
+   Cloudflare account.
+7. DO NOT import any data or create any investor account.
+8. If a step fails twice, stop and report. Do not improvise around a failure in
+   an application that handles other people's money.
 
-STEP 1 — THE SERVER
+STEP 1 — INSTALL
 
-A small VPS, Ubuntu 24.04. Hetzner, DigitalOcean or Vultr — the cheapest tier is
-enough; this serves under 50 people. If one already exists at the address above,
-use it.
+  brew install postgresql@16 node pnpm cloudflared
+  brew services start postgresql@16
+  createdb spv
 
-Then, before anything else:
-  - A non-root user with sudo. Do not run the application as root.
-  - SSH key auth only. Disable password authentication.
-  - ufw: allow 22, 80, 443. Deny everything else. Enable it.
-  - unattended-upgrades for security patches.
+Node must be 22 or later. Check with `node -v`.
 
-Install: Node.js 22 LTS, pnpm, PostgreSQL 16, nginx, certbot, git.
+STEP 2 — GET THE CODE
 
-STEP 2 — THE DATABASE
+  cd ~/Documents
+  git clone https://github.com/mikehelm/flipit-spv-portal.git spv
+  cd spv
+  pnpm install
 
-PostgreSQL on this same machine. Do not use a hosted database service — the
-whole point of this arrangement is that the database costs nothing because it
-lives on the server that is already running.
-
-  - A database named spv and a user that owns it, with a long random password.
-  - Local connections only. Do not open 5432 to the internet. Check
-    postgresql.conf and pg_hba.conf and confirm it.
-
-STEP 3 — THE APPLICATION
-
-Clone https://github.com/mikehelm/flipit-spv-portal using the token, into
-/srv/spv owned by the application user. Then immediately take the token back out
-of the repository:
+Ask Michael for the GitHub token when the clone asks for credentials. The
+repository is private. Do not write the token into any file in the repository —
+after cloning, run:
 
   git remote set-url origin "https://github.com/mikehelm/flipit-spv-portal.git"
 
 (.git/config is committed. A token left in it would be published.)
 
-  pnpm install
-  pnpm build
+STEP 3 — CONFIGURE
 
-STEP 4 — CONFIGURATION
+Copy .env.example to .env, then fill it in. Read the comments in that file —
+they explain what each variable does and what breaks without it.
 
-Create /srv/spv/.env, owned by the application user, chmod 600:
-
-  DATABASE_URL        postgresql://<user>:<password>@127.0.0.1:5432/spv
-  BASE_PATH           /SPV
-  APP_URL             https://mikehelm.com/SPV
-  PRODUCTION_APP_URL  https://spv.flipit.com
+  DATABASE_URL        postgresql://localhost:5432/spv
+  BASE_PATH           (leave empty)
+  APP_URL             http://localhost:3000
+  PRODUCTION_APP_URL  (leave empty for now — set in step 7)
   ENCRYPTION_KEY      openssl rand -base64 32
-  AUTH_SECRET         openssl rand -base64 32   (generate separately — a different value)
+  AUTH_SECRET         openssl rand -base64 32   ← generate separately, a different value
   OWNER_EMAILS        mike@flipthepage.com,mike@flipit.com
   OPERATOR_EMAILS     serenedavid@gmail.com
   MEDIA_STORE         filesystem
-  MEDIA_DIR           /srv/spv-media
-  HEALTH_TOKEN        openssl rand -base64 32
+  MEDIA_DIR           .media
 
-.env.example in the repository documents every variable. Read it — the comments
-explain why several of these exist and what breaks without them.
+APP_URL stays as localhost. See rule 2.
 
-Create /srv/spv-media, owned by the application user.
-
-APP_URL and PRODUCTION_APP_URL are deliberately different. Do not make them
-match. See rule 3.
-
-STEP 5 — DATABASE SETUP
+STEP 4 — START IT
 
   pnpm db:migrate
   pnpm db:seed
+  pnpm build
+  pnpm start
 
 The seed prints THREE ONE-TIME SETUP LINKS — two for the owner, one for the
 operator. Each works once and cannot be recovered.
 
-Capture all three verbatim and put them in your final report. Do not open them.
-Do not write them to a file on the server. If you lose them, `pnpm setup-link`
-mints new ones.
+Capture all three verbatim for your final report. DO NOT OPEN THEM. Do not save
+them to a file. If they are lost, `pnpm setup-link` mints new ones.
 
-STEP 6 — KEEP IT RUNNING
+Confirm http://localhost:3000 loads in a browser.
 
-A systemd service running `pnpm start` as the application user, with
-Restart=always, EnvironmentFile=/srv/spv/.env, and the working directory
-/srv/spv. Enable it so it survives a reboot.
+STEP 5 — CLOUDFLARE: FIND OUT WHAT MICHAEL OWNS
 
-nginx in front, proxying to the application, with certbot for HTTPS and
-automatic renewal. The application is served under the path /SPV — check that
-BASE_PATH and the nginx location block agree, because a mismatch here produces
-a site where every asset 404s.
+Log in to Michael's Cloudflare account — ask him to sign in if a browser session
+is needed. List every zone (domain) on the account.
 
-STEP 7 — THE SCHEDULED JOBS
+Also check whether he owns domains that are NOT yet on Cloudflare. If a likely
+one is missing, say so — adding a domain to Cloudflare is free and takes a
+nameserver change at the registrar.
 
-Three cron entries as the application user. Without the first one, reminders
-never send, which is a specified feature silently not working.
+STEP 6 — PROPOSE TEN, AND STOP
 
-  0 * * * * cd /srv/spv && /usr/bin/pnpm reminders:run >> /var/log/spv/reminders.log 2>&1
-  15 8 * * * cd /srv/spv && /usr/bin/pnpm check:health >> /var/log/spv/health.log 2>&1
-  30 8 * * 1 cd /srv/spv && /usr/bin/pnpm media:check >> /var/log/spv/media.log 2>&1
+Give Michael TEN candidate hostnames drawn from the domains he actually owns,
+ranked best first, each with one line on why. Then STOP AND WAIT for him to
+choose. Do not pick one yourself.
 
-Create /var/log/spv, owned by the application user, and set up logrotate.
+What makes a good one here, in order of importance:
 
-Adjust the pnpm path to whatever `which pnpm` reports for that user — cron has
-almost no PATH and this is the commonest reason these silently never run.
+  a. It matches what the investor expects to see. They are being invited into a
+     Flipit SPV, so a flipit.com subdomain reads as genuine and anything else
+     reads as odd. This outranks everything below.
+  b. It is short and typeable. This hostname is printed on the anti-phishing
+     page and investors are told to TYPE it rather than click, so length and
+     ambiguity are real costs.
+  c. It is unambiguous read aloud over a phone. No hyphens, no numbers, nothing
+     that could be spelt two ways.
+  d. It sounds like a private records portal, not a marketing site or a
+     sign-up page.
+  e. It is not already in use for anything else on that domain.
 
-STEP 8 — BACKUPS
+Note in your list that "spv.flipit.com" is the value written into the project's
+existing documentation, so choosing it means no other file needs changing.
+Michael is free to choose differently — say what else would need updating if he
+does.
 
-  pnpm backup            writes a backup
-  pnpm verify:restore    proves one actually restores
+STEP 7 — TUNNEL, once Michael has chosen
 
-Run both. `verify:restore` is the one that matters: a backup nobody has restored
-is a hope, not a backup.
+  cloudflared tunnel login
+  cloudflared tunnel create spv
+  cloudflared tunnel route dns spv <the hostname he chose>
 
-Then add a nightly cron entry for `pnpm backup`, and copy the backups somewhere
-off this machine — a second location, however modest. A backup on the same disk
-as the database is not a backup.
+Create ~/.cloudflared/config.yml:
 
-STEP 9 — CHECK IT
+  tunnel: spv
+  credentials-file: /Users/<his-user>/.cloudflared/<tunnel-id>.json
+  ingress:
+    - hostname: <the hostname he chose>
+      service: http://localhost:3000
+    - service: http_status:404
 
-Run these and report the output of each:
+Install it as a background service so it survives a reboot:
 
-  pnpm verify:deployment    checks the deployment is correctly configured
-  pnpm check:health         exits non-zero when something needs a person
+  sudo cloudflared service install
 
-Then, in a browser:
+Then set PRODUCTION_APP_URL in .env to https://<the hostname he chose>.
 
-  a. https://mikehelm.com/SPV/verify loads with no sign-in and is indexable.
-     This is the anti-phishing page and it is the ONLY page that should be
-     indexable. Everything else must carry noindex — verify:deployment checks
-     this, but look at one other page's headers yourself and confirm.
-  b. https://mikehelm.com/SPV/signin loads.
-  c. A page that does not exist returns a clean 404, not a stack trace.
-  d. robots.txt and sitemap.xml contain no portal or admin paths.
+LEAVE APP_URL as http://localhost:3000. See rule 2. The application will now
+correctly refuse to send anything, which is the state Michael wants until the
+compliance approval exists.
+
+Confirm https://<the hostname> loads from outside — check it on a phone on
+mobile data, not on the house wifi.
+
+STEP 8 — KEEP IT RUNNING
+
+Stop the Mac sleeping: System Settings → Displays → Advanced → "Prevent
+automatic sleeping when the display is off". If it is a laptop, set Energy Saver
+for plugged-in operation too. Report what you changed.
+
+Create ~/Library/LaunchAgents/com.flipit.spv.plist so the app starts on login
+and restarts if it crashes — Label com.flipit.spv, WorkingDirectory the repo
+path, ProgramArguments the full path to pnpm plus "start", RunAtLoad true,
+KeepAlive true, logs to /tmp/spv.log and /tmp/spv-error.log. Then:
+
+  launchctl load ~/Library/LaunchAgents/com.flipit.spv.plist
+
+Reboot the Mac and confirm both the app and the tunnel come back on their own.
+Do not skip the reboot — an arrangement that has never survived one is an
+arrangement nobody has tested.
+
+STEP 9 — SCHEDULED JOBS
+
+crontab -e, with the full path from `which pnpm` (cron has almost no PATH, and
+this is the commonest reason these silently never run):
+
+  0  *  * * *  cd ~/Documents/spv && <pnpm> reminders:run  >> /tmp/spv-reminders.log 2>&1
+  15 8  * * *  cd ~/Documents/spv && <pnpm> check:health   >> /tmp/spv-health.log    2>&1
+  30 8  * * 1  cd ~/Documents/spv && <pnpm> media:check    >> /tmp/spv-media.log     2>&1
+
+Without the first line, reminders never send.
+
+macOS may need Full Disk Access for cron: System Settings → Privacy & Security →
+Full Disk Access → add /usr/sbin/cron. Do it, and say you did.
+
+STEP 10 — BACKUPS
+
+  pnpm backup
+  pnpm verify:restore
+
+Run both and report the output. verify:restore is the one that matters — a
+backup nobody has restored is a hope, not a backup.
+
+Add a nightly `pnpm backup` to cron. Then set the backup folder to sync OFF this
+Mac — iCloud Drive, Dropbox, or an external drive. Ask Michael which he wants. A
+backup on the same disk as the database is not a backup.
+
+STEP 11 — CHECK IT
+
+Run and report the output of each:
+
+  pnpm verify:deployment
+  pnpm check:health
+
+Then in a browser, against the public hostname:
+
+  a. /verify loads with no sign-in. This is the anti-phishing page and it is the
+     ONLY page that should be indexable. Confirm it is.
+  b. Any other page carries noindex. Check the headers on one yourself.
+  c. /signin loads.
+  d. A URL that does not exist returns a clean 404, not a stack trace.
+  e. robots.txt and sitemap.xml contain no portal or admin paths.
 
 WHERE YOU STOP
 
-Stop after step 9. Do not:
-  - open any setup link or create any password
+Stop after step 11. Do not:
+  - open any setup link or choose any password
   - complete operator onboarding
   - connect any email account
   - import any data
   - send anything
-  - migrate to spv.flipit.com
+  - change APP_URL
 
-Those steps belong to Michael and David and are documented in GO_LIVE.md in the
-repository. Two of them depend on things you cannot obtain: a Gmail app password
-from David's own account, and a compliance approval, which is a person reading
-the investor email and confirming in writing that it may be sent to named
-individuals in their particular countries. Nothing sends until that exists, and
-that is by design.
+Those belong to Michael and David and are set out in GO_LIVE.md in the
+repository. Two of them depend on things you cannot get: a Gmail app password
+from David's own account, and a compliance approval — a person reading the
+investor email and confirming in writing that it may be sent to named
+individuals in their particular countries. Nothing sends until that exists, by
+design.
 
 REPORT
 
-  1. The server: provider, address, spec, monthly cost.
-  2. THE THREE SETUP LINKS, verbatim. Michael needs these and they work once.
-  3. Where ENCRYPTION_KEY and AUTH_SECRET can be found. Say plainly that
-     ENCRYPTION_KEY must be kept safe — it encrypts the stored Gmail app
-     password and OpenAI key, and losing it means re-entering both.
+  1. THE THREE SETUP LINKS, verbatim. Michael needs them and they work once.
+  2. The hostname now serving the portal, and confirmation it loads from
+     outside the house.
+  3. Where ENCRYPTION_KEY and AUTH_SECRET are. State plainly that ENCRYPTION_KEY
+     must be kept safe — it encrypts the stored Gmail app password and OpenAI
+     key, and losing it means re-entering both.
   4. Output of verify:deployment and check:health.
-  5. Confirmation that the application refuses to send, and the exact sentence
-     it gives. This is the correct state on a test deployment. Quote it.
-  6. Confirmation that backup ran and verify:restore passed.
-  7. Anything you could not do, or had to decide. Do not smooth over a failure.
+  5. The exact sentence the application gives when asked to send. It should
+     refuse because APP_URL is not PRODUCTION_APP_URL. Quote it. This is the
+     correct state.
+  6. Confirmation that backup ran, verify:restore passed, and where backups go.
+  7. Confirmation that the app and tunnel both survived a reboot.
+  8. What you changed in System Settings.
+  9. Anything you could not do, or had to decide. Do not smooth over a failure.
 ```
 
 ---
 
 ## After Codex reports back
 
-You will have a running deployment and three one-time links. From there:
+You'll have it running on your own domain, with three one-time links in hand.
+Carry on at `GO_LIVE.md` **step 3**.
 
-- Open one link, choose a password — `GO_LIVE.md` step 3.
-- Send David his — step 4.
-- Fill in Settings — step 5.
+The two long-lead items should already be moving: David's Gmail app password
+(two minutes) and the compliance approval (a conversation with other people).
+Start the second today — everything else waits on it.
 
-The two long-lead items should already be in flight by then: David's Gmail app
-password (two minutes) and the compliance approval (a conversation with other
-people). Start the second one today; everything else waits on it.
-
-The move to `spv.flipit.com` — `GO_LIVE.md` step 12 — happens **before the first
-real invitation**, never after. Portal links embed the domain they were issued
-from, and a link issued from the test deployment dies the moment you move.
+**The last thing you do, not the first:** when the approval is recorded and
+pre-flight passes, change `APP_URL` in `.env` to match `PRODUCTION_APP_URL` and
+restart. That one line is what turns sending on.
