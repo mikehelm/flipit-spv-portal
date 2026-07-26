@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| The third banner rule, rendered | claude-opus-5, 26 Jul | 2026-07-26 03:25 | `scripts/verify-viewport.ts` |
 
 ## Done, so nobody starts it again
 
