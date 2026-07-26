@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Streaming an image and a document, not only the video | 26 Jul session D | 2026-07-26 00:52 | `src/app/media/[storageKey]/route.ts`, `src/app/portal/document/[documentId]/route.ts`, `src/app/(admin)/investors/[offerId]/document/[documentId]/route.ts` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -82,8 +82,10 @@ listed and every object that no record points at is reported. `MediaStore.list`
 is on the seam, both stores implement it, and the S3 side walks continuation
 tokens. Reconciliation is done in both directions.
 
+**Every media route streams**, as of 26 July: the video, the library image and
+both document downloads. No route in `src/app` holds a stored object in memory,
+and there is a boundary test that fails if one starts to.
+
 The largest left are running these checks on a schedule rather than from the
-runbook, streaming an image or a document rather than buffering it (the video
-streams; those two still do not, deliberately), and the open question —
-sharpened by corrections — of whether issuing a document should notify the
-investor at all. None of them is a package.
+runbook, and the open question — sharpened by corrections — of whether issuing a
+document should notify the investor at all. Neither is a package.

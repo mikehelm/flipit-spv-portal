@@ -48,14 +48,16 @@ export async function GET(
   const store = mediaStore()
   if (!store) return notFound
 
-  const object = await store.get(document.storageKey)
-  if (!object) return notFound
+  // Opened rather than read, exactly as the investor's route does it. The
+  // operator's copy of a document is the same twenty megabytes.
+  const opened = await store.openStream(document.storageKey)
+  if (!opened) return notFound
 
-  return new Response(new Uint8Array(object.bytes), {
+  return new Response(opened.stream, {
     status: 200,
     headers: {
       'Content-Type': document.contentType,
-      'Content-Length': String(object.bytes.length),
+      'Content-Length': String(opened.length),
       'Content-Disposition': 'inline',
       'Cache-Control': 'private, no-store',
       'X-Content-Type-Options': 'nosniff',

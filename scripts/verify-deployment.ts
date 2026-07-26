@@ -39,8 +39,10 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { eq, like } from 'drizzle-orm'
 import { db } from '@/db'
 import {
+  documentPackages,
   investorAccounts,
   investorSessions,
+  mediaAssets,
   offers,
   operatorVideos,
   portalTokens,
@@ -49,7 +51,7 @@ import {
   users,
 } from '@/db/schema'
 import { issueToken } from '@/lib/crypto'
-import { mp4WithLocation } from '@/lib/media/fixtures'
+import { jpegWithMetadata, mp4WithLocation, pdfBytes } from '@/lib/media/fixtures'
 import { ingest } from '@/lib/media/ingest'
 import { mediaStore } from '@/lib/media/store'
 
@@ -440,6 +442,114 @@ async function main(): Promise<void> {
 
         await db.delete(operatorVideos).where(eq(operatorVideos.id, videoRow!.id))
         await store.remove(ingested.storageKey)
+      }
+
+      /**
+       * §5, §13.2 — the other two things that are served from a store.
+       *
+       * The video was streamed first because it is the biggest. The image and
+       * the document followed, and the reason to check them over real HTTP is
+       * the same: a streamed body and a buffered one carry identical bytes, so
+       * the only way to know a route did not quietly go back to reading a
+       * twenty-megabyte agreement into memory is to see the length it declares
+       * and the bytes that arrive agree with what is stored.
+       */
+      console.log('\n§5, §13.2 — an image and a document, over real HTTP')
+
+      const imageBytes = jpegWithMetadata()
+      const image = await ingest('image', imageBytes, 'image/jpeg')
+
+      if (!image.ok) {
+        check('an image can be stored for this check', false, image.message)
+      } else {
+        const [assetRow] = await db
+          .insert(mediaAssets)
+          .values({
+            name: `${PREFIX} image`,
+            storageKey: image.storageKey,
+            contentType: image.format,
+            sizeBytes: image.sizeBytes,
+          })
+          .returning()
+
+        const served = await fetch(`${ORIGIN}/media/${image.storageKey}`)
+        check('a library image is served without a session, as an email needs', served.status === 200, String(served.status))
+        check(
+          'and declares the length the store actually has',
+          served.headers.get('content-length') === String(image.sizeBytes),
+          String(served.headers.get('content-length')),
+        )
+        const servedBody = new Uint8Array(await served.arrayBuffer())
+        check('and every byte of it arrives', servedBody.length === image.sizeBytes, String(servedBody.length))
+        check(
+          'and they are the stored bytes, in order',
+          servedBody[0] === 0xff && servedBody[1] === 0xd8,
+        )
+        check(
+          'a key that names nothing is a 404, not an empty 200',
+          (await fetch(`${ORIGIN}/media/img_NOTHINGHEREATALLNOTHINGX`)).status === 404,
+        )
+
+        await db.delete(mediaAssets).where(eq(mediaAssets.id, assetRow!.id))
+        await store.remove(image.storageKey)
+      }
+
+      const document = await ingest('document', pdfBytes(), 'application/pdf')
+
+      if (!document.ok) {
+        check('a document can be stored for this check', false, document.message)
+      } else {
+        const [investor] = await db
+          .select()
+          .from(investorAccounts)
+          .where(eq(investorAccounts.email, `${PREFIX}@example.test`))
+          .limit(1)
+
+        const [offer] = await db
+          .select()
+          .from(offers)
+          .where(eq(offers.accountId, investor!.id))
+          .limit(1)
+
+        const [documentRow] = await db
+          .insert(documentPackages)
+          .values({
+            offerId: offer!.id,
+            title: `${PREFIX} agreement`,
+            storageKey: document.storageKey,
+            contentType: document.format,
+            sizeBytes: document.sizeBytes,
+            issuedAt: new Date(),
+          })
+          .returning()
+
+        const url = `${ORIGIN}/portal/document/${documentRow!.id}`
+
+        const download = await fetch(url, { headers: { cookie } })
+        check('an issued document downloads for the investor it belongs to', download.status === 200, String(download.status))
+        check(
+          'as an attachment, with a filename built from the title',
+          download.headers.get('content-disposition')?.startsWith('attachment;') === true,
+          String(download.headers.get('content-disposition')),
+        )
+        check(
+          'declaring the length the store has, not the one the row claims',
+          download.headers.get('content-length') === String(document.sizeBytes),
+          String(download.headers.get('content-length')),
+        )
+        const downloaded = new Uint8Array(await download.arrayBuffer())
+        check('and every byte arrives', downloaded.length === document.sizeBytes, String(downloaded.length))
+        check(
+          'and it is a PDF, which is what was stored',
+          String.fromCharCode(...downloaded.slice(0, 5)) === '%PDF-',
+        )
+        check(
+          'the same download without a session is the same 404 as anything else',
+          (await fetch(url)).status === 404,
+        )
+
+        await db.delete(documentPackages).where(eq(documentPackages.id, documentRow!.id))
+        await store.remove(document.storageKey)
       }
     }
 

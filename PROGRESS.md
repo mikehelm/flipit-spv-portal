@@ -2318,3 +2318,111 @@ key and one stray text file: both reported, with sizes, exit code 1.
 - *Nothing runs this on a schedule.* Still true, and still the most obvious next
   thing: `pnpm reminders:run` already needs a scheduler and this belongs beside
   it.
+
+---
+
+## Streaming an image and a document — the two routes the video left behind
+
+*26 July 2026. Claimed at 00:52, built after the claim was pushed.*
+
+Streaming the video was written up with the same sentence twice, under
+Decisions and again under Uncertain: *images and documents still buffer, at five
+and twenty megabytes against the video's sixty.* The reasoning was that the
+ceiling was a third the size for the same work. It was the right call to defer
+and the wrong one to keep, for a reason the note itself contained: the twenty is
+a **document package**, which is a signed subscription agreement, and the five is
+the **image route** — the one an email client hits, which means forty recipients
+opening an invitation is forty of those at once rather than one.
+
+**Built.**
+
+- **All three remaining routes read with `openStream`** — the library image, the
+  investor's document download, and the operator's copy of the same document.
+  No route in `src/app` now holds a stored object in memory.
+- **Every `Content-Length` on those routes comes from the store**, as the video's
+  does, rather than from the `size_bytes` column beside the key.
+- **Two boundary tests.** One walks every route that touches a media store and
+  fails if any of them calls `get` or `getRange`; the other fails if a
+  `Content-Length` on one of them is built from anything but the store's own
+  count. Both exist because a buffered response and a streamed one carry
+  identical bytes — no behavioural test can tell them apart, so the shape has to
+  be pinned.
+- **Eleven new checks in `pnpm verify:deployment`**, over real HTTP against the
+  built application: an image served with no session at all (which is what an
+  email client is), the length it declares matching the length stored, every
+  byte arriving, an unknown key answered 404 rather than an empty 200, an issued
+  document downloading for the investor it belongs to as an attachment with the
+  right length and a real PDF header, and the same download without a session
+  answered with the same 404 as anything else.
+
+**Decisions.**
+
+- ***The routes were not folded into `serveMedia`.*** It exists to answer range
+  requests with `Content-Disposition: inline` and `Cache-Control: private,
+  no-store`, and neither of the others wants that: an image is `public,
+  max-age=31536000, immutable` because its key is unique per upload, and a
+  document is an attachment with a filename built from its title. Sharing the
+  function would mean parameterising three header sets through one signature to
+  save four lines each. The shared thing is `openStream`, which is the part that
+  was actually duplicated.
+- ***No range support on either.*** A document is served as an attachment and an
+  image is displayed rather than seeked, so nothing asks for a range; adding one
+  would be three more code paths and three more places for a 206 to be subtly
+  wrong. `Accept-Ranges` is not advertised, so a client is told the truth.
+- ***`get` and `getRange` stay on the seam.*** The verification scripts use them
+  to compare a stored file against what was uploaded, and draining a stream to
+  do that would be worse. The comment on the interface now says plainly that no
+  route should, and a test enforces it.
+- ***The audit entry now means "the download began".*** The investor's route
+  audits `document.downloaded` after the object is opened and before the body is
+  sent, where it used to audit after the whole file had been read into memory.
+  Neither ever meant the investor received it — a socket can break at any point
+  in both — so nothing about the trail's meaning is weaker, but it is a
+  different moment and it is recorded here rather than left to be discovered.
+- ***Absence is still decided before the audit and before the status line.***
+  `openStream` returns null for an object that is not there, which is the same
+  404 as before. A stream that failed later would already have sent a 200.
+
+**Deviations.** None.
+
+**Checklist.**
+
+1. **No monetary value is a JavaScript number.** Nothing here touches money.
+2. **No send path bypasses anything.** Nothing here sends; `verify:deployment`
+   re-run, 67 checks including the base-URL guard.
+3. **A jurisdiction block still stops one recipient.** Untouched.
+4. **The operator still cannot record, amend or void an approval.** Untouched.
+5. **No investor-facing response reveals another investor.** Every access check
+   on all three routes is unchanged and still runs before a byte is read: the
+   investor's document route still answers a document that exists but is not
+   theirs with the identical 404 it gives a document that does not exist, and
+   `verify:deployment` now checks the anonymous case over real HTTP as well.
+6. **Claim and sign-in tokens are single-use, hashed and expiring.** Untouched.
+7. **Suspension revokes sessions and refuses new links.** Untouched — a
+   suspended investor is refused before the store is asked anything.
+8. **No log line carries a token, a body or a key.** The audit entry is
+   unchanged in content: document id, offer id and title, never a byte of the
+   file.
+9. **The verification page is still the only indexable route.** Every header on
+   all three responses is unchanged, `X-Robots-Tag` included.
+10. A published Q&A entry carries nothing identifying. Untouched.
+11. The AI path cannot change a calculated figure. Untouched.
+12. The app still refuses to send when its base URL is not the production value.
+    Confirmed by `verify:deployment`.
+
+**Verified.** `pnpm typecheck`, `pnpm lint`, `pnpm test` — 1850 tests in 93
+files. `pnpm verify:deployment` — 67 checks, up from 56, eleven of them new and
+all against the built application over real HTTP. `pnpm verify:media` — 39.
+`pnpm verify:object-store` — 36. `pnpm verify:documents` — 48.
+`pnpm acceptance` regenerates `ACCEPTANCE.md` unchanged at 48 criteria.
+
+**Uncertain.**
+
+- *A PDF viewer that wants ranges will not get them.* Stated as a decision
+  above; the failure mode is a viewer downloading the whole file rather than
+  seeking, which is what it did before.
+- *The `document.downloaded` audit fires at a slightly earlier moment.* Argued
+  above. If somebody ever wants "was it actually delivered", neither the old
+  shape nor the new one answers it, and nothing at this layer can.
+- *Nothing has measured the memory here either.* Same as the video: the
+  mechanism is proved, the saving is not quantified.

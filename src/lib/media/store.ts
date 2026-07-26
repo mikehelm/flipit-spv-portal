@@ -94,11 +94,14 @@ export interface MediaStore {
    * The same bytes as `get`/`getRange`, as a stream that is never all in
    * memory at once.
    *
-   * This is what the routes use. `get` stays because several callers genuinely
-   * want the bytes — the ingest verification reads a stored file to compare it,
-   * and a caller that wants a `Uint8Array` should not have to drain a stream to
-   * get one. `openStream` is for the one case where holding sixty megabytes to
-   * hand them straight to a socket is the wrong shape.
+   * **This is what every route uses — the video, the image and both document
+   * downloads.** `get` stays because the verification scripts genuinely want
+   * the bytes, comparing a stored file against what was uploaded, and a caller
+   * that wants a `Uint8Array` should not have to drain a stream to get one.
+   * What no route should do is take that shortcut: the two are the same words
+   * to type, they pass identical behavioural tests because the bytes are
+   * identical, and one of them puts a twenty-megabyte agreement in this
+   * process's memory once per download. There is a boundary test.
    *
    * `range` is inclusive on both ends, as `getRange` is. Null means the object
    * is not there — decided before a stream exists, because a stream that failed

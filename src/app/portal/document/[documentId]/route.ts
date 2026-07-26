@@ -61,8 +61,13 @@ export async function GET(
   const store = mediaStore()
   if (!store) return notFound
 
-  const object = await store.get(document.storageKey)
-  if (!object) return notFound
+  // Opened, not read. A twenty-megabyte execution copy of an agreement was
+  // otherwise held whole in this process for as long as the investor's
+  // connection took to pull it down. Absence is still decided here, before the
+  // audit entry and before a status line — a stream that failed later would
+  // already have sent a 200 and there would be no way left to say 404.
+  const opened = await store.openStream(document.storageKey)
+  if (!opened) return notFound
 
   await audit({
     actor: { kind: 'investor', id: account.id, label: 'investor' },
@@ -72,11 +77,14 @@ export async function GET(
     metadata: { offerId: document.offerId, title: document.title },
   })
 
-  return new Response(new Uint8Array(object.bytes), {
+  return new Response(opened.stream, {
     status: 200,
     headers: {
       'Content-Type': document.contentType,
-      'Content-Length': String(object.bytes.length),
+      // The store's own count, never the row's. They differ only when storage
+      // has drifted from the record — which `pnpm media:check` exists to find —
+      // and on that day a length from the row promises bytes that never arrive.
+      'Content-Length': String(opened.length),
       'Content-Disposition': `attachment; filename="${safeFilename(document.title)}"`,
       'Cache-Control': 'private, no-store',
       'X-Content-Type-Options': 'nosniff',

@@ -362,4 +362,50 @@ describe('the gates this package must not weaken', () => {
       /IMAGE_FORMATS\s*=\s*\[[^\]]*svg/i,
     )
   })
+
+  /**
+   * Not one route holds a stored file in memory — the video, the image, the
+   * investor's document and the operator's copy of it alike.
+   *
+   * `get` and `getRange` still exist on the seam, and the verification scripts
+   * use them to compare bytes. What must not happen is a *route* reaching for
+   * one: it is the same two words to type, it passes every behavioural test
+   * because the bytes are identical, and it puts a twenty-megabyte agreement
+   * back into this process's memory once per download.
+   */
+  it('no route reads a stored object into memory', () => {
+    const routes = walk('src/app').filter((file) => /mediaStore\(\)|MediaStore/.test(code(file)))
+
+    // The four that serve stored bytes, and the upload route that writes them.
+    expect(routes.length).toBeGreaterThanOrEqual(4)
+
+    for (const file of routes) {
+      const source = code(file)
+      expect(source, `${file} buffers a stored object`).not.toMatch(/store\.get\(/)
+      expect(source, `${file} buffers a range`).not.toMatch(/store\.getRange\(/)
+    }
+
+    const servers = routes.filter((file) => /openStream\(|serveMedia\(/.test(code(file)))
+    expect(servers.sort()).toEqual([
+      'src/app/(admin)/admin/video/[videoId]/preview/route.ts',
+      'src/app/(admin)/investors/[offerId]/document/[documentId]/route.ts',
+      'src/app/media/[storageKey]/route.ts',
+      'src/app/portal/document/[documentId]/route.ts',
+      'src/app/portal/video/[videoId]/route.ts',
+    ])
+  })
+
+  /**
+   * And every one of them declares the length the store gave it, not the one
+   * the row claims. The two differ exactly when `pnpm media:check` has
+   * something to report, and on that day a header from the row promises bytes
+   * that never arrive.
+   */
+  it('no route takes a Content-Length from a database column', () => {
+    for (const file of walk('src/app').filter((f) => /openStream\(/.test(code(f)))) {
+      const source = code(file)
+      expect(source, file).toContain("'Content-Length': String(opened.length)")
+      expect(source, file).not.toMatch(/'Content-Length': String\((?!opened\.length)/)
+    }
+  })
 })

@@ -61,14 +61,17 @@ export async function GET(
   const store = mediaStore()
   if (!store) return notFound
 
-  const object = await store.get(storageKey)
-  if (!object) return notFound
+  // Opened rather than read. An image is capped at five megabytes, which is
+  // small — but this route is the one an email client hits, and an email that
+  // goes to forty recipients is forty of those at once.
+  const opened = await store.openStream(storageKey)
+  if (!opened) return notFound
 
-  return new Response(new Uint8Array(object.bytes), {
+  return new Response(opened.stream, {
     status: 200,
     headers: {
       'Content-Type': asset.contentType,
-      'Content-Length': String(object.bytes.length),
+      'Content-Length': String(opened.length),
       // The key is unique per upload and its bytes never change, so this can
       // be cached hard. Removing an asset removes the row, and the URL 404s.
       'Cache-Control': 'public, max-age=31536000, immutable',
