@@ -61,11 +61,24 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { and, eq, like } from 'drizzle-orm'
 import { chromium, type Browser, type Page } from 'playwright'
 import { db } from '@/db'
-import { auditEvents, operatorVideos, serviceConfig, users } from '@/db/schema'
+import {
+  auditEvents,
+  investorAccounts,
+  investorSessions,
+  offers,
+  operatorVideos,
+  portalTokens,
+  recipients,
+  rounds,
+  serviceConfig,
+  users,
+} from '@/db/schema'
+import { issueToken } from '@/lib/crypto'
 import { readOnboardingSnapshot } from '@/lib/auth/onboarding-store'
 import { SERVICE_CONFIG_ID } from '@/lib/auth/service-config'
 import { isStepComplete, type OnboardingStepId } from '@/lib/auth/onboarding'
 import { hashPassword } from '@/lib/auth/password'
+import { MAX_VIDEO_BYTES } from '@/lib/media/formats'
 
 const PORT = 3240
 const ORIGIN = `http://127.0.0.1:${PORT}`
@@ -79,6 +92,7 @@ const ORIGIN = `http://127.0.0.1:${PORT}`
 const OPERATOR_EMAIL = (process.env.OPERATOR_EMAILS ?? '').split(',')[0]?.trim() ?? ''
 const OWNER_EMAIL = (process.env.OWNER_EMAILS ?? '').split(',')[0]?.trim() ?? ''
 const PASSWORD = 'wp15-recorder-verify-not-a-real-password'
+const PREFIX = 'wp15-recorder'
 
 /** Long enough for the MediaRecorder to emit more than a header. */
 const RECORD_MS = 2500
@@ -214,6 +228,18 @@ async function cleanUp(): Promise<void> {
       .where(eq(users.id, operator.id))
   }
 
+  const account = await db.query.investorAccounts.findFirst({
+    where: eq(investorAccounts.email, `${PREFIX}@example.test`),
+  })
+  if (account) {
+    await db.delete(investorSessions).where(eq(investorSessions.accountId, account.id))
+    await db.delete(portalTokens).where(eq(portalTokens.accountId, account.id))
+    await db.delete(offers).where(eq(offers.accountId, account.id))
+    await db.delete(investorAccounts).where(eq(investorAccounts.id, account.id))
+  }
+  await db.delete(recipients).where(like(recipients.email, `${PREFIX}%`))
+  await db.delete(rounds).where(like(rounds.name, `${PREFIX}%`))
+
   if (sendingAccountBefore) {
     await db
       .update(serviceConfig)
@@ -345,6 +371,60 @@ async function completeOnboarding(page: Page): Promise<void> {
   check('and only then is there anything to finish', completed)
 }
 
+/**
+ * An investor with a live portal session waiting to be claimed.
+ *
+ * §13.3's strongest claim is not about recording at all — it is that an
+ * unpublished video is *unreachable*, and that the refusal is the same 404 an
+ * invented id gets. That claim cannot be checked from an administrator's
+ * browser, so this run needs a second person in it.
+ */
+async function seedInvestor(): Promise<string> {
+  const [round] = await db
+    .insert(rounds)
+    .values({
+      name: `${PREFIX} round`,
+      aggregateTargetUsd: '30000.00',
+      flipitShare: '0.300000',
+    })
+    .returning()
+
+  const [account] = await db
+    .insert(investorAccounts)
+    .values({
+      name: 'Alexandra Fenwick-Harrington',
+      email: `${PREFIX}@example.test`,
+      status: 'ACTIVE',
+    })
+    .returning()
+
+  await db.insert(recipients).values({
+    roundId: round!.id,
+    name: 'Alexandra Fenwick-Harrington',
+    email: `${PREFIX}@example.test`,
+    jurisdiction: 'GB',
+  })
+
+  await db.insert(offers).values({
+    roundId: round!.id,
+    accountId: account!.id,
+    proposedAmountUsd: '12500.00',
+    spvPercentage: '41.666667',
+    indirectPercentage: '12.500000',
+    responseDeadline: '2026-12-31',
+  })
+
+  const { token, hash } = issueToken()
+  await db.insert(portalTokens).values({
+    tokenHash: hash,
+    accountId: account!.id,
+    purpose: 'CLAIM',
+    expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+  })
+
+  return token
+}
+
 async function startServer(): Promise<ChildProcess> {
   const child = spawn('node_modules/.bin/next', ['start', '--port', String(PORT)], {
     cwd: process.cwd(),
@@ -451,6 +531,7 @@ async function main(): Promise<void> {
   mediaDir = mkdtempSync(join(tmpdir(), 'spv-recorder-'))
   await cleanUp()
   await prepareOperator()
+  const claimToken = await seedInvestor()
 
   const server = await startServer()
   let browser: Browser | undefined
@@ -707,6 +788,208 @@ async function main(): Promise<void> {
       'a refused upload created a row',
     )
     checkNothingWasRefused('the refusal', before, /status of 400/)
+
+    // -----------------------------------------------------------------------
+    console.log('\nThe size limit, refused twice')
+
+    const beforeSize = complaints.length
+
+    // In the page, not from here: a 65 MB buffer sent over the wire to the
+    // browser would cost a minute and prove nothing extra. `DataTransfer` is
+    // what a real drop or a real file picker produces.
+    const clientRefusal = await page.evaluate(async (limit) => {
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement | null
+      if (!input) return 'no file input'
+      const oversized = new File([new Uint8Array(limit + 1024 * 1024)], 'too-big.mp4', {
+        type: 'video/mp4',
+      })
+      const transfer = new DataTransfer()
+      transfer.items.add(oversized)
+      input.files = transfer.files
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      const alerts = Array.from(document.querySelectorAll('[role="alert"]'))
+        .map((el) => el.textContent ?? '')
+        .filter((text) => text.trim() !== '')
+      return alerts[0] ?? 'nothing was said'
+    }, MAX_VIDEO_BYTES)
+
+    check(
+      'the recorder refuses an oversized file before it posts it',
+      /limit is 64 MB/.test(clientRefusal),
+      clientRefusal.slice(0, 160),
+    )
+    check(
+      'and says how big the file actually is, not only that it is too big',
+      /\b6[5-9](\.\d)? MB\b/.test(clientRefusal),
+      clientRefusal.slice(0, 160),
+    )
+
+    // The client guard is a courtesy. The one that matters is the server's, and
+    // it refuses on the declared length before a byte is read into memory.
+    const declared = await page.evaluate(
+      async ([origin, limit]) => {
+        const body = new FormData()
+        body.append(
+          'file',
+          new Blob([new Uint8Array(Number(limit) + 8 * 1024 * 1024)], { type: 'video/mp4' }),
+          'huge.mp4',
+        )
+        const response = await fetch(`${origin}/admin/video/upload`, { method: 'POST', body })
+        return { status: response.status, text: (await response.text()).slice(0, 160) }
+      },
+      [ORIGIN, String(MAX_VIDEO_BYTES)] as const,
+    )
+    check(
+      'and the endpoint refuses one on its declared length — 413',
+      declared.status === 413,
+      `status ${declared.status}: ${declared.text}`,
+    )
+    check(
+      'and nothing was stored by either refusal',
+      (await db.select().from(operatorVideos)).length === 1,
+      'an oversized upload created a row',
+    )
+    checkNothingWasRefused('the size limit', beforeSize, /status of 413/)
+
+    // -----------------------------------------------------------------------
+    console.log('\nA caption, for somebody who cannot play sound')
+
+    await page.goto(`${ORIGIN}/admin/video`, { waitUntil: 'networkidle' })
+    check(
+      'a video with neither caption nor transcript says so',
+      (await page.locator('text=neither a caption nor a transcript').count()) > 0,
+    )
+
+    await page.fill('input[name="caption"]', 'A short note from David')
+    await page.fill('textarea[name="transcript"]', 'Hello — this is what I said.')
+    await page.locator('form', { hasText: 'Transcript' }).getByRole('button').click()
+
+    // Asked of the row, for the same reason onboarding is: these forms
+    // re-render in place and never navigate.
+    const captionDeadline = Date.now() + 20_000
+    let captioned = (await db.select().from(operatorVideos))[0]
+    while (Date.now() < captionDeadline && captioned?.caption === null) {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      captioned = (await db.select().from(operatorVideos))[0]
+    }
+    check(
+      'the caption is stored',
+      captioned?.caption === 'A short note from David',
+      `${String(captioned?.caption)} — the page said "${(
+        (await page.locator('[role="alert"], [role="status"]').filter({ hasText: /\S/ }).first().textContent()
+          .catch(() => 'nothing')) ?? 'nothing'
+      ).slice(0, 120)}"`,
+    )
+    check('and the transcript with it', (captioned?.transcript ?? '').startsWith('Hello'))
+
+    await page.reload({ waitUntil: 'networkidle' })
+    check(
+      'and the warning about silent playback is gone',
+      (await page.locator('text=neither a caption nor a transcript').count()) === 0,
+    )
+
+    // -----------------------------------------------------------------------
+    console.log('\nUnpublished, which is unreachable')
+
+    const investor = await context.browser()!.newContext()
+    const investorPage = await investor.newPage()
+    await investorPage.goto(`${ORIGIN}/portal/claim/${claimToken}`, { waitUntil: 'networkidle' })
+    check('the investor is in their portal', investorPage.url().includes('/portal'), investorPage.url())
+
+    const videoId = captioned!.id
+    let asked = 0
+    const ask = async (id: string) => {
+      // A unique query string on every ask. The route ignores it; what it stops
+      // is any layer between here and the handler answering from what it
+      // already has, which would make "it is out of reach now" read as a pass
+      // against a copy of the answer from when it was not.
+      asked += 1
+      const response = await investorPage.request.get(
+        `${ORIGIN}/portal/video/${id}?ask=${asked}`,
+        { headers: { 'Cache-Control': 'no-cache' } },
+      )
+      return { status: response.status(), body: (await response.text()).slice(0, 40) }
+    }
+
+    const unpublished = await ask(videoId)
+    const invented = await ask('a-video-id-that-does-not-exist')
+    check('an unpublished video is 404 to an investor', unpublished.status === 404, String(unpublished.status))
+    check(
+      'and it is the same 404 an invented id gets — not a different one',
+      unpublished.status === invented.status && unpublished.body === invented.body,
+      `"${unpublished.body}" against "${invented.body}"`,
+    )
+    check(
+      'and the portal shows no video section at all',
+      !((await investorPage.textContent('body')) ?? '').includes('A short note from David'),
+    )
+
+    // -----------------------------------------------------------------------
+    console.log('\nPublished')
+
+    await page.locator('input[name="confirm"]').check()
+    await page.getByRole('button', { name: 'Publish to the portal' }).click()
+    await page.waitForFunction(
+      () => document.body.textContent?.includes('Take it down') === true,
+      undefined,
+      { timeout: 20_000 },
+    )
+    check(
+      'publishing records the moment',
+      (await db.select().from(operatorVideos))[0]?.publishedAt !== null,
+    )
+
+    const published = await ask(videoId)
+    check('and the investor can now fetch it', published.status === 200, String(published.status))
+
+    /**
+     * And it is not written to any cache on the way.
+     *
+     * This one is here because the harness got it wrong first: the check below
+     * — that unpublishing puts the video back out of reach — passed a 200 after
+     * the row said `published_at` was null, and the cause was a copy of the
+     * earlier answer being served without asking. That was Playwright's request
+     * context rather than the application, but it is exactly the shape of the
+     * real risk: a video taken down and still sitting in somebody's browser.
+     * So the response is asked what it permits, and every `ask` since then
+     * carries a fresh query string.
+     */
+    const cacheHeaders = await investorPage.request.get(`${ORIGIN}/portal/video/${videoId}?ask=h`)
+    check(
+      'and the response forbids anything keeping a copy of it',
+      /no-store/.test(cacheHeaders.headers()['cache-control'] ?? ''),
+      `Cache-Control: ${cacheHeaders.headers()['cache-control'] ?? 'absent'}`,
+    )
+    check(
+      'and it is private, not something a shared cache may hold',
+      /private/.test(cacheHeaders.headers()['cache-control'] ?? ''),
+      `Cache-Control: ${cacheHeaders.headers()['cache-control'] ?? 'absent'}`,
+    )
+
+    await investorPage.reload({ waitUntil: 'networkidle' })
+    check(
+      'and the caption is on their portal',
+      ((await investorPage.textContent('body')) ?? '').includes('A short note from David'),
+    )
+
+    await page.getByRole('button', { name: 'Unpublish' }).click()
+    await page.waitForFunction(
+      () => document.body.textContent?.includes('Publish to the portal') === true,
+      undefined,
+      { timeout: 20_000 },
+    )
+    const takenDown = await ask(videoId)
+    check(
+      'taking it down puts it back out of reach',
+      takenDown.status === 404,
+      `status ${takenDown.status} — publishedAt is ${String(
+        (await db.select().from(operatorVideos))[0]?.publishedAt,
+      )}`,
+    )
+
+    await investorPage.close()
+    await investor.close()
 
     // -----------------------------------------------------------------------
     console.log('\nLeaving the page')

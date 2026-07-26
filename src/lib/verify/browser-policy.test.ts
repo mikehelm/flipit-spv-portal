@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { contentSecurityPolicy, generateNonce } from '@/lib/security/csp'
+import { MAX_VIDEO_BYTES } from '@/lib/media/formats'
 
 /**
  * The browser-policy headers. BUILD_SPEC §15, §13.3.
@@ -196,6 +197,18 @@ describe('Content-Security-Policy', () => {
     // have carried no policy at all, with every domain-root check passing.
     // `next.config.ts` carries the same one-line entry for the same reason.
     expect(middlewareSource).toContain("matcher: ['/', ")
+  })
+
+  it('does not truncate an upload, which having middleware at all nearly did', () => {
+    // Next buffers a request body before a route handler when a middleware is
+    // configured, capped at 10 MB by default. Over it the handler receives the
+    // first 10 MB and no error — so adding middleware for the nonce silently
+    // made every video over 10 MB arrive corrupt, stored, with a success
+    // message. The cap must stay ABOVE the largest body the application will
+    // accept, or the route's honest 413 becomes a truncation.
+    const configured = /proxyClientMaxBodySize: '(\d+)mb'/.exec(source)?.[1]
+    expect(configured, 'no proxyClientMaxBodySize in next.config.ts').toBeDefined()
+    expect(Number(configured) * 1024 * 1024).toBeGreaterThan(MAX_VIDEO_BYTES * 1.05)
   })
 
   it('discards any Content-Security-Policy that arrived with the request', () => {

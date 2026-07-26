@@ -5606,3 +5606,118 @@ was looking at the wrong element. It now scans every video element on the page.
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael rather than in another Uncertain
   list.
+
+## The 10 MB cap that arrived with the middleware
+
+The previous entry left four things open about §13.3 and this one closes them:
+the size limit that had never been reached, publishing, taking a video down, and
+the caption. `pnpm verify:recorder` is 67 checks, up from 47.
+
+**And it found the worst defect of the last three entries, which was mine.**
+
+Adding `src/middleware.ts` for the Content-Security-Policy nonce silently
+capped every upload at **10 MB**. Next buffers a request body before it reaches
+a route handler when a middleware is configured, and over the default cap the
+handler does not get an error — it gets *the first 10 MB*, and one line on the
+server's own stdout. §13.3 allows a 64 MB video. So for three entries, a video
+between 10 and 64 MB would have arrived truncated, been stored, and reported
+success. A corrupt file with a green tick on it.
+
+Nothing could have caught it. The unit suite does not post a body. The recorded
+webm in the previous entry is a few hundred kilobytes. It appeared the first
+time anything posted something large enough, which is the check this entry was
+adding for an unrelated reason — and it appeared in the *server log*, not in a
+failing assertion, which is why the line is now read.
+
+`experimental.proxyClientMaxBodySize` is `'68mb'`, and the number matters in one
+direction: it must stay **above** the largest body the application will accept.
+`/admin/video/upload` refuses on a declared length over `MAX_VIDEO_BYTES × 1.05`
+— 67.2 MB — and a cap below that would turn that honest 413 into a truncation,
+which is the failure this is here to prevent. A unit test fails if the two drift.
+
+**Also built.**
+
+- The size limit, refused twice: the recorder's own guard before it posts —
+  naming both the file's size and the limit — and the endpoint's 413 on the
+  declared length. Both fixtures are built *inside the page*, so a 72 MB body
+  never crosses the wire from Node.
+- Caption and transcript saved, and the warning that a video with neither gives
+  nothing at all to somebody who cannot play sound.
+- **An unpublished video is 404 to an investor, and it is the same 404 an
+  invented id gets** — byte-identical body, which is §13.3's actual claim.
+  Proved with a second browser context holding a real claimed portal session.
+- Published: the investor can fetch it and the caption is on their portal.
+- Unpublished again: back out of reach.
+- The media response forbids anything keeping a copy of it.
+
+**Decisions.**
+
+- ***Every `ask` of the video endpoint carries a fresh query string.*** The
+  take-down check failed with a 200 while the row said `published_at` was null,
+  and the cause was a copy of the earlier answer being reused without asking.
+  That was Playwright's request context rather than the application — but it is
+  exactly the shape of the real risk, a video taken down and still sitting in
+  somebody's browser, so rather than only busting it the response is now asked
+  what it permits. It says `private, no-store`, and two checks say so.
+- ***The oversized fixtures are made in the browser.*** `DataTransfer` for the
+  file input and a `Blob` for the direct post. Sending 72 MB from Node to
+  Chromium would take a minute and prove nothing the in-page version does not.
+- ***The investor is a second browser context, not a second page.*** One context
+  holds one set of cookies. An investor session and an administrator session in
+  the same jar is a fixture that proves whichever one the server happened to
+  read.
+- ***The caption form is located by "Transcript", not by "Caption".*** The word
+  Caption appears in the card title, the field label and the hint; the form was
+  matched by an ancestor and the submit went to the wrong control. Naming the
+  second field is the unambiguous one.
+
+**Deviations.** None. One line of configuration was added to `next.config.ts`,
+and it restores a limit the middleware had lowered rather than raising one.
+
+**Checklist.**
+
+1. *Money as a `number`?* No.
+2. *A send path bypassing a gate?* No.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No — and this entry is the first
+   time that has been checked *from an investor's browser* for the video. The
+   three refusals produce the same response as an id that does not exist, so
+   nothing distinguishes "there is a video you may not have" from "there is no
+   video".
+6. *Tokens?* Untouched. The claim token is used the way one is meant to be.
+7. *Suspension?* Not exercised here; `portalReadable` is the input the route
+   already reads for it.
+8. *Does any log line contain a token, a body or a key?* No.
+9. *Indexable routes?* Unchanged. The media response carries
+   `X-Robots-Tag: noindex` and `no-store`.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2416) and `pnpm build` are green.
+`pnpm verify:recorder` is 67 of 67, twice; `pnpm verify:viewport` 323 of 323;
+`pnpm verify:deployment` 97 of 97.
+
+**Uncertain.**
+
+- ***Nothing else in the application posts a large body, and nothing checks
+  that.*** The 10 MB cap was found on the video route because that is the route
+  this entry was working on. Document upload and image upload post through the
+  same middleware and have their own limits, and no check has ever sent either
+  of them anything near one. The cap is global; the exposure was not.
+- ***Replacing a *published* video is still not driven.*** The recorder renders
+  a specific warning for it — *"Uploading a replacement **takes it down**"* —
+  and the run reaches a published state but never records over it. The caption
+  is supposed to carry across, and that is untested.
+- ***Removing a video altogether is not driven,*** and it is the one control
+  that deletes bytes.
+- *The image upload preview and the email template preview are still
+  unexercised.*
+- *Nothing measures bundle size, and nothing measures what the middleware
+  costs* — now a slightly sharper question, since the middleware has been shown
+  to change request handling and not only headers.
+- *`img-src data:`, `media-src blob:` and `worker-src blob:` have never been
+  asked what an attacker could do with them.*
+- *The password-reset journey is still not built,* and belongs in
+  OPEN_DECISIONS.md as a question for Michael.

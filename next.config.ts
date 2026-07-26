@@ -21,6 +21,31 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
 
+  experimental: {
+    /**
+     * **Adding middleware capped every upload at 10 MB, silently.**
+     *
+     * Next buffers a request body before it reaches a route handler when a
+     * middleware is configured, and the default cap on that buffer is 10 MB.
+     * Over it, the handler does not get an error — it gets *the first 10 MB*,
+     * and a line on the server's own stdout that nobody is watching. §13.3
+     * allows a 64 MB video. So the entry that added `src/middleware.ts` for the
+     * Content-Security-Policy nonce also, and invisibly, made every video over
+     * 10 MB arrive truncated: a corrupt file, stored, with a success message.
+     *
+     * It was found by `pnpm verify:recorder` posting an oversized body to see
+     * the route's own 413, and reading the server log while it did.
+     *
+     * The number must stay **above** the largest body the application will ever
+     * accept, not equal to it. `/admin/video/upload` refuses on a declared
+     * length over `MAX_VIDEO_BYTES * 1.05`, and a cap below that would turn
+     * that honest 413 into a truncation — the failure this is here to prevent.
+     * 64 MB × 1.05 is 67.2 MB; 68 MB leaves room for the multipart envelope and
+     * nothing more. `browser-policy.test.ts` fails if the two drift apart.
+     */
+    proxyClientMaxBodySize: '68mb',
+  },
+
   /**
    * `X-Robots-Tag: noindex` on everything, then the verification page opts back
    * in. BUILD_SPEC §15, §15.1.

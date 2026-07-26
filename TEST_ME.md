@@ -865,7 +865,7 @@ Then publish it and try again from an investor's portal. It plays.
 pnpm build && pnpm verify:recorder
 ```
 
-Forty-seven checks. It signs in as the owner and confirms he is offered no camera at all — and that the upload address refuses him too, not just the button. Then it signs in as David *before* he has finished setting up, confirms he is sent to the setup screen, walks all six setup steps through the real forms, and only then reaches the recorder. Then it turns the camera on, turns it off, records, watches the timer count, stops, plays the recording back, discards it, records another, keeps that one, and checks that the file on disk is exactly the file that was recorded.
+Sixty-seven checks. It signs in as the owner and confirms he is offered no camera at all — and that the upload address refuses him too, not just the button. Then it signs in as David *before* he has finished setting up, confirms he is sent to the setup screen, walks all six setup steps through the real forms, and only then reaches the recorder. Then it turns the camera on, turns it off, records, watches the timer count, stops, plays the recording back, discards it, records another, keeps that one, and checks that the file on disk is exactly the file that was recorded.
 
 Two of those checks are worth calling out because they are about the camera light rather than about the video:
 
@@ -873,6 +873,10 @@ Two of those checks are worth calling out because they are about the camera ligh
 - **Walking away from the page stops it too.**
 
 Both were confirmed by deliberately breaking the code that releases the camera and watching the run go red before putting it back.
+
+**It also found the worst mistake in this whole run of work, and it was one this build had made a week earlier.** The security headers added recently needed a small piece of code to run on every request. That piece of code brought a default with it: any file posted to the application larger than 10 MB was quietly cut off at 10 MB. Not refused — *cut off*, and then stored, with a success message. A video is allowed to be 64 MB. So for about a week, any video longer than a minute or two would have been saved broken and nothing would have said so. It was invisible to every existing check, because no check had ever posted anything that big. Fixed, with a test that fails if the limit ever slips back below what a video is allowed to be.
+
+The run also now covers what happens after the recording: saving a caption and transcript, publishing, and taking it down again. The important one is proved from a real investor's browser rather than from the database — **before you publish, an investor asking for the video directly gets exactly the same "not found" as somebody asking for a video that was never recorded.** Not a "you are not allowed", which would confirm there is something there. The two responses are compared character by character.
 
 > **The setup screen had never been opened by any automated check until now** — it is David's alone, and every other browser check signs in as Michael. Walking through it also proved something worth knowing: **finishing setup stores the sending address and password but does not mark the connection as working.** Sending stays blocked until the connection is actually tested, which is the correct order and is now checked rather than assumed. The run uses an obviously fake password and puts your real settings back when it finishes.
 - **Leave the caption and transcript empty.** The screen tells you that anyone who cannot play sound gets nothing at all from the video. Fill them in and they appear on the portal as text, in full, not hidden behind a control somebody has to find.
