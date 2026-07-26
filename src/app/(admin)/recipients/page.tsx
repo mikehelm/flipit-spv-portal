@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Card, Pill, SectionHeading } from '@/components/admin/ui'
-import { requireOnboardedAdmin } from '@/lib/auth/guards'
+import { requireReader } from '@/lib/auth/guards'
 import { formatMoney, formatPercentage } from '@/lib/money'
 
 /** Every figure on this screen is USD, and says so. See lib/portal/data.ts. */
@@ -188,7 +188,7 @@ export default async function RecipientsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const admin = await requireOnboardedAdmin()
+  const admin = await requireReader()
 
   const params = await searchParams
   const context = await loadBatchContext()

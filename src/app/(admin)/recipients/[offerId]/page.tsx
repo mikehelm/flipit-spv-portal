@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { investorAccounts, offers, rounds } from '@/db/schema'
 import { Card, Notice, Pill, SectionHeading } from '@/components/admin/ui'
-import { requireOnboardedAdmin } from '@/lib/auth/guards'
+import { requireReader } from '@/lib/auth/guards'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { listCertificates } from '@/lib/certificate/issue'
 import { formatMoney, formatPercentage } from '@/lib/money'
@@ -44,7 +44,7 @@ export default async function OfferPage({
 }: {
   params: Promise<{ offerId: string }>
 }) {
-  await requireOnboardedAdmin()
+  await requireReader()
 
   const { offerId } = await params
 

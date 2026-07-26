@@ -1,4 +1,4 @@
-import type { PrivilegedRole } from '@/lib/roles'
+import type { AdminRole } from '@/lib/roles'
 import type { AdminCredential, CredentialStore } from './credential-store'
 import { dummyPasswordHash, verifyPassword } from './password'
 import {
@@ -33,7 +33,9 @@ import { evaluateAllowlist } from './sign-in-policy'
 export type SignInFailure = 'INVALID_CREDENTIALS' | 'LOCKED' | 'UNAVAILABLE'
 
 export type SignInResult =
-  | { ok: true; userId: string; email: string; role: PrivilegedRole }
+  // Signing in is not acting. A viewer holds a real session and a real role;
+  // what they may do with it is the guards' question, not this one's.
+  | { ok: true; userId: string; email: string; role: AdminRole }
   | { ok: false; reason: SignInFailure; lockedUntil?: number; detail: SignInDetail }
 
 /** Never leaves the server. For the audit log only. */

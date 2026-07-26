@@ -3,7 +3,8 @@ import { signOutAction } from '@/actions/auth'
 import { AdminNav } from '@/components/admin/admin-nav'
 import { PageCurl } from '@/components/page-curl'
 import { SiteFooter } from '@/components/site-footer'
-import { requireAdmin } from '@/lib/auth/guards'
+import { requireReader } from '@/lib/auth/guards'
+import { ROLE_LABELS, VIEWER_BANNER } from '@/lib/roles'
 import { env } from '@/lib/env'
 
 export const metadata: Metadata = {
@@ -30,7 +31,11 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  const admin = await requireAdmin()
+  // `requireReader`, not `requireAdmin` — the shell has to render for a viewer
+  // or they cannot reach the pages that are open to them. It remains a
+  // convenience rather than an authorization boundary: every page repeats its
+  // own guard, and a nested route handler never runs this at all.
+  const admin = await requireReader()
   const config = env()
 
   return (
@@ -45,9 +50,7 @@ export default async function AdminLayout({
               </p>
               <p className="mt-1 text-sm break-words text-dim">
                 Signed in as <span className="text-ftext">{admin.email}</span>{' '}
-                <span className="text-orange">
-                  ({admin.role === 'OWNER' ? 'Owner' : 'Operator'})
-                </span>
+                <span className="text-orange">({ROLE_LABELS[admin.role]})</span>
               </p>
             </div>
 
@@ -60,6 +63,21 @@ export default async function AdminLayout({
               </button>
             </form>
           </div>
+
+          {/*
+            A read-only session says so, permanently and on every screen.
+            §22 AC19's refusal page is the control; this is so nobody meets it
+            by surprise. It is a banner rather than a hidden button because
+            around fifty controls sit behind these pages and hiding each one is
+            a list somebody eventually falls off — the refusal is enforced by
+            the guards and by the type of `currentAdmin()`, and this explains
+            it before it happens.
+          */}
+          {admin.role === 'VIEWER' ? (
+            <p className="mt-4 border-l-2 border-orange bg-orange/6 p-3 text-xs leading-relaxed text-silver2">
+              {VIEWER_BANNER}
+            </p>
+          ) : null}
 
           {!config.isProductionDeployment ? (
             <p className="mt-4 border-l-2 border-warn pl-3 text-xs leading-relaxed text-dim">

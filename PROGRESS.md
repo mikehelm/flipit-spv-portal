@@ -4339,3 +4339,115 @@ are green.
 - *§13.1's "more prominent once an investor reaches Commitment agreed" is still
   not implemented.* The tiles render identically at every stage. Unchanged by
   this package and still open.
+
+## A third role, added to an application built for two
+
+Michael asked for `grahambrain@gmail.com` to see everything and change nothing,
+and was right to say `OPERATOR` was the wrong answer. It is worse than it looks:
+`OPERATOR` advances statuses, records funds received, publishes answers, extends
+deadlines, closes the round and **sends invitations**. It is the most
+operationally powerful role in the application.
+
+Scope chosen: **B** — every investor by name, all four amounts, documents, the
+conversation thread and status history. Not the audit log.
+
+**The danger was never writing the role.** Around forty existing guards already
+asked "is somebody signed in", and `roleEnum` is consulted by all of them. A
+value added to that enum would have answered yes to all forty at once, silently,
+and each would then have had to be found and closed by hand. One missed call
+site is an outsider sending a securities invitation. The role would have failed
+**open**.
+
+**Built.**
+
+- **`AdminRole = PrivilegedRole | 'VIEWER'`**, with `PrivilegedRole` left at two
+  members and a test asserting it by name.
+- **`currentAdmin()` returns `ActingAdmin`** — `AdminIdentity & { role:
+  PrivilegedRole }` — and returns `null` for a viewer.
+- **`currentIdentity()`**, new, the only function that hands one back.
+- **`requireReader()`**, and eight pages that opt into it.
+- **A permanent banner** on every admin screen for a read-only session.
+- **`VIEWER_EMAILS`**, empty by default.
+- **Migration `0011`**, and `viewer-role.test.ts` — 30 tests, almost all
+  negative.
+
+**Decisions.**
+
+- ***The widening went the other way.*** Rather than adding `VIEWER` to the type
+  the guards consult, `currentAdmin()` was narrowed to exclude it. Every one of
+  the forty call sites keeps the behaviour it had, a viewer is simply nobody to
+  all of them, and access is granted one page at a time by deliberately asking.
+  **Nothing opened by default.** This is the whole design and everything else
+  follows from it.
+- ***The compiler enforces it, not a comment.*** `ActingAdmin` narrows the role
+  at the type level, so `admin.role` still satisfies `PrivilegedRole` at every
+  existing call site. Adding a fourth role later produces type errors at exactly
+  the places that need looking at. That property is worth more than the tests.
+- ***`canAct()` is an allowlist, not `!isViewer()`.*** A fourth role gets no
+  capability by accident.
+- ***A banner, not fifty hidden buttons.*** Around fifty controls sit behind the
+  opened pages. Hiding each is a list somebody eventually falls off, and a
+  missed one is a security bug rather than a cosmetic one. The refusal is
+  enforced by the guards and by the type; the banner exists so nobody meets it
+  by surprise.
+- ***Refused, not signed out.*** A viewer reaching an acting page gets the
+  no-access page and an audit entry, because telling somebody who is signed in
+  that they are not is a lie that reads as a broken application.
+- ***The register is closed to a viewer*** even though it is investor data. §5.2.2
+  makes the computed order operator-only, and it is a ranking of people rather
+  than a record of them.
+- ***The export is closed.*** Scope B is sight of the records. Handing a third
+  party a spreadsheet of every investor's financial position to keep is a
+  different act from letting them look at a screen, and it was not asked for.
+- ***Owner beats operator beats viewer*** in `resolveRole`. An address on two
+  lists is a misconfiguration, and resolving downward would demote somebody out
+  of their own application.
+- ***The document route uses `currentIdentity()`.*** §20 names documents, and the
+  handler is a GET returning bytes — it is safe to want the wider question
+  precisely because it writes nothing.
+
+**Deviations.** None. This is an addition rather than a spec item; §2 names two
+roles and both are unchanged.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here touches an amount.
+2. *A send path bypassing a gate?* No — and this is the one that mattered. Every
+   `'use server'` file is asserted to reach an acting guard and asserted not to
+   use `requireReader` or `currentIdentity`. The one indirection,
+   `requireImportActor`, is separately asserted to call `currentAdmin`.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* No, and a viewer cannot see the
+   approval screen at all.
+5. *Does anything reveal another investor?* The admin side is the list, by
+   design. No investor-facing surface changed.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The refusal entry
+   carries two role names, asserted.
+9. *Indexable routes?* No route added; the admin area is `noindex`.
+10. *Published Q&A?* A viewer reads the queue and cannot publish.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (2276, up from 2246) are green.
+
+**Uncertain.**
+
+- *A viewer cannot enrol two-factor.* `/admin/security` calls `requireAdmin`,
+  which now refuses them. An account that can see every investor's financial
+  position should be able to add a second factor, and today it cannot. This is
+  the clearest gap and the next thing to fix here.
+- *Controls are refused rather than hidden.* Safe, and not polished. A viewer
+  pressing Send is turned away by the guard, which on a securities application
+  is the correct outcome and an alarming experience. Threading a `canAct` flag
+  through the page components is the fix.
+- *No database-backed check signs in as a viewer and walks the admin area.* The
+  wiring is asserted at the source and by the type system. A `verify:roles`
+  script in the shape of `verify:lifecycle` would be stronger.
+- *Nothing records that a viewer looked at a particular record.* Their sign-in
+  is audited; individual reads are not, for anybody. The banner says "your
+  sign-in is recorded", which is true and narrower than it might be read.
+- *Graham has no account.* The role exists and its allowlist is empty. Adding
+  the address is Michael's step, and it grants sight of every named investor's
+  financial position — worth being a deliberate act rather than a config edit.

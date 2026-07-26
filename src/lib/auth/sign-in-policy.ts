@@ -1,4 +1,4 @@
-import { resolveRole, type PrivilegedRole } from '@/lib/roles'
+import { resolveRole, type AdminRole } from '@/lib/roles'
 
 /**
  * The allowlist gate. BUILD_SPEC §2, §2.2, §22 AC18.
@@ -23,7 +23,7 @@ export type SignInDenialReason =
   | 'NOT_ALLOWLISTED'
 
 export type AllowlistDecision =
-  | { allowed: true; email: string; role: PrivilegedRole }
+  | { allowed: true; email: string; role: AdminRole }
   | { allowed: false; email: string | null; reason: SignInDenialReason }
 
 export function normaliseEmail(email: string | null | undefined): string | null {

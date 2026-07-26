@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { audit } from '@/lib/audit'
-import type { PrivilegedRole } from '@/lib/roles'
+import { canAct, isViewer, type AdminRole, type PrivilegedRole } from '@/lib/roles'
 import { drizzleCredentialStore } from './credential-store'
 import { isOnboardingComplete } from './onboarding'
 import { readOnboardingSnapshot } from './onboarding-store'
@@ -24,8 +24,19 @@ export interface AdminIdentity {
   id: string
   email: string
   name: string | null
-  role: PrivilegedRole
+  role: AdminRole
 }
+
+/**
+ * An identity that may act, narrowed at the type level.
+ *
+ * `currentAdmin()` returns this rather than `AdminIdentity`, which means the
+ * compiler — not a comment, and not a reviewer's attention — is what stops a
+ * viewer reaching the forty call sites that take a `PrivilegedRole`. Adding a
+ * fourth role later produces type errors at exactly the places that need
+ * looking at, which is the behaviour worth having.
+ */
+export type ActingAdmin = AdminIdentity & { role: PrivilegedRole }
 
 export const SIGN_IN_PATH = '/signin'
 export const NO_ACCESS_PATH = '/admin/no-access'
@@ -52,8 +63,16 @@ function secondFactorPending(
   return user.totpConfirmedAt !== null && session.secondFactorAt === null
 }
 
-/** The signed-in administrator, or null. Never throws, never redirects. */
-export async function currentAdmin(): Promise<AdminIdentity | null> {
+/**
+ * Whoever is signed in on the admin side, viewer included. Never throws, never
+ * redirects.
+ *
+ * **Almost nothing should call this.** It is the primitive the two functions
+ * below are built from, and it is the only one that will hand back a `VIEWER`.
+ * If you are about to call it in order to decide whether somebody may do
+ * something, you want `currentAdmin()` instead.
+ */
+export async function currentIdentity(): Promise<AdminIdentity | null> {
   const found = await readAdminSessionUser()
   if (!found) return null
 
@@ -70,6 +89,32 @@ export async function currentAdmin(): Promise<AdminIdentity | null> {
     name: user.displayName ?? user.name ?? null,
     role: decision.role,
   }
+}
+
+/**
+ * The signed-in administrator **who may act**, or null.
+ *
+ * A viewer gets `null` here, and that is the single most important line in the
+ * role design rather than an implementation detail.
+ *
+ * When `VIEWER` was added, around forty existing call sites already asked this
+ * question — every server action, every mutating route, the import path. Had
+ * this function returned a viewer, all forty would have admitted one at once,
+ * silently, and each would have had to be found and closed again by hand. One
+ * missed call site is an outsider advancing an investor's status or sending a
+ * securities invitation.
+ *
+ * So the widening happened in the other direction. Every existing caller keeps
+ * the exact behaviour it had, a viewer is simply nobody to all of them, and
+ * read access is granted one page at a time by deliberately asking for
+ * `requireReader()`. Nothing opened by default. `guards.test.ts` asserts this
+ * function cannot return a viewer.
+ */
+export async function currentAdmin(): Promise<ActingAdmin | null> {
+  const identity = await currentIdentity()
+  if (!identity) return null
+  if (!canAct(identity.role)) return null
+  return { ...identity, role: identity.role }
 }
 
 /**
@@ -104,9 +149,49 @@ export async function pendingSecondFactorAdmin(): Promise<{
  * sign-in — it has a valid password behind it and asking for the password
  * again would be a puzzle rather than a control.
  */
-export async function requireAdmin(): Promise<AdminIdentity> {
+export async function requireAdmin(): Promise<ActingAdmin> {
   const admin = await currentAdmin()
   if (admin) return admin
+
+  // A viewer is signed in and simply may not be here. Sending them to the
+  // sign-in page would be a lie — they are signed in — and would read as the
+  // application being broken. They get the refusal page, and the attempt is
+  // logged, because §22 AC19 wants a refused privileged action recorded.
+  const identity = await currentIdentity()
+  if (identity && isViewer(identity.role)) {
+    await audit({
+      actor: { kind: 'user', id: identity.id, label: identity.email },
+      entityType: 'access',
+      entityId: identity.id,
+      action: 'access.refused',
+      metadata: { requiredRole: 'ACTOR', actualRole: identity.role },
+    })
+    redirect(NO_ACCESS_PATH)
+  }
+
+  if (await pendingSecondFactorAdmin()) redirect(SECOND_FACTOR_PATH)
+  redirect(SIGN_IN_PATH)
+}
+
+/**
+ * Signed in as anybody who may **read** — owner, operator or viewer.
+ *
+ * The opt-in half of the role. A page calling this is stating that everything
+ * on it is safe for a read-only administrator, and that every control it
+ * renders is either absent for a viewer or refused server-side by the action
+ * behind it.
+ *
+ * Read access is not the same as an empty page: `canAct(identity.role)` is what
+ * a page uses to decide whether to render a button at all. Hiding the button is
+ * courtesy; the action's own guard is the control.
+ */
+export async function requireReader(): Promise<AdminIdentity> {
+  const identity = await currentIdentity()
+  if (identity) {
+    const credential = await drizzleCredentialStore().findByEmail(identity.email)
+    if (!credential || credential.passwordHash === null) redirect(PASSWORD_PATH)
+    return identity
+  }
 
   if (await pendingSecondFactorAdmin()) redirect(SECOND_FACTOR_PATH)
   redirect(SIGN_IN_PATH)
@@ -124,7 +209,7 @@ export async function requireAdmin(): Promise<AdminIdentity> {
  * The password page itself calls `requireAdmin`, not this, or it would redirect
  * to itself for ever.
  */
-export async function requirePasswordSet(): Promise<AdminIdentity> {
+export async function requirePasswordSet(): Promise<ActingAdmin> {
   const admin = await requireAdmin()
 
   const credential = await drizzleCredentialStore().findByEmail(admin.email)
@@ -133,7 +218,7 @@ export async function requirePasswordSet(): Promise<AdminIdentity> {
   return admin
 }
 
-async function requireRole(role: PrivilegedRole): Promise<AdminIdentity> {
+async function requireRole(role: PrivilegedRole): Promise<ActingAdmin> {
   const admin = await requirePasswordSet()
   if (admin.role !== role) {
     // BUILD_SPEC §22 AC19: a refused privileged action is logged, not silent.
@@ -153,7 +238,7 @@ async function requireRole(role: PrivilegedRole): Promise<AdminIdentity> {
  * Owner only. Compliance approval (§8.2), service configuration, the OpenAI key
  * and operator invites all sit behind this. The operator never passes.
  */
-export async function requireOwner(): Promise<AdminIdentity> {
+export async function requireOwner(): Promise<ActingAdmin> {
   return requireRole('OWNER')
 }
 
@@ -166,7 +251,7 @@ export async function requireOwner(): Promise<AdminIdentity> {
  *
  * Shared admin surfaces use `requireAdmin()`.
  */
-export async function requireOperator(): Promise<AdminIdentity> {
+export async function requireOperator(): Promise<ActingAdmin> {
   return requireRole('OPERATOR')
 }
 
@@ -177,7 +262,7 @@ export async function requireOperator(): Promise<AdminIdentity> {
  *
  * Call this from admin pages that are not the onboarding flow itself.
  */
-export async function requireOnboardedAdmin(): Promise<AdminIdentity> {
+export async function requireOnboardedAdmin(): Promise<ActingAdmin> {
   const admin = await requirePasswordSet()
   if (admin.role !== 'OPERATOR') return admin
 

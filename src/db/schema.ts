@@ -38,7 +38,12 @@ import { createId } from '@/lib/id'
 // Enums — one per state machine
 // ---------------------------------------------------------------------------
 
-export const roleEnum = pgEnum('role', ['OWNER', 'OPERATOR'])
+/**
+ * BUILD_SPEC §2 names two. `VIEWER` is an addition: read-only oversight, no
+ * capability to act. See `lib/roles.ts` — it is deliberately absent from
+ * `PrivilegedRole`, which is the type every mutation guard consults.
+ */
+export const roleEnum = pgEnum('role', ['OWNER', 'OPERATOR', 'VIEWER'])
 
 /** BUILD_SPEC §4.2 */
 export const accountStatusEnum = pgEnum('account_status', [

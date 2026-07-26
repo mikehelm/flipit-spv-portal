@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { MailConnectionPanel } from '@/components/admin/mail-connection-panel'
 import { Card, Notice, Pill, SectionHeading, SecretState } from '@/components/admin/ui'
-import { requireOnboardedAdmin } from '@/lib/auth/guards'
+import { requireReader } from '@/lib/auth/guards'
 import { onboardingProgress } from '@/lib/auth/onboarding'
 import { readOnboardingSnapshot } from '@/lib/auth/onboarding-store'
 import { isSendingAccountConfigured, readServiceConfig } from '@/lib/auth/service-config'
@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic'
  * connection and, on the compliance screen, the approval.
  */
 export default async function AdminHomePage() {
-  const admin = await requireOnboardedAdmin()
+  const admin = await requireReader()
   const config = await readServiceConfig()
 
   const sendingConfigured = isSendingAccountConfigured(config)

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { Card, Notice, Pill, SectionHeading } from '@/components/admin/ui'
-import { requireOnboardedAdmin } from '@/lib/auth/guards'
+import { requireReader } from '@/lib/auth/guards'
 import { DIGEST_CADENCE_DAYS, lastDigestAt } from '@/lib/rounds/digest'
 import { loadRoundSummary } from '@/lib/rounds/summary'
 import { db } from '@/db'
@@ -29,7 +29,7 @@ export const dynamic = 'force-dynamic'
  * because §6.6 is emphatic that silence closes nobody's opportunity.
  */
 export default async function RoundPage() {
-  const admin = await requireOnboardedAdmin()
+  const admin = await requireReader()
 
   const round = await db.query.rounds.findFirst({ orderBy: desc(rounds.createdAt) })
   if (!round) {

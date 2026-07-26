@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import type { PrivilegedRole } from '@/lib/roles'
+import type { AdminRole } from '@/lib/roles'
 
 /**
  * Admin navigation.
@@ -21,18 +21,18 @@ import type { PrivilegedRole } from '@/lib/roles'
 interface NavItem {
   href: string
   label: string
-  roles: PrivilegedRole[]
+  roles: AdminRole[]
 }
 
 const ITEMS: NavItem[] = [
-  { href: '/admin', label: 'Overview', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/recipients', label: 'Review and send', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/investors', label: 'Investors', roles: ['OWNER', 'OPERATOR'] },
+  { href: '/admin', label: 'Overview', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
+  { href: '/recipients', label: 'Review and send', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
+  { href: '/investors', label: 'Investors', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
   { href: '/import', label: 'Import', roles: ['OWNER', 'OPERATOR'] },
   { href: '/templates', label: 'Email templates', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/round', label: 'The round', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/updates', label: 'Updates', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/questions', label: 'Questions', roles: ['OWNER', 'OPERATOR'] },
+  { href: '/round', label: 'The round', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
+  { href: '/updates', label: 'Updates', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
+  { href: '/questions', label: 'Questions', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
   { href: '/reminders', label: 'Reminders', roles: ['OWNER', 'OPERATOR'] },
   { href: '/register', label: 'Register', roles: ['OWNER', 'OPERATOR'] },
   { href: '/compliance', label: 'Compliance', roles: ['OWNER'] },
@@ -58,7 +58,7 @@ const ITEMS: NavItem[] = [
   { href: '/admin/settings', label: 'Settings', roles: ['OWNER'] },
 ]
 
-export function AdminNav({ role }: { role: PrivilegedRole }) {
+export function AdminNav({ role }: { role: AdminRole }) {
   const pathname = usePathname()
   const items = ITEMS.filter((item) => item.roles.includes(role))
 

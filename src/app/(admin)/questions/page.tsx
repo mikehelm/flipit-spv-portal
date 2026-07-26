@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Card, Notice, SectionHeading } from '@/components/admin/ui'
-import { requireOnboardedAdmin } from '@/lib/auth/guards'
+import { requireReader } from '@/lib/auth/guards'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { anyRoundOpen, loadQaQueue, type QaQueueEntry } from '@/lib/qa/data'
 import { PUBLISH_BLOCK_MESSAGE } from '@/lib/qa/anonymity'
@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic'
  * questions with who asked, their offer detail, and their status, so he answers
  * with context rather than blind."
  *
- * `requireOnboardedAdmin()` is the authorization for the page; every form on it
+ * `requireReader()` is the authorization for the page; every form on it
  * posts to a server action that checks the role again for itself.
  *
  * Cards rather than a table, mobile-first: an answer is a paragraph of prose
@@ -121,7 +121,7 @@ function QueueEntry({ entry }: { entry: QaQueueEntry }) {
 }
 
 export default async function QuestionsPage() {
-  await requireOnboardedAdmin()
+  await requireReader()
 
   const entries = await loadQaQueue('ALL')
   const config = await readServiceConfig()

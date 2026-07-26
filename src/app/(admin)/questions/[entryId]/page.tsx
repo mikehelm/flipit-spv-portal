@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Card, Notice, SectionHeading } from '@/components/admin/ui'
-import { requireOnboardedAdmin } from '@/lib/auth/guards'
+import { requireReader } from '@/lib/auth/guards'
 import { loadOwnThreads, loadQaEntry } from '@/lib/qa/data'
 import { previewAnswerReply } from '@/lib/qa/service'
 import { UNPUBLISH_NOTICE } from '@/lib/qa/anonymity'
@@ -39,7 +39,7 @@ export default async function QuestionPage({
 }: {
   params: Promise<{ entryId: string }>
 }) {
-  await requireOnboardedAdmin()
+  await requireReader()
 
   const { entryId } = await params
   const entry = await loadQaEntry(entryId)

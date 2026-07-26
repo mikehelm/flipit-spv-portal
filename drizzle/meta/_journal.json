@@ -78,6 +78,13 @@
       "when": 1785040639756,
       "tag": "0010_lethal_killraven",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785055658119,
+      "tag": "0011_shallow_professor_monster",
+      "breakpoints": true
     }
   ]
 }

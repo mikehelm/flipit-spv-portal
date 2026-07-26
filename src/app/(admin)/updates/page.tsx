@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { Card, Notice, Pill, SectionHeading } from '@/components/admin/ui'
-import { requireOnboardedAdmin } from '@/lib/auth/guards'
+import { requireReader } from '@/lib/auth/guards'
 import {
   addressableAccounts,
   loadOperatorUpdates,
@@ -153,7 +153,7 @@ function UpdateCard({
 }
 
 export default async function UpdatesPage() {
-  await requireOnboardedAdmin()
+  await requireReader()
 
   const updates = await loadOperatorUpdates()
   const accounts = await addressableAccounts()

@@ -78,6 +78,9 @@ const schema = z.object({
   /** Comma-separated allowlists. Role is assigned by address (BUILD_SPEC §2). */
   OWNER_EMAILS: z.string().default(''),
   OPERATOR_EMAILS: z.string().default(''),
+  // Read-only administrators. See lib/roles.ts — a viewer may see and may not
+  // do. Empty is the ordinary state and means the role has no members.
+  VIEWER_EMAILS: z.string().default(''),
 
   /**
    * Where uploaded images and video are stored. BUILD_SPEC §13.2, §13.3.
@@ -169,6 +172,7 @@ const withObjectStore = schema.superRefine((value, ctx) => {
 type Env = z.infer<typeof schema> & {
   ownerEmails: string[]
   operatorEmails: string[]
+  viewerEmails: string[]
   isProductionDeployment: boolean
 }
 
@@ -202,6 +206,7 @@ function load(): Env {
     ...value,
     ownerEmails: splitList(value.OWNER_EMAILS),
     operatorEmails: splitList(value.OPERATOR_EMAILS),
+    viewerEmails: splitList(value.VIEWER_EMAILS),
     isProductionDeployment:
       normaliseUrl(value.APP_URL) === normaliseUrl(value.PRODUCTION_APP_URL),
   }

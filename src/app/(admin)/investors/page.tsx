@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { Card, Notice, Pill, SectionHeading } from '@/components/admin/ui'
-import { requireOnboardedAdmin } from '@/lib/auth/guards'
+import { requireReader } from '@/lib/auth/guards'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { documentsByAccount, type AccountOfferDocuments } from '@/lib/documents/data'
 import { mediaStore } from '@/lib/media/store'
@@ -138,7 +138,7 @@ function AccountCard({
 }
 
 export default async function InvestorsPage() {
-  await requireOnboardedAdmin()
+  await requireReader()
 
   const [accounts, config, documents] = await Promise.all([
     loadAdminAccounts(),
