@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Verifying the reconciliation report itself | 26 Jul session D | 2026-07-26 01:02 | `scripts/verify-media.ts` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -85,6 +85,10 @@ tokens. Reconciliation is done in both directions.
 **Every media route streams**, as of 26 July: the video, the library image and
 both document downloads. No route in `src/app` holds a stored object in memory,
 and there is a boundary test that fails if one starts to.
+
+**`pnpm media:check` is verified by `pnpm verify:media`** as of 26 July — the
+real command, spawned, against a store holding a missing file and two orphans.
+It was the last thing in the repository with no automated check behind it.
 
 The largest left are running these checks on a schedule rather than from the
 runbook, and the open question — sharpened by corrections — of whether issuing a

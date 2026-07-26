@@ -17,7 +17,8 @@
  */
 
 import 'dotenv/config'
-import { mkdtemp, readFile, readdir } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { eq, like } from 'drizzle-orm'
@@ -309,11 +310,130 @@ async function main(): Promise<void> {
 
   await cleanup()
 
+  // After the cleanup, deliberately: the report is about every media row in the
+  // database, so the only way to assert on exact counts is for the only rows
+  // present to be the ones this check just made.
+  await verifyReconciliation()
+
   const leftovers = await db.select().from(mediaAssets).where(like(mediaAssets.name, `${PREFIX}%`))
   check('verification data is removed', leftovers.length === 0)
 
   console.log(`\n${passed} passed, ${failed} failed`)
   if (failed > 0) process.exitCode = 1
+}
+
+
+/**
+ * `pnpm media:check`, run the way a person runs it. BUILD_SPEC §5, §13.2.
+ *
+ * The reconciliation report is a script, and a script is the one kind of code
+ * that quietly stops working: nothing imports it, so nothing type-checks its
+ * output, and the only signal that it has gone wrong is somebody reading a
+ * clean report about a store that is not clean. Its two answers are the ones
+ * that matter after a restore — *this record has no file* and *this file has no
+ * record* — so both are provoked here, in a directory this function owns, and
+ * the real command is spawned against them.
+ *
+ * The store is switched to an empty directory for the duration and switched
+ * back afterwards, so nothing above is disturbed.
+ */
+async function verifyReconciliation(): Promise<void> {
+  console.log('\n§5, §13.2 — the reconciliation report, as a person runs it')
+
+  const previousDirectory = process.env.MEDIA_DIR
+  const directory = await mkdtemp(path.join(tmpdir(), 'spv-verify-reconcile-'))
+
+  try {
+    // A file with a valid storage key that no row names, and a file this
+    // application would never have written at all.
+    await writeFile(path.join(directory, 'doc_ORPHANORPHANORPHANORPH'), Buffer.alloc(11))
+    await writeFile(path.join(directory, 'somebody-elses-notes.txt'), 'left here')
+
+    // And a row whose file is not there, which is what a database restored
+    // without its bucket looks like.
+    const [ghost] = await db
+      .insert(mediaAssets)
+      .values({
+        name: `${PREFIX} ghost`,
+        storageKey: 'img_GHOSTGHOSTGHOSTGHOSTGH',
+        contentType: 'image/png',
+        sizeBytes: 4321,
+      })
+      .returning()
+
+    const report = await runCheck(directory)
+
+    check('the report exits non-zero when something is wrong', report.code === 1, String(report.code))
+    check(
+      'a record whose file is missing is reported as missing',
+      /1 file is MISSING/.test(report.out),
+      report.out.match(/\d+ files? (is|are) MISSING/)?.[0] ?? 'no MISSING line',
+    )
+    check(
+      'and it is named by its record rather than by its storage key',
+      report.out.includes(ghost!.id) && !report.out.includes('img_GHOSTGHOSTGHOSTGHOSTGH'),
+    )
+    check(
+      'both objects that no record points at are reported',
+      /2 objects are stored that no record points at/.test(report.out),
+      report.out.match(/\d+ objects are stored[^\n]*/)?.[0],
+    )
+    check(
+      'an orphan is named in full, because naming it is the only way to act on it',
+      report.out.includes('doc_ORPHANORPHANORPHANORPH'),
+    )
+    check(
+      'and a file this application would never write is called that',
+      report.out.includes('somebody-elses-notes.txt') &&
+        report.out.includes('not a storage key this application would write'),
+    )
+    // Eleven zero bytes and nine characters, which is the number a person
+    // reading the report would add up themselves.
+    check(
+      'the total bytes of the orphans are stated',
+      report.out.includes('(20 bytes)'),
+      report.out.match(/\(\d+ bytes\)/)?.[0] ?? 'no total',
+    )
+    check('and nothing was changed', (await readdir(directory)).length === 2)
+
+    await db.delete(mediaAssets).where(eq(mediaAssets.id, ghost!.id))
+
+    // Now with the orphans gone and no rows left: the clean answer.
+    const empty = await mkdtemp(path.join(tmpdir(), 'spv-verify-reconcile-clean-'))
+    const clean = await runCheck(empty)
+
+    check(
+      'a store with nothing in it and no records is a clean answer',
+      clean.code === 0,
+      clean.out.trim().split('\n').slice(-3).join(' | '),
+    )
+    check('and says so in as many words', /clean answer/.test(clean.out))
+  } finally {
+    process.env.MEDIA_DIR = previousDirectory
+    resetEnvCache()
+    resetMediaStoreCache()
+  }
+}
+
+/** The real command, in its own process, with its own store directory. */
+function runCheck(directory: string): Promise<{ code: number; out: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('pnpm', ['media:check'], {
+      cwd: process.cwd(),
+      env: { ...process.env, MEDIA_STORE: 'filesystem', MEDIA_DIR: directory },
+    })
+
+    let out = ''
+    child.stdout.on('data', (chunk) => {
+      out += String(chunk)
+    })
+    child.stderr.on('data', (chunk) => {
+      out += String(chunk)
+    })
+
+    child.on('error', reject)
+    child.on('close', (code) => resolve({ code: code ?? 0, out }))
+  })
 }
 
 main()

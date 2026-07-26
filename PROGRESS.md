@@ -2426,3 +2426,75 @@ all against the built application over real HTTP. `pnpm verify:media` — 39.
   shape nor the new one answers it, and nothing at this layer can.
 - *Nothing has measured the memory here either.* Same as the video: the
   mechanism is proved, the saving is not quantified.
+
+---
+
+## Verifying the reconciliation report itself
+
+*26 July 2026. Claimed at 01:02, built after the claim was pushed. A small
+package, and the reason it is one is written below.*
+
+`pnpm media:check` is the command the runbook tells somebody to run after a
+restore, and it was the only piece of this application with no automated check
+behind it. That is not an oversight in the ordinary sense — it is a script, and
+a script is the one kind of code that fails quietly: nothing imports it, so
+nothing exercises it, and the signal that it has gone wrong is somebody reading
+a clean report about a store that is not clean. The orphan half of it, added an
+hour earlier, had been verified by running it by hand once. That is evidence
+that expires.
+
+**Built.**
+
+- **A section in `pnpm verify:media` that spawns the real command**, in its own
+  process, against a directory it owns and rows it made — one record whose file
+  is missing, one orphan with a valid storage key, and one file this application
+  would never have written.
+- **Ten checks over its actual output and exit code**: non-zero when something
+  is wrong; the missing record named by its record id and *not* by its storage
+  key; both orphans reported; an orphan named in full; a stray file described as
+  what it is; the byte total right; the directory unchanged afterwards; and a
+  clean store with no records answered zero, in as many words.
+
+**Decisions.**
+
+- ***It spawns the command rather than importing the logic.*** Importing
+  `check-media.ts` runs it — it is a script with a `main()` at the bottom — and
+  extracting its logic into a module to make it importable would test the
+  extraction rather than the thing the runbook names. What is being verified is
+  literally `pnpm media:check`, including its exit code, which is what a
+  deployment script reads.
+- ***It runs after the cleanup, not before.*** The report is about every media
+  row in the database, so exact counts are only assertable when the only rows
+  present are the ones the check just made. Running it earlier made "1 file is
+  MISSING" depend on what else the script had left lying around — which is
+  precisely the sort of assertion that passes for a month and then does not.
+- ***The check that a storage key is *not* printed is as important as the ones
+  that are.*** A missing record is reported by record id; an orphan is reported
+  by key. Those are opposite rules for a reason argued in the previous section,
+  and now both directions are pinned.
+- ***The two failures found while writing it were kept as evidence rather than
+  smoothed over.*** The first run reported four failures: two were my arithmetic
+  and my regex, and two were real — the clean-store case cannot be asserted
+  while other rows exist. The fix was to move the section, not to loosen the
+  assertion.
+
+**Deviations.** None.
+
+**Checklist.** Nothing in the application changed; only a verification script.
+
+1–12. No production code was touched. `pnpm typecheck`, `pnpm lint`, `pnpm test`
+(1850 tests), `pnpm verify:object-store` (36), `pnpm verify:documents` (48) and
+`pnpm media:check` were all re-run green, and `pnpm verify:media` is now 49
+checks, up from 39.
+
+**Uncertain.**
+
+- *It spawns `pnpm`, which assumes `pnpm` is on the path of whatever runs the
+  verification.* True of `pnpm verify:deployment` already, which spawns a build
+  and a server.
+- *The report's exact wording is now load-bearing in ten places.* That is the
+  cost of asserting on human-readable output. It is the right cost here — the
+  output *is* the product — but rewording the report means updating this
+  section, and that is deliberate rather than annoying.
+- *Still nothing runs any of this on a schedule.* Unchanged, and still the most
+  obvious next thing.
