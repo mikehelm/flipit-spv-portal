@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| WP21 — one reminder runner at a time | 26 Jul session (cloud) | 2026-07-26 01:10 | `src/lib/reminders/lock.ts` (new), `run.ts`, `scripts/run-reminders.ts`, `scripts/verify-reminders.ts`, a migration adding `claimed_at` to `reminder_events` |
 
 ## Done, so nobody starts it again
 
