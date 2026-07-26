@@ -5158,3 +5158,185 @@ console, and the two policy checks print an error name and a directive.
   exist at all, against the sign-in page's own recorded argument that it should
   not — is the thing to settle first, and it is a decision for Michael rather
   than a thing to build over him.
+
+## The nonce, and the front door that had no policy
+
+The last two entries both ended with the same line carried forward: *"`script-src
+'unsafe-inline'` is unchanged, and the nonce is still the fix."* Before that,
+`next.config.ts` had been saying it about itself since the day the policy was
+written — *"**`script-src` carries `'unsafe-inline'`, and that is the weak
+part** … the tight answer is a per-request nonce, which needs middleware."*
+
+It is the weak part in a specific way that is easy to under-read. With
+`'unsafe-inline'`, if a name, a question an investor submitted, or a cell from an
+imported CSV ever reached a page unescaped, the policy stopped the injected
+script from *fetching* anything and did nothing whatever to stop it *running*.
+On a page carrying a claim token and a transfer amount, running is the whole of
+the damage. Every other directive was defence against a second step that an
+attacker does not need to take.
+
+**Built.**
+
+- `src/lib/security/csp.ts` — the policy, in one place, built per request.
+  `script-src 'self' 'nonce-…'`. No `'unsafe-inline'`.
+- `src/middleware.ts` — the first middleware in this application. It draws 16
+  bytes from the platform CSPRNG, sets the policy on the request *and* on the
+  response, and does nothing else at all.
+- `next.config.ts` no longer sets `Content-Security-Policy`. The other six
+  headers stay there, because none of them varies per request.
+- `export const dynamic = 'force-dynamic'` in the root layout.
+- `verify:viewport` gains a section that injects the thing the nonce exists to
+  refuse. 254 checks, up from 246.
+- `verify:deployment` gains a served-response browser-policy section — the gap
+  the last entry named. 97 checks. **It found a defect on its first run.**
+- `browser-policy.test.ts` rewritten: the policy is a module now, so the tests
+  call it instead of scraping `next.config.ts` with a regular expression.
+
+**The defect.** `verify:deployment` is the only thing in this repository that
+serves the application under a path prefix, which is the shape production will
+actually have. Under `/SPV`, the landing page came back with **no
+Content-Security-Policy header at all** — not a weak one, none — while every
+equivalent check at a domain root passed.
+
+The matcher was `'/((?!_next/static|_next/image).*)'`, copied from the shape
+everybody uses. That is a path-to-regexp group, and **a group will not match an
+empty segment.** At a domain root the path is `/` and the group matches the
+empty string after the slash. Under a prefix Next rewrites the matcher to
+`/SPV/((?!…).*)`, the landing page is served at `/SPV` with nothing after it, and
+the middleware never runs.
+
+This is the second time this exact trap has been sprung here. `next.config.ts`
+carries a one-line `source: '/'` entry, added by an earlier session, with a
+comment saying the catch-all group would not match the root — found the same
+way, by asking a running server. Neither instance was visible to a test that
+reads the source. The fix is `matcher: ['/', '/((?!…).*)']`, with the note.
+
+**Decisions.**
+
+- ***The whole application is `force-dynamic`, declared once in the root
+  layout.*** Next stamps the nonce on script tags *while it renders them*. A
+  statically prerendered page is rendered at build time, when no request and
+  therefore no nonce exists: its inline bootstrap and flight-data scripts carry
+  no nonce, the per-request policy refuses them, and the page arrives looking
+  entirely correct and never hydrates. No error status, no missing markup,
+  nothing in the network tab. Four pages were in that position — `/`,
+  `/portal/email-confirmed`, `/portal/link-not-valid` and the built-in
+  `/_not-found`. Marking those four would have fixed those four and left the
+  next static page anybody adds to fail the same silent way. Declared in the
+  layout, a page in this application cannot accidentally be static. The cost is
+  nil: every other route already rendered per request, nothing here is cacheable
+  by anyone, and `robots.ts` and `sitemap.ts` are route handlers outside the
+  layout and are still `○`.
+- ***The policy is set in exactly one of the two places.*** Two
+  `Content-Security-Policy` headers on one response are two policies and a
+  browser enforces the intersection. Here that intersection would have been
+  roughly correct — which is worse, not better: an accident invisible in either
+  file, waiting for whoever next edits one of them. `verify:deployment` now
+  counts `default-src` occurrences on the wire, because `fetch` joins repeated
+  headers with a comma.
+- ***`'strict-dynamic'` was considered and is not used.*** Browsers that honour
+  it *ignore* host sources in the same directive, so the policy would rest
+  entirely on the nonce propagating through webpack's chunk loader. Next stamps
+  the nonce on the tags it renders and loads the rest by URL from this origin,
+  which `'self'` already covers. Without `'strict-dynamic'` is the narrower of
+  the two.
+- ***The nonce is not optional in the type, deliberately.*** There is no
+  `contentSecurityPolicy()` overload that omits it. A policy with neither a
+  nonce nor `'unsafe-inline'` refuses Next's own bootstrap and serves every page
+  dead, and the surest way to stop somebody adding that variant "just for the
+  static pages" is that it cannot be spelled. A test asserts the field is not
+  `nonce?`.
+- ***The middleware makes no access decision, and a test enforces it.*** No
+  redirect, no rewrite, no cookie read, no database import. The Edge runtime
+  cannot reach the database, so anything decided there would be decided against
+  a cookie rather than against a row — and §2 and §18 are enforced where the
+  data is. It would be the natural place for somebody to later add "just a quick
+  auth check", so the test names all four.
+- ***`style-src 'unsafe-inline'` remains, and is now named as the weak part.***
+  Smaller — an injected style can move or hide things, it cannot read a token or
+  call a server action — but not nothing. A nonce cannot reach it: React writes
+  `style` attributes, which are governed by `style-src-attr`. Removing it means
+  removing every inline style attribute first. Recorded rather than quietly
+  inherited.
+- ***Development keeps `script-src-elem 'self' 'unsafe-inline'`,*** which does
+  bypass the nonce for script elements under `next dev`. It was there before and
+  is unchanged; what is new is that it is now a real widening rather than a
+  restatement of `script-src`. A test asserts it appears only when
+  `development` is true, and never in a production policy. `'unsafe-eval'` still
+  appears in neither branch.
+- ***Every new check was proved by breaking the thing it watches.***
+  `'unsafe-inline'` was put back into `script-src`, rebuilt, and run: the header
+  check failed. The nonce generator was made a constant, rebuilt, and run: the
+  rotation check failed. Both restored, `git status` clean, full run green.
+  The first of those two is the finding worth keeping: with a nonce present,
+  the *behavioural* checks did **not** notice `'unsafe-inline'` coming back —
+  because the specification says a browser ignores `'unsafe-inline'` in a
+  directive that also carries a nonce. So the injected script was refused
+  anyway and only the assertion that reads the header text caught it. A
+  behavioural check and a textual one are not substitutes here, and both are
+  kept.
+
+**Deviations.** None. No directive was relaxed, no exception added, and
+`Permissions-Policy`, `X-Frame-Options`, `Referrer-Policy`,
+`X-Content-Type-Options`, `X-Robots-Tag` and `Strict-Transport-Security` are
+byte-identical to before.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here touches an amount.
+2. *A send path bypassing a gate?* No. The middleware sets one header and
+   returns; it does not read a session, reach the database, redirect or rewrite,
+   and a test asserts each of those. The compliance gate and the mail-connection
+   gate are untouched.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No. The header carries 16 random
+   bytes and no application data. `verify:viewport` re-ran all thirty-one
+   screens, including the fault banner, which still names no email address and
+   no investor.
+6. *Tokens?* Untouched. Worth stating the direction of travel: the nonce makes
+   a claim token *harder* to steal, because the script that would read it out of
+   the page can no longer run.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No — and this was worth
+   checking rather than assuming, since the nonce is a fresh secret on every
+   request. It is never logged, never persisted, and never written to a file.
+   It appears in a response header and in `nonce=` attributes, which is where
+   the specification puts it; it is worthless the moment the response ends.
+9. *Indexable routes?* Unchanged. `/verify`, `/privacy`, `robots.txt` and
+   `sitemap.xml`, confirmed on served responses under the prefix.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched, and re-proved: `verify:deployment` runs the
+    §18.1 refusal end to end and is 97 of 97.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2414, up from 2400) and `pnpm build`
+are green. `pnpm verify:viewport` is 254 of 254 in a real browser;
+`pnpm verify:deployment` is 97 of 97; `pnpm verify:account-access` is 42 of 42.
+
+**Uncertain.**
+
+- ***`style-src 'unsafe-inline'` is now the weakest line in the policy,*** and
+  unlike the script one it has no one-file fix. It needs every inline `style`
+  attribute in the application found and moved into a class, and only then can
+  the directive be narrowed. That is a real piece of work and it is the natural
+  successor to this entry.
+- ***The middleware runs on every request and nothing measures what it costs.***
+  A `getRandomValues` and a header copy is not much, but "not much" is a guess
+  and the matcher deliberately covers the media route, which streams video. A
+  number would settle it.
+- *The recorder component itself is still driven by nobody.* Arm, start, stop,
+  review, discard, upload has never been exercised. It needs `MEDIA_STORE` set
+  and an onboarded operator — a fixture worth building, and still the only path
+  in the application that produces a file from a browser.
+- *The image upload preview and the email template preview are still
+  unexercised.*
+- *`/admin/onboarding` is still audited by nobody,* because `verify:viewport`
+  signs in as the owner and that page is operator-only.
+- *Nothing measures bundle size,* so the next accident of the kind that put zod
+  in the browser is still a console message rather than a number.
+- *The password-reset journey is still not built.* Carried forward three times
+  now. The design question — whether a signed-out "forgotten password" form
+  should exist at all, against the sign-in page's own recorded argument that it
+  should not — is a decision for Michael, not something to build over him. It
+  belongs in OPEN_DECISIONS.md rather than in another Uncertain list.

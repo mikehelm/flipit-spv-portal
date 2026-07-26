@@ -94,6 +94,100 @@ async function header(path: string, name: string): Promise<string | null> {
 }
 
 /**
+ * The browser-policy headers, on a response rather than in a file.
+ *
+ * The unit suite asserts these against source, and `pnpm verify:viewport`
+ * exercises what they block in a real browser. Between the two sat a gap this
+ * script is the right place to close: **is the header on the wire at all, and
+ * is it on the wire once?**
+ *
+ * That is not a pedantic question. The Content-Security-Policy now comes from
+ * `src/middleware.ts` rather than from `next.config.ts`, and the failure mode
+ * of getting that wrong is not an error — it is *two* `Content-Security-Policy`
+ * headers on one response. A browser then enforces the intersection of two
+ * policies, which here would happen to be roughly right, silently, until
+ * somebody edited one of the two files. `fetch` joins repeated headers with a
+ * comma, so a second policy shows up as a second `default-src`.
+ *
+ * And it is checked **under the path prefix** specifically. A middleware
+ * matcher is a path pattern; Next rewrites it for `basePath`, and if that ever
+ * stopped working the symptom would be an application served with no policy at
+ * all on the one deployment that is reachable from the internet. Nothing else
+ * in this repository would notice, because every other check runs at a domain
+ * root.
+ */
+async function verifyTheBrowserPolicyOnAServedResponse(): Promise<void> {
+  console.log('\nThe browser policy, on the wire, under the prefix')
+
+  for (const path of ['', '/verify', '/signin']) {
+    const label = `${BASE_PATH}${path || '/'}`
+    const response = await fetch(`${HOST}${BASE_PATH}${path}`, { redirect: 'manual' })
+    const policy = response.headers.get('content-security-policy') ?? ''
+    const html = await response.text()
+
+    check(`${label} carries a Content-Security-Policy`, policy !== '', 'no header')
+
+    // Repeated headers arrive joined by a comma. One policy, one `default-src`.
+    check(
+      `${label} carries exactly one of them`,
+      (policy.match(/default-src/g) ?? []).length === 1,
+      policy.slice(0, 220),
+    )
+
+    const nonce = /script-src [^;]*'nonce-([A-Za-z0-9+/_-]+={0,2})'/.exec(policy)?.[1]
+    check(`${label} names a nonce`, nonce !== undefined, policy.slice(0, 220))
+    check(
+      `${label} does not allow inline script`,
+      !/script-src[^;]*'unsafe-inline'/.test(policy),
+      policy.slice(0, 220),
+    )
+
+    // The proof that the middleware ran *and* that Next saw what it set. If the
+    // matcher stopped covering the prefix, the header would be absent; if only
+    // the response header were set and not the request header, the document
+    // would carry no nonce and every script on the page would be refused.
+    check(
+      `${label} stamps that same nonce on the document`,
+      nonce !== undefined && html.includes(`nonce="${nonce}"`),
+      nonce === undefined ? 'no nonce to look for' : 'the header and the document disagree',
+    )
+    check(
+      `${label} leaves no un-nonced inline script behind`,
+      !/<script(?![^>]*\bnonce=)[^>]*>[^<]/.test(html),
+      'an inline script with no nonce would be refused, and the page would not hydrate',
+    )
+  }
+
+  // Two requests, one URL.
+  const first = await header(`${BASE_PATH}/signin`, 'content-security-policy')
+  const second = await header(`${BASE_PATH}/signin`, 'content-security-policy')
+  check(
+    'a second request gets a different nonce',
+    first !== null && second !== null && first !== second,
+    'both responses carried the same policy — the nonce is a constant',
+  )
+
+  // The static headers are next.config.ts's, and this is the first thing that
+  // asks a served response for them under a prefix.
+  const permissions = await header(`${BASE_PATH}/signin`, 'permissions-policy')
+  check(
+    'Permissions-Policy leaves the camera to this origin',
+    permissions?.includes('camera=(self)') === true,
+    String(permissions),
+  )
+  check(
+    'and denies what §13.3 has no use for',
+    permissions?.includes('geolocation=()') === true,
+    String(permissions),
+  )
+  check(
+    'no Strict-Transport-Security, because this run is not served over TLS',
+    (await header(`${BASE_PATH}/signin`, 'strict-transport-security')) === null,
+    'HSTS on an http origin is ignored by a browser and outlives the project on a dev machine',
+  )
+}
+
+/**
  * Every `href` and `src` in a document, minus the ones a base path does not
  * apply to: a fragment, an absolute URL, a `mailto:` and a `tel:`.
  */
@@ -292,6 +386,8 @@ async function main(): Promise<void> {
       'the verification page still refuses to be framed',
       (await header(`${BASE_PATH}/verify`, 'x-frame-options')) === 'DENY',
     )
+
+    await verifyTheBrowserPolicyOnAServedResponse()
 
     console.log('\nCrawler files')
     const robots = await text(`${BASE_PATH}/robots.txt`)

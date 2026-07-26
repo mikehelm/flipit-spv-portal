@@ -690,6 +690,8 @@ async function main(): Promise<void> {
 
     await verifyThePolicyInPractice(page)
 
+    await verifyTheNonce(page)
+
     await verifyTheBannerWithAFaultBehindIt(page)
   } catch (error) {
     console.error('\nThe run stopped early. The application said:\n')
@@ -831,6 +833,142 @@ async function verifyThePolicyInPractice(page: Page): Promise<void> {
     'no Content-Security-Policy violation from any of it',
     csp.length === 0,
     csp.join(' | '),
+  )
+}
+
+/**
+ * The nonce, proved by injecting the thing it exists to refuse.
+ *
+ * Removing `'unsafe-inline'` from `script-src` is only worth doing if an inline
+ * script the application did not render is now actually refused. Every other
+ * check in this file is satisfied by a policy that blocks nothing: the pages
+ * load, they hydrate, the console is quiet. A policy that has never been seen
+ * to refuse anything is a string in a header.
+ *
+ * So four claims, each of which fails if the nonce is wrong in a different way:
+ *
+ *   1. **An inline script with no nonce does not run.** This is the attack.
+ *      An investor's name, a question they submitted, a cell from an imported
+ *      CSV — anywhere unescaped text could reach the page, this is what stops
+ *      the script in it from executing. Under the old policy it ran.
+ *   2. **An inline script carrying somebody else's nonce does not run.** A
+ *      guessed or stale value is no better than none.
+ *   3. **An inline script carrying *this response's* nonce does run.** Without
+ *      this one, checks 1 and 2 would pass just as happily against a policy
+ *      that forbids inline script outright — which would mean Next's own
+ *      bootstrap is refused too and every page is dead. This is the check that
+ *      distinguishes a working nonce from a broken policy.
+ *   4. **The nonce is different on the next request.** A constant "nonce" is a
+ *      value an attacker reads off one page and reuses on the next, which is
+ *      the whole of the protection gone while every other check still passes.
+ *
+ * The value used in 3 is read from the response header rather than from the
+ * document, deliberately: `script[nonce]` in the DOM is what Next *stamped*,
+ * and comparing that to itself proves nothing about the header the browser is
+ * enforcing. Taking it from the header proves the two agree.
+ */
+async function verifyTheNonce(page: Page): Promise<void> {
+  console.log('\nThe nonce, proved by injecting what it refuses')
+
+  complaints.length = 0
+
+  const response = await page.goto(`${ORIGIN}/signin`, { waitUntil: 'networkidle' })
+  const header = response?.headers()['content-security-policy'] ?? ''
+
+  check(
+    'the served policy carries a nonce',
+    /script-src [^;]*'nonce-[A-Za-z0-9+/_-]+={0,2}'/.test(header),
+    header.slice(0, 200) || 'no Content-Security-Policy header on the response',
+  )
+  check(
+    "and script-src no longer carries 'unsafe-inline'",
+    !/script-src[^;]*'unsafe-inline'/.test(header),
+    header.slice(0, 200),
+  )
+
+  const nonce = /script-src [^;]*'nonce-([A-Za-z0-9+/_-]+={0,2})'/.exec(header)?.[1] ?? ''
+
+  /**
+   * Injected from inside the page, which is where an injection would come from.
+   * `setAttribute` rather than the `.nonce` property because that is what a
+   * bundler's own nonce support does, and because the property is hidden again
+   * once the element is in the document.
+   */
+  const inject = async (value: string | null, flag: string): Promise<boolean> => {
+    const ran = await page.evaluate(
+      ([nonceValue, name]) => {
+        const script = document.createElement('script')
+        if (nonceValue !== null) script.setAttribute('nonce', nonceValue)
+        script.textContent = `window[${JSON.stringify(name)}] = true`
+        document.head.appendChild(script)
+        script.remove()
+        return (window as unknown as Record<string, boolean>)[name] === true
+      },
+      [value, flag] as const,
+    )
+    // A refusal is reported after the fact: Chromium queues both the console
+    // message and the `securitypolicyviolation` event, so neither has arrived
+    // by the time `evaluate` resolves. Without this wait the *execution* checks
+    // pass and the *reporting* check fails, which reads as a broken detector
+    // rather than as a race.
+    await page.waitForTimeout(200)
+    return ran
+  }
+
+  /** Either spelling of "the policy refused an inline script". */
+  const refusedInlineScript = (complaint: string): boolean =>
+    /CSP refused script-src/.test(complaint) ||
+    /Refused to execute inline script/.test(complaint)
+
+  const ranWithout = await inject(null, '__nonceless_ran')
+  check(
+    'an inline script with no nonce does not run',
+    ranWithout === false,
+    'it executed — script-src is not enforcing the nonce',
+  )
+  check(
+    'and the policy says so, naming script-src',
+    complaints.some((c) => /CSP refused script-src/.test(c)),
+    complaints.filter((c) => /CSP refused/.test(c)).slice(0, 2).join(' | ') ||
+      'no violation was reported at all',
+  )
+
+  const ranWithWrong = await inject('bm90LXRoZS1yZWFsLW5vbmNl', '__wrong_nonce_ran')
+  check(
+    "an inline script carrying somebody else's nonce does not run",
+    ranWithWrong === false,
+    'it executed — the nonce is not being compared',
+  )
+
+  const ranWithRight = nonce === '' ? false : await inject(nonce, '__right_nonce_ran')
+  check(
+    "an inline script carrying this response's nonce does run",
+    ranWithRight === true,
+    nonce === ''
+      ? 'no nonce could be read from the header'
+      : 'it was refused — the header and the document disagree, and every page is dead',
+  )
+
+  // A second request to the same URL. If this matched, the value is a constant
+  // wearing the word nonce.
+  const again = await page.goto(`${ORIGIN}/signin`, { waitUntil: 'domcontentloaded' })
+  const second =
+    /script-src [^;]*'nonce-([A-Za-z0-9+/_-]+={0,2})'/.exec(
+      again?.headers()['content-security-policy'] ?? '',
+    )?.[1] ?? ''
+  check(
+    'and the next request gets a different one',
+    second !== '' && second !== nonce,
+    second === '' ? 'the second response carried no nonce' : 'both responses carried the same value',
+  )
+
+  // The two deliberate refusals above are expected and are the point. Anything
+  // else the browser objected to during this section is not.
+  const stray = complaints.filter((c) => !isEnvironmental(c)).filter((c) => !refusedInlineScript(c))
+  check(
+    'and nothing else was refused along the way',
+    stray.length === 0,
+    stray.slice(0, 3).join(' | '),
   )
 }
 

@@ -99,7 +99,9 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Referrer-Policy', value: 'no-referrer' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Content-Security-Policy', value: contentSecurityPolicy() },
+          // Content-Security-Policy is deliberately NOT here. It carries a
+          // per-request nonce and is set by `src/middleware.ts`; see the note
+          // where `contentSecurityPolicy` used to live, below.
           { key: 'Permissions-Policy', value: PERMISSIONS_POLICY },
           ...strictTransportSecurity(),
         ],
@@ -113,56 +115,28 @@ const nextConfig: NextConfig = {
 // ---------------------------------------------------------------------------
 
 /**
- * Content-Security-Policy.
+ * Content-Security-Policy — moved out of this file, and this note is why.
  *
- * This application loads nothing from anywhere else — no CDN, no analytics, no
- * font service, no tag manager — so `default-src 'self'` is achievable rather
- * than aspirational, and every widening below is named with the feature that
- * needs it.
+ * It used to be a constant here, and its own comment recorded the flaw:
+ * `script-src` carried `'unsafe-inline'`, because Next injects inline bootstrap
+ * and hydration scripts and a build-time constant cannot carry a per-request
+ * nonce. Every header in this function is evaluated once, at build time, and
+ * baked into `.next/routes-manifest.json`. A nonce that is identical on every
+ * response is not a nonce.
  *
- * **`script-src` carries `'unsafe-inline'`, and that is the weak part.** Next
- * injects inline bootstrap and hydration scripts, and the tight answer is a
- * per-request nonce, which needs middleware and makes every route dynamic.
- * Most of this application already is. It is the next improvement here and it
- * is recorded as such rather than glossed over: without it, CSP is defence
- * against injected *external* script and not against injected inline script.
+ * The policy now lives in `src/lib/security/csp.ts` and is applied per request
+ * by `src/middleware.ts`, with `'unsafe-inline'` gone from `script-src`.
+ *
+ * It is set in exactly one of the two places, never both: two
+ * `Content-Security-Policy` headers on one response are two policies, and a
+ * browser enforces the intersection. That intersection would happen to be
+ * correct here and it would be an accident, invisible in either file, and a
+ * trap for whoever next edits one of them.
  *
  * `frame-ancestors 'none'` says what `X-Frame-Options: DENY` says, for browsers
- * that prefer the modern spelling. Both are kept.
+ * that prefer the modern spelling. Both are kept — the second is in the list
+ * above, the first is in the policy module.
  */
-function contentSecurityPolicy(): string {
-  const directives = [
-    "default-src 'self'",
-    "base-uri 'self'",
-    // Nothing in this application is a plugin or an applet, and a <frame> on an
-    // investor's portal is somebody else's page wearing it.
-    "object-src 'none'",
-    "frame-src 'none'",
-    "frame-ancestors 'none'",
-    // A form on this origin may only post back to this origin. Without it, an
-    // injected form could post a password or a claim token elsewhere.
-    "form-action 'self'",
-    "script-src 'self' 'unsafe-inline'",
-    // Tailwind ships a stylesheet, and Next inlines critical CSS.
-    "style-src 'self' 'unsafe-inline'",
-    // `data:` for the inline brand marks; `blob:` for a video preview held in
-    // memory before it is uploaded (§13.3).
-    "img-src 'self' data: blob:",
-    "media-src 'self' blob:",
-    "font-src 'self' data:",
-    "connect-src 'self'",
-    // MediaRecorder may run off a worker created from a blob.
-    "worker-src 'self' blob:",
-  ]
-
-  // Next's development server evaluates code to hot-reload. Never in production
-  // — `'unsafe-eval'` there would undo most of the value of the policy.
-  if (process.env.NODE_ENV === 'development') {
-    directives.push("script-src-elem 'self' 'unsafe-inline'")
-  }
-
-  return directives.join('; ')
-}
 
 /**
  * Permissions-Policy.

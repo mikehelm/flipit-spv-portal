@@ -671,11 +671,29 @@ Issuing an offer does not send anything and does not take anybody off the regist
 pnpm build && pnpm verify:viewport
 ```
 
-242 checks across every screen, admin and investor, in a real browser. If your machine has a Chromium that Playwright did not install, put its path in `CHROMIUM_PATH` and it will use that rather than asking you to download another.
+254 checks across every screen, admin and investor, in a real browser. If your machine has a Chromium that Playwright did not install, put its path in `CHROMIUM_PATH` and it will use that rather than asking you to download another.
 
 The run also now *uses* the camera, rather than only reading the header that permits it. Two lines in the security policy were written the awkward way on purpose — the camera is allowed for this site rather than blocked outright, because blocking it would break the video recorder with no error message anywhere — and until now the evidence for that was somebody having read the file. The run asks the browser for a camera and plays back a recording, and both were checked by deliberately breaking the policy, rebuilding, and confirming the run went red before putting it back.
 
 > **Two things were added to that run and both found something immediately.** The password page and the refusal page had never been measured at all, and the refusal page turned out to have the two smallest tap targets in the application — 20 pixels where 44 is the minimum. And the run now *listens to the browser console*, which nothing had ever done: the security policy added last week was checked by reading the headers it sends, which proves a header is sent and proves nothing about what it blocks. It was blocking something on the Updates screen. Nothing was visibly broken — the page worked, the tests passed — but every visit filed a violation into a console nobody was reading, and standing noise like that is what a real problem hides behind. Fixed at the cause, and the run now fails if it comes back.
+
+### The hole in the security policy, now closed
+
+There has been a known weak spot in that policy since the day it was written, recorded in the file itself rather than glossed over. It is worth explaining, because it is the difference between a policy that sounds thorough and one that does something.
+
+A web page can be attacked by getting it to run a script that was never meant to be there — smuggled in through a name, a question an investor typed, or a cell in a spreadsheet somebody imported. The policy blocked a great deal: no fonts from elsewhere, no images from elsewhere, no talking to any other server, no framing the page inside somebody else's. But it still permitted a script written *directly into the page* to run. So a smuggled script could not phone home — and it did not need to. Everything worth stealing was already on the page it was standing in: an investor's claim link, their figures.
+
+**That is now closed.** Every page is served with a one-time password of its own, freshly generated for that single response and thrown away. Scripts that belong to the application carry it. Anything else does not run at all.
+
+You cannot see this and there is nothing to click. What you can do is watch the check that proves it, which does the attack on purpose:
+
+```bash
+pnpm build && pnpm verify:viewport
+```
+
+Look for the section headed *The nonce, proved by injecting what it refuses*. It writes a script into a live page three times: once with no password, once with the wrong one, once with the right one. The first two must not run. The third must — because a policy that blocks *everything* would leave every page in the application dead, and looking correct while being dead is exactly the failure this had to be tested for. It also checks the password is genuinely different on the next page load, since one that never changes could simply be copied.
+
+> **And this found a real fault, on a part of the site nobody had been able to test until now.** The application will eventually be served under a sub-path — `mikehelm.com/SPV` rather than a domain of its own — and there is a separate run, `pnpm verify:deployment`, that stands it up that way and asks a live server questions. It now checks the security headers, and it reported that the **front page had no security policy at all** under a sub-path. Not a weak one — none. Every equivalent check on a plain domain passed, which is why nothing had caught it: the rule that decides which addresses the policy applies to has a quirk where an address with nothing after the prefix falls through the gap. One line fixed it. The same trap had been sprung once before in this project, in a different file, and was found the same way — by asking a running server rather than by reading the code.
 
 Open your own portal link on your phone and look for:
 
@@ -703,7 +721,7 @@ pnpm build
 pnpm verify:viewport
 ```
 
-That starts the application, opens a real browser at phone size, signs itself in as both an administrator and an investor, and walks twenty-one screens measuring every one — a hundred and four checks. It needs a database and takes about a minute.
+That starts the application, opens a real browser at phone size, signs itself in as both an administrator and an investor, and walks every screen measuring each one — 254 checks. It needs a database and takes a few minutes.
 
 ## The forty-eight things this was meant to do
 
