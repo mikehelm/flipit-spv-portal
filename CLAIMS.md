@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Measuring the memory the streaming work claims | claude-opus-5, 26 Jul | 2026-07-26 03:05 | `scripts/verify-memory.ts` (new), `package.json`, `DEPLOYMENT.md` |
+| _(nothing claimed)_ | | | |
 
 ## Done, so nobody starts it again
 
@@ -127,6 +127,13 @@ written, and it disagreed with the health page whenever no media store was
 configured — which is the default this repository runs in. Both fixed.
 `pnpm verify:viewport` is 155 checks and includes the fault branch of the
 overview and the health page at 375px, put back afterwards.
+
+**The memory claim is measured**, as of 26 July. `pnpm verify:memory` serves a
+96 MB object through the real route from the real built server and samples the
+server's resident set out of `/proc`. Streaming grows it by 2 MB for one download
+and 1 MB for four at once; the same route made to buffer grows it by 95 MB and
+379 MB, measured by temporarily reverting it and watching the check fail. Three
+Uncertain notes saying "nothing has measured the memory" are closed.
 
 The largest left is installing the three cron lines in `DEPLOYMENT.md` §8, and
 the open question — sharpened by corrections — of whether issuing a document

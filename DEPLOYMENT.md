@@ -447,6 +447,29 @@ commands in §8 have become one thing to watch: whatever the weekly reconciliati
 found turns up in the daily health report, and in the operator's System health
 page, without anybody remembering to read a third log.
 
+### Proving the memory claim, rather than arguing it
+
+```
+pnpm build && pnpm verify:memory
+```
+
+Every media route was changed from reading an object into one array to opening a
+stream, on the argument that a sixty-megabyte video otherwise sits in the
+server's heap for as long as a phone on a slow connection takes to pull it down.
+This measures it: a 96 MB object, served through the real route from the real
+built server, with the server's resident set sampled out of `/proc` while the
+bytes move.
+
+Streaming grows the server by about **2 MB** for one download and about **1 MB**
+for four at once. The same route made to buffer grows it by **95 MB** and
+**379 MB** — the two numbers are two orders of magnitude apart, which is why the
+bound is a generous quarter of the object rather than something tight enough to
+be noisy.
+
+It needs a build, it writes its fixture into its own temporary store directory,
+and it removes both. On a platform without `/proc` it says the measurement was
+skipped rather than passing.
+
 ```
 pnpm verify:health
 ```

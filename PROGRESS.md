@@ -3217,3 +3217,115 @@ are green. `pnpm verify:viewport` is 155 of 155, up from 135, and
 - *Nothing still tells anybody without somebody looking.* Unchanged. The
   non-zero exit from `pnpm check:health` remains the only machine-readable
   signal, and nothing acts on it.
+
+## The memory the streaming work claimed — measured
+
+Three sections ended with the same line: *Nothing has measured the memory. The
+reasoning about memory is arithmetic rather than an observation.* Every media
+route in this application was changed from reading an object into one
+`Uint8Array` to opening a stream, and the whole justification for that change
+was a sentence about what a sixty-megabyte video costs a process. There is a
+boundary test that fails if a route reaches for the buffering read again. There
+was no test anywhere that a byte of the argument was true.
+
+It is the shape of gap worth closing, because of how the failure looks. A route
+that buffers serves the same bytes with the same headers as one that streams:
+the tests pass, the file downloads, the video plays. The difference appears only
+on the day several people open the same document at once, as a process killed
+for using too much memory — and by then nothing points at the cause.
+
+**Built.**
+
+- **`pnpm verify:memory`** — a 96 MB object written into a real filesystem
+  store, the real built server started against it, and the object downloaded
+  through the real route while the server's resident set is sampled out of
+  `/proc/<pid>/status` from the parent.
+- **Three measurements**: one download, four concurrent downloads, and a
+  `Range` request.
+- **Documented in `DEPLOYMENT.md` §9**, with the numbers.
+
+**What it measures.**
+
+| | one download | four at once |
+| --- | --- | --- |
+| streaming (as built) | **+2.2 MB** | **+1.1 MB** |
+| the same route made to buffer | +94.9 MB | +379.0 MB |
+
+The buffering row is not a guess. The route was temporarily changed back to
+`store.get()`, rebuilt, and measured, and the run failed exactly the two checks
+it should — which is the only way to know a passing measurement is measuring
+anything. The route was then restored, and the diff against `main` for it is
+empty.
+
+**Decisions.**
+
+- ***The bound is a generous quarter of the object, not a tight one.*** Node
+  does not return freed memory promptly, this script schedules no collection,
+  and a resident set is noisy. What is being distinguished is not 50 MB from
+  60 MB — it is *the size of the file* from *the size of a buffer*, and the
+  measured numbers are two orders of magnitude apart. A loose bound that
+  survives a year is worth more than a tight one somebody switches off in a
+  month.
+- ***Sampled from `/proc`, not from the process itself.*** Asking the server how
+  much memory it is using would mean a route that exists only for a test and
+  reports this process's internals — one more thing to have to reason about
+  being reachable. The parent reads `/proc`; the child is told nothing.
+- ***The library image route, because it is the one with no session on it.***
+  §13.2 requires that: an email client fetching a logo carries no cookie. It
+  means this measurement needs no sign-in and no claim token, and it exercises
+  the same `openStream` seam the video and both document routes use.
+- ***A platform without `/proc` skips the measurement and says so.*** It does
+  not pass. A check that quietly reports success on a machine where it could not
+  run is worse than one that is missing.
+- ***The script writes its 96 MB fixture a megabyte at a time.*** A script that
+  built a 96 MB `Buffer` to prove the server does not would be a poor
+  advertisement for the argument, and on a small container it would be the thing
+  that ran out of memory.
+- ***The image route's silence about ranges is now asserted rather than
+  assumed.*** It builds its own response — `public, immutable`, unlike
+  `serveMedia`'s `private, no-store` — and neither advertises `Accept-Ranges`
+  nor answers a `Range` header. Ignoring one and sending the whole object with a
+  200 is what a server that does not support ranges is required to do, and there
+  is now a check saying so, which is the difference between a decision and an
+  omission nobody noticed.
+
+**Deviations.** None.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Byte counts.
+2. *A send path bypassing a gate?* Nothing sends.
+3. *One recipient or the whole batch?* Not applicable.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No. The fixture is a library image,
+   which by §13.2 belongs to nobody, and the row is removed at the end.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The script prints
+   byte counts and a temporary directory.
+9. *Indexable routes?* No route added or changed — the media route's diff is
+   empty.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched. The script sets `APP_URL` to its own origin for
+    the server it starts, as the viewport run already does.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (1985) and `pnpm build` are green.
+`pnpm verify:memory` is 12 of 12.
+
+**Uncertain.**
+
+- *Only the image route is measured.* The video and both document routes use the
+  same `serveMedia`/`openStream` seam and the boundary test asserts no route in
+  `src/app` reaches for `get()`, so the measurement covers the mechanism rather
+  than one caller. Measuring the video would need a signed-in investor and a
+  claim token, which is the viewport run's apparatus rather than this one's.
+- *The fixture is 96 MB and the real cap on an image is 5 MB.* Deliberate — the
+  point is to make buffering visible against process noise, not to model a real
+  upload. It does mean the route is being asked to do something the application
+  would never let anybody do.
+- *Nothing runs this on a schedule.* It needs a build and takes about a minute,
+  which is a deployment-time check rather than a nightly one. It is in
+  `DEPLOYMENT.md` §9 at the point where somebody is already building.
+- *`verify:memory` is not in `pnpm check`.* Same reason: `check` is
+  typecheck, lint, test and build, and none of those starts a server.
