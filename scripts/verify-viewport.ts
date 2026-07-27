@@ -52,10 +52,12 @@ import { chromium, type Browser, type Page } from 'playwright'
 import { db } from '@/db'
 import {
   auditEvents,
+  interestRegisterEntries,
   investorAccounts,
   investorSessions,
   offers,
   portalTokens,
+  qaEntries,
   recipients,
   reminderEvents,
   rounds,
@@ -372,6 +374,21 @@ async function auditScreen(
    * by this function for as long as it only accepted a success.
    */
   expected = 200,
+  /**
+   * Something that proves this screen is showing its **content** and not its
+   * empty state — a word from a seeded row, not from the page's own chrome.
+   *
+   * Set on every screen whose subject is data, and it exists because three were
+   * not. An inventory pass printed the rendered text of all thirty-two screens
+   * and found `/questions` saying *"Nothing is waiting"* and `/register` saying
+   * *"Nobody is on the register"*. Both had been green since they were added,
+   * and in both cases the thing not being drawn was a **table** — the widest
+   * thing this application renders and the whole reason this script exists.
+   *
+   * A layout check on an empty screen is not a weak check. It is a check of the
+   * empty state, reported under the name of the populated one.
+   */
+  mustShow?: RegExp,
 ): Promise<void> {
   complaints.length = 0
 
@@ -380,6 +397,65 @@ async function auditScreen(
   const acceptable = expected === 200 ? status < 400 : status === expected
   check(`${label}: loads (${status})`, acceptable, `${path} returned ${status}`)
   if (!acceptable) return
+
+  await measureScreen(page, label, { mustShow, expected, html: await response!.text() })
+}
+
+/**
+ * Everything `auditScreen` does **except** the navigation.
+ *
+ * Split out because three of the screens this script is meant to cover are not
+ * reachable by a URL at all: steps 2, 3 and 4 of the import wizard are client
+ * state on `/import`, and the only way to measure them is to press the buttons
+ * and then measure what is in front of you. Before this, the import screen was
+ * audited at step 1 — a heading, a file input and a sentence — and *the review
+ * table was never measured at 375px by anything.*
+ *
+ * That table is the widest thing in the application: name, email, amount, SPV
+ * percentage, indirect percentage, deadline and jurisdiction, one row per
+ * recipient, with a totals block under it. If any screen here was going to push
+ * a page sideways on a phone, it was that one.
+ */
+async function measureScreen(
+  page: Page,
+  label: string,
+  {
+    mustShow,
+    /**
+     * The status this screen answers with, when it is not 200 — so the browser's
+     * own note about a 404 is not counted as the screen complaining.
+     */
+    expected = 200,
+    /**
+     * The **served** markup, and only ever that. The inline-style checks are
+     * skipped when it is absent.
+     *
+     * The first version of this fell back to `page.content()` for a wizard step
+     * that has no served body of its own, on the reasoning that the DOM is the
+     * fairer source. It is not, and this repository already knew why: an earlier
+     * entry spent an afternoon on `<next-route-announcer style="position:
+     * absolute">`, an invisible element Next adds client-side. `style-src-attr`
+     * governs a style attribute *in the markup a document was parsed from*, and
+     * does not inspect one assigned later by script — so the DOM fallback
+     * reported a violation on every wizard step that the browser had not made
+     * and would never make. Two checks, failing, naming a real element, about
+     * nothing. Exactly the finding that was already documented as not a finding.
+     *
+     * A wizard step therefore gets its layout, contrast and console measured and
+     * not its inline styles, because the document those styles came from is
+     * `/import`, which is audited in its own right.
+     */
+    html,
+  }: { mustShow?: RegExp; expected?: number; html?: string } = {},
+): Promise<void> {
+  if (mustShow) {
+    const text = await onScreen(page)
+    check(
+      `${label}: is showing content and not its empty state`,
+      mustShow.test(text),
+      `nothing matched ${mustShow} — measured ${text.length} characters`,
+    )
+  }
 
   const heard = complaints
     .filter((c) => !isEnvironmental(c))
@@ -424,7 +500,7 @@ async function auditScreen(
     result.smallTargets.map((t) => `<${t.tag}> ${t.height}px "${t.text}"`).join(' | '),
   )
 
-  await checkNothingInlineStyled(label, await response!.text())
+  if (html !== undefined) await checkNothingInlineStyled(label, html)
 
   // Contrast, on what the browser actually painted.
   const failures: string[] = []
@@ -464,6 +540,13 @@ async function cleanUp(): Promise<void> {
   for (const account of accounts) {
     await db.delete(portalTokens).where(eq(portalTokens.accountId, account.id))
     await db.delete(investorSessions).where(eq(investorSessions.accountId, account.id))
+    // Both cascade from the account, and both are deleted explicitly anyway:
+    // a cascade that stops being declared is a cleanup that silently stops
+    // cleaning, and this data is a question and an amount against a name.
+    await db.delete(qaEntries).where(eq(qaEntries.askedByAccountId, account.id))
+    await db
+      .delete(interestRegisterEntries)
+      .where(eq(interestRegisterEntries.accountId, account.id))
 
     // Reminders first: a queued row references the offer, so deleting the offer
     // out from under one fails on the foreign key. The fault-branch check
@@ -532,6 +615,55 @@ async function seedInvestor(): Promise<string> {
     accountId: account!.id,
     purpose: 'CLAIM',
     expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+  })
+
+  /**
+   * A question waiting, a question answered and published, and a name on the
+   * register — because without them three of the screens below were audited in
+   * their empty state.
+   *
+   * That was found by measuring rather than by reading: an inventory pass
+   * printed the rendered text of every screen this script visits, and
+   * `/questions` said *"Nothing is waiting"*, `/register` said *"Nobody is on
+   * the register"*. Both had been reported green since the day they were added.
+   *
+   * **The thing each of them was not rendering is a table** — a queue of
+   * questions with a name and a date against each, and a computed-order register
+   * with an amount in every row. A table of amounts is the widest thing this
+   * application draws and the most likely to push a page sideways at 375px,
+   * which is the entire subject of this script. So the two screens whose layout
+   * risk was highest were the two whose layout had never been measured.
+   *
+   * The wording is deliberately long and unbroken. A short question wraps
+   * anywhere and would prove nothing; a long address and a five-figure amount
+   * are what actually strain a narrow column.
+   */
+  const operator = await db.query.users.findFirst({ where: eq(users.email, ADMIN_EMAIL) })
+
+  await db.insert(qaEntries).values({
+    askedByAccountId: account!.id,
+    questionOriginal:
+      'Could you clarify how the indirect Flipit interest interacts with the SPV percentage ' +
+      'if the aggregate target is not reached before the response deadline?',
+  })
+
+  await db.insert(qaEntries).values({
+    askedByAccountId: account!.id,
+    questionOriginal: 'What happens to my participation if the round closes early?',
+    questionPublic: 'What happens to a participation if the round closes early?',
+    answer:
+      'The participation stands exactly as recorded. Closing a round early does not alter ' +
+      'any figure already agreed, and every document already issued remains on the portal.',
+    answeredById: operator?.id ?? null,
+    answeredAt: new Date(),
+    isPublished: true,
+    publishedAt: new Date(),
+  })
+
+  await db.insert(interestRegisterEntries).values({
+    accountId: account!.id,
+    indicativeAmountUsd: '47500.00',
+    addedByOperator: true,
   })
 
   return token
@@ -715,21 +847,32 @@ async function main(): Promise<void> {
     await page.waitForURL(/\/admin/, { timeout: 20_000 })
     check('the owner is signed in', page.url().includes('/admin'), page.url())
 
-    for (const [label, path, status] of [
+    /**
+     * The fourth column is `mustShow`, and it is the reason this list is worth
+     * re-reading. See `auditScreen`: every screen whose subject is data now has
+     * to prove it is showing some, because three of them were being measured
+     * empty and reported under the name of the populated screen.
+     *
+     * Screens with no data of their own — a form, a set of switches, a template
+     * preview — have nothing to assert here and are left blank on purpose.
+     */
+    for (const [label, path, status, mustShow] of [
       ['overview', '/admin'],
-      ['review and send', '/recipients'],
-      ['investors', '/investors'],
+      ['review and send', '/recipients', 200, /Alexandra Fenwick-Harrington/],
+      ['investors', '/investors', 200, /Alexandra Fenwick-Harrington/],
       ['import', '/import'],
       ['email templates', '/templates'],
       ['the round', '/round'],
       ['updates', '/updates'],
-      ['questions', '/questions'],
+      // The queue of unanswered questions, and the published pair beneath it.
+      ['questions', '/questions', 200, /indirect Flipit interest interacts/],
       ['reminders', '/reminders'],
-      ['register', '/register'],
+      // The computed-order table, with an amount in the row.
+      ['register', '/register', 200, /47,500/],
       ['compliance', '/compliance'],
       ['portal roadmap', '/admin/roadmap'],
-      ['operator access', '/admin/invites'],
-      ['audit log', '/audit'],
+      ['operator access', '/admin/invites', 200, /PENDING/],
+      ['audit log', '/audit', 200, /\d{4}-\d{2}-\d{2}/],
       ['system health', '/health'],
       ['two-factor', '/admin/security'],
       ['portal tiles', '/admin/roadmap'],
@@ -751,8 +894,10 @@ async function main(): Promise<void> {
       // unstyled with nothing to say so.
       ['not found', '/an-address-that-is-not-one', 404],
     ] as const) {
-      await auditScreen(page, label, path, status)
+      await auditScreen(page, label, path, status, mustShow)
     }
+
+    await verifyTheImportWizardSteps(page)
 
     await verifyThePolicyInPractice(page)
 
@@ -906,6 +1051,85 @@ async function verifyTheQrCodeLoads(page: Page): Promise<void> {
       })
       .where(eq(users.email, ADMIN_EMAIL))
   }
+}
+
+/**
+ * The import wizard's later steps, measured where they actually live.
+ *
+ * `/import` is audited in the list above, and until now that audit saw **step 1**
+ * — a heading, a file input and one sentence. Steps 2, 3 and 4 are client state
+ * on the same URL, so no amount of visiting the path reaches them, and *nothing
+ * in this repository had ever measured them at 375px.*
+ *
+ * Step 3 is the one that matters. It is a table of every recipient in the file —
+ * name, email, amount, SPV percentage, indirect percentage, deadline,
+ * jurisdiction — with a totals block under it. It is the widest thing this
+ * application draws. §13.2 makes 375px the condition of the whole build, and the
+ * screen most likely to fail it was the screen nothing looked at.
+ *
+ * The file is built in the page rather than read from disk, the same way the
+ * upload fixtures are: `SAMPLE_IMPORT.csv` exists and using it would tie this
+ * check to a file somebody may edit for another reason. The rows here are
+ * deliberately awkward — a long double-barrelled name, a long address, a
+ * six-figure amount and a six-decimal percentage — because a tidy row proves
+ * nothing about a narrow column.
+ *
+ * **It stops before importing.** Step 4 creates recipients, accounts and offers,
+ * and the wizard's own promise is that nothing is created until the operator
+ * confirms. Pressing that button here would make this layout script a script
+ * that writes investor records, so it does not: what step 4 looks like is still
+ * unmeasured, and that is recorded in PROGRESS.md rather than worked around.
+ */
+async function verifyTheImportWizardSteps(page: Page): Promise<void> {
+  console.log('\nThe import wizard past step 1, which nothing had ever seen')
+
+  complaints.length = 0
+  await page.goto(`${ORIGIN}/import`, { waitUntil: 'networkidle' })
+
+  await page.evaluate(() => {
+    const rows = [
+      'recipient_name,recipient_email,investment_amount_usd,spv_percentage,response_deadline,recipient_jurisdiction,indirect_flipit_percentage_override,internal_notes',
+      'Alexandra Fenwick-Harrington,wp18-viewport-import-one@example.test,127500.00,41.666667,2026-12-31,GB,12.500000,Introduced by David at the Lisbon dinner',
+      'Bartholomew Ravensworth-Cole,wp18-viewport-import-two@example.test,8250.50,2.750000,2026-11-15,US,,Asked for the long form of the agreement',
+    ].join('\n')
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement | null
+    if (!input) throw new Error('no file input on the import screen')
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([rows], 'register.csv', { type: 'text/csv' }))
+    input.files = transfer.files
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+
+  await page.getByRole('button', { name: /Read the file/ }).click()
+
+  // A locator wait, and legitimately: the wizard's step is client state, so
+  // there is no row to poll. What settles is a control appearing, which is what
+  // Playwright's own waiting is for. See the page-text entry in PROGRESS.md for
+  // the distinction.
+  await page.getByRole('button', { name: /Check the file/ }).waitFor({ timeout: 40_000 })
+  await measureScreen(page, 'import — the columns', {
+    mustShow: /recipient_name|Alexandra Fenwick-Harrington/,
+  })
+
+  await page.getByRole('button', { name: /Check the file/ }).click()
+  await page.getByRole('button', { name: /Import \d+ recipient/ }).waitFor({ timeout: 40_000 })
+
+  // The review table, at 375px, for the first time.
+  await measureScreen(page, 'import — the review table', {
+    mustShow: /127,500|Alexandra Fenwick-Harrington/,
+  })
+
+  check(
+    'and nothing was created by looking at it',
+    (
+      await db
+        .select({ email: recipients.email })
+        .from(recipients)
+        .where(like(recipients.email, `${PREFIX}-import%`))
+    ).length === 0,
+    'the review step created recipient rows, which is the one thing it promises not to do',
+  )
 }
 
 async function verifyThePolicyInPractice(page: Page): Promise<void> {

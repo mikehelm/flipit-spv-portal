@@ -750,6 +750,24 @@ pnpm verify:viewport
 
 That starts the application, opens a real browser at phone size, signs itself in as both an administrator and an investor, and walks every screen measuring each one — 332 checks. It needs a database and takes a few minutes.
 
+## Two screens that had been checked empty, and a real fault behind them
+
+There is a run that opens every screen in the application on a phone-sized window and measures it — no sideways scrolling, nothing off the edge, every button big enough for a thumb, every piece of text readable against its background. It has been reported green for weeks.
+
+**It had been measuring two of them with nothing on them.** The questions screen said *"Nothing is waiting"*. The register screen said *"Nobody is on the register"*. Both were checked, both passed, and in both cases the thing that was not being drawn is **a table** — a list of questions with names and dates, and a register with an amount in every row. A table of figures is the widest thing this application puts on a page and by far the likeliest to push it sideways on a phone. So the two screens most at risk were the two whose layout had never actually been looked at.
+
+**And a third was worse.** The import screen is four steps, and only the first one is reachable by opening the page — the rest appear after you choose a file and press a button. The run only ever saw step 1: a heading and a file picker. **Step 3 is the review table** — every recipient, with their amount, both percentages, their deadline and their jurisdiction, and totals underneath. It is the widest thing in the whole application, and nothing had ever measured it on a phone.
+
+All three are now populated and measured. The run went from 332 checks to 357.
+
+**It immediately found a real fault.** On the column-mapping step of the import — the screen where you tell the application which spreadsheet column is which — the eight dropdowns were **36 pixels tall**. The standard, which every other control in the application meets and which this run enforces everywhere else, is 44. They were too small to tap comfortably, on the screen where you are matching up a file of real people's money, and it had been that way since the wizard was written. Nothing had caught it because nothing had ever got to that step.
+
+Both dropdowns are now the right size. That fault could not have been found by reading the code — it needed a real browser, at that width, on a step that only exists after two clicks and a real file.
+
+> **One more thing worth saying, because it is the third time.** Three checks in a row have now turned out to be green for the wrong reason: one that waited for a page to look right instead of waiting for the thing to be true, one that was reading a hidden copy of the page instead of the page, and now two that were measuring empty screens. None of them was broken in a way anybody would notice; all three were reporting success about something they were not looking at. This is now being hunted deliberately rather than stumbled over, and the question being asked of each check is a blunt one: *would this still pass if the thing it names were simply not there?*
+
+---
+
 ## The forty-eight things this was meant to do
 
 The specification ends with a list of forty-eight things that have to be true before this is finished. **`ACCEPTANCE.md` in this repository is that list, with the test that proves each one beside it.**

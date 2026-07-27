@@ -6620,3 +6620,177 @@ are green. `pnpm verify:viewport` is 336 of 336; `pnpm verify:deployment` 103 of
   shape as the wait that failed, and none have been read with that in mind.*
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
+
+## Two screens audited empty, and a tap target nobody could have found
+
+The last entry's first Uncertain item named the family and guessed at the
+members:
+
+> *"How many other checks are vacuous the way the QR one was? … The shape to look
+> for is a check that would still pass if the thing it names were **absent**, and
+> there is no mechanical test for it. `/admin/invites` with no invites, `/audit`
+> with an empty log, `/questions` with no questions and `/register` with nothing
+> in it are the obvious candidates — all four are audited, and all four may well
+> have been audited empty."*
+
+Two of the four guesses were right, a fifth nobody had guessed was worse, and
+fixing it exposed a **real accessibility defect that had been in the application
+since the import wizard was written**.
+
+**Measured first.** A throwaway pass printed the rendered length and text of all
+thirty-two screens `verify:viewport` visits. The interesting rows:
+
+    audit log          29,199 characters   full of data
+    investors           1,262              one account card, real
+    operator access     1,370              two pending invitations, real
+    questions           1,534              "Nothing is waiting."
+    register            1,589              "Nobody is on the register."
+    import                890              step 1 of four
+
+So `/audit` and `/admin/invites` were fine — the seed populates both. `/questions`
+and `/register` were being measured in their empty states and reported under the
+names of the populated screens. **And in both cases the thing not being drawn is a
+table**: a queue of questions with a name and a date against each, and a
+computed-order register with an amount in every row. A table of amounts is the
+widest thing this application draws and the likeliest to push a page sideways at
+375px, which is the entire subject of the script. The two screens whose layout
+risk was highest were the two whose layout had never been measured.
+
+**The fifth was `/import`.** Steps 2, 3 and 4 of the wizard are *client state on
+the same URL*, so no amount of visiting the path reaches them, and nothing in this
+repository had ever measured them. Step 3 is the review table — name, email,
+amount, SPV percentage, indirect percentage, deadline, jurisdiction, one row per
+recipient, with a totals block under it. It is the widest thing in the
+application and it had never been seen at 375px by anything.
+
+**Built.**
+
+- The fixture now seeds **a question waiting, a question answered and published,
+  and a name on the register with an indicative amount**, with deliberately
+  awkward content: a double-barrelled name, a long address, a six-figure amount
+  and a six-decimal percentage. A tidy row proves nothing about a narrow column.
+- `auditScreen` takes a **`mustShow`** pattern, set on every screen whose subject
+  is data, and fails if the screen is in its empty state. *A layout check on an
+  empty screen is not a weak check — it is a check of the empty state, reported
+  under the name of the populated one.*
+- `measureScreen` is `auditScreen` without the navigation, so a screen that is
+  client state can be measured where it lives.
+- `verifyTheImportWizardSteps` builds a two-row CSV in the page, presses *Read the
+  file*, measures **the columns**, presses *Check the file*, measures **the review
+  table** — and stops, asserting that nothing was created by looking at it.
+
+`verify:viewport` is 357, up from 332.
+
+**And the defect it found.** The column-mapping selects on step 2 are **36px
+tall** — under WCAG 2.5.5's 44px, which this script fails any tap target for on
+every other screen in the application. Eight of them at once, on the screen where
+an operator maps the columns of a file of real investors, and the sheet selector
+beside them the same. Both now carry `min-h-11`.
+
+That defect could not have been found by reading. It needed a browser, at that
+width, on a step that only exists after two button presses with a real file.
+
+**Decisions.**
+
+- ***`mustShow` matches a word from a seeded row, never from the page's own
+  chrome.*** `/register` contains the word "register" in its heading whether or
+  not anybody is on it. The pattern is `47,500` — the amount in the seeded row —
+  because the only string that proves a table rendered is a value from inside it.
+- ***The wizard stops before importing.*** Step 4 creates recipients, accounts and
+  offers, and the wizard's own promise is that nothing is created until the
+  operator confirms. Pressing that button would turn a layout script into one that
+  writes investor records. What step 4 looks like is still unmeasured, and that is
+  in the Uncertain list rather than worked around. A check asserts the review step
+  created nothing, which is the promise itself under test.
+- ***The inline-style checks are skipped for a wizard step, and this took two
+  attempts.*** The first version fell back to `page.content()` when there was no
+  served body, reasoning that the DOM is the fairer source for a policy about
+  style attributes. It is not, and **this repository already knew why**: an
+  earlier entry spent an afternoon on `<next-route-announcer style="position:
+  absolute">`, an invisible element Next adds client-side. `style-src-attr`
+  governs a style attribute in the markup a document was *parsed from* and does
+  not inspect one assigned later by script. The fallback duly reported two
+  violations, naming a real element, about nothing — reproducing exactly the
+  finding already documented as not a finding. A wizard step now gets its layout,
+  contrast and console measured and not its inline styles, because the document
+  those styles came from is `/import`, which is audited in its own right.
+- ***The selects were fixed rather than exempted.*** The overflow check has a
+  documented exemption for elements inside a deliberate horizontal scroller, and
+  adding a similar one here would have been one line. A 36px dropdown on a phone
+  is a real miss, on the screen with the most consequential dropdowns in the
+  application.
+- ***Q&A and register rows are deleted explicitly in cleanup as well as by
+  cascade.*** Both cascade from the account. A cascade that stops being declared
+  is a cleanup that silently stops cleaning, and this fixture writes a question
+  and an amount against a person's name.
+
+**Deviations.** None. One production change — `min-h-11` on two selects — and it
+brings a screen up to the standard every other screen already met.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. The seeded indicative amount is a string in the
+   money column, as every amount in this repository is.
+2. *A send path bypassing a gate?* No. The seeded published Q&A entry is written
+   directly to the row and sends nothing; `answerEmailSentAt` is left null.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No — and the register is the screen
+   where that risk is sharpest. Its own note says a displayed rank *"would leak
+   the existence and relative standing of other investors"*, which is why the
+   computed order is administrator-only. This entry renders that table for the
+   first time and renders it **only on the administrator's screen**; nothing was
+   added to any portal page, and the seeded entry belongs to the one seeded
+   account.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* **Read this one.** The fixture publishes an entry, so the rule
+    is now exercised by the layout audit as well as by `verify:qa`. Its
+    `questionPublic` is a rewrite with the asker removed — *"What happens to a
+    participation…"* rather than *"my participation"* — and it contains no amount,
+    no date, no address and no reference to a private conversation. The seeded
+    entry is what §6.7's anonymisation rule asks for rather than a string that
+    merely fills a table.
+11. *Can the AI path change a figure?* Untouched. The wizard is driven to the
+    review step, which is where a figure is *shown* before anything is created,
+    and the check that nothing was created is the one that matters here.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2446) and `pnpm build` are green.
+`pnpm verify:viewport` is 357 of 357; `pnpm verify:deployment` 103 of 103;
+`pnpm verify:recorder` 107 of 107.
+
+**Uncertain.**
+
+- ***Step 4 of the import wizard has still never been measured,*** and it is the
+  screen that reports what was created. Doing it means letting a layout script
+  create investor records and then remove them; the cleanup already deletes by
+  prefix, so this is a decision rather than an obstacle, and the decision made
+  here was not to.
+- ***`mustShow` is set on six screens and absent on twenty-six.*** Most of those
+  twenty-six are forms and switch panels with no data of their own, which is why
+  they are blank — but that judgement was made by reading the inventory once, and
+  a screen that grows a table later will not acquire a `mustShow` on its own.
+- ***The two questions and the register entry are one account's.*** A second name
+  in both tables would be a fairer test of a list at 375px, and would exercise the
+  ordering the register's whole screen is about. One row is a table with one row.
+- ***The inventory pass was thrown away.*** It is nine lines and it found two of
+  the three defects in this entry. As a permanent check it would need a per-screen
+  expected length, which is the kind of assertion that fails on every copy edit —
+  so it stays a technique rather than a test, recorded here so the next person
+  knows it exists.
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *The image upload preview and the email template preview are still
+  unexercised.*
+- *The error page has never been rendered by a real error.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *Nothing measures how long a 20 MB upload takes.*
+- *`waitFor` on a locator whose appearance depends on server state has still not
+  been read with that question in mind — and this entry added two more, on the
+  wizard, where they are legitimate: a wizard step is client state with no row to
+  poll.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *The password-reset journey is still not built,* and belongs in
+  OPEN_DECISIONS.md as a question for Michael.

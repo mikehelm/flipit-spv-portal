@@ -237,7 +237,7 @@ export function ImportWizard() {
               id="sheet"
               value={analysis.sheetName ?? ''}
               onChange={(event) => upload(event.target.value)}
-              className="mt-1 block w-full rounded-md border hairline bg-bg2 px-2 py-2 text-sm text-ftext sm:w-64"
+              className="mt-1 block min-h-11 w-full rounded-md border hairline bg-bg2 px-2 py-2 text-sm text-ftext sm:w-64"
             >
               {analysis.sheetNames.map((name) => (
                 <option key={name} value={name}>
@@ -318,7 +318,18 @@ export function ImportWizard() {
                         setPreview(null)
                         setStep('map')
                       }}
-                      className="w-full rounded-md border hairline bg-bg2 px-2 py-2 text-sm text-ftext"
+                      /*
+                       * `min-h-11` is WCAG 2.5.5's 44px, and it was missing.
+                       *
+                       * These two selects were 36px tall for as long as the
+                       * wizard has existed, and `verify:viewport` — which fails
+                       * any tap target under 44px on every other screen in the
+                       * application — had never seen them: they are step 2 of a
+                       * client-side wizard, and the audit only ever loaded
+                       * step 1. Eight of them at once, on the screen where an
+                       * operator maps the columns of a file of real investors.
+                       */
+                      className="min-h-11 w-full rounded-md border hairline bg-bg2 px-2 py-2 text-sm text-ftext"
                     >
                       <option value={IGNORE_COLUMN}>Do not import this column</option>
                       {TARGET_FIELDS.map((field) => (
