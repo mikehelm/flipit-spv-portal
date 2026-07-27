@@ -45,13 +45,13 @@
 
 :root {
   --line: rgba(255, 255, 255, 0.09);
-  --user-text-scale: 2;
+  --user-text-scale: 1.5;
 }
 
 /*
- * Mike asked for the portal to start at twice its former text size while
+ * Mike asked for the portal to start at 50% above its former text size while
  * leaving cards, gutters and controls at their designed dimensions. The
- * account curl carries the A-/A+ control and changes this one variable.
+ * visible floating A-/A+ control changes this one variable.
  *
  * These rules scale Tailwind's typography utilities, not the root rem. A
  * larger root rem would also double every width and padding, which would make

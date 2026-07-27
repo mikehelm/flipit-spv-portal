@@ -7112,3 +7112,45 @@ brings a screen up to the standard every other screen already met.
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
+
+## 2026-07-27 — 1.5× text default and wide-screen use
+
+**Built.**
+
+- The default typography scale is 1.5× instead of 2×.
+- A small `Text 150%` control is always visible at the bottom-right of every
+  page. Hover or keyboard focus reveals A− and A+ in 25% steps from 100% to
+  200%.
+- The old 2× browser preference key was versioned rather than reused, so a
+  previous automatic 2× value cannot silently keep this release oversized.
+- The administrator frame now uses `max-w-6xl` instead of `max-w-4xl`, preserving
+  outer cushion while letting navigation, prose and cards use more of a wide
+  screen.
+
+**Decisions.**
+
+- The text control is global rather than hidden under the account curl. It is a
+  reading aid, not account administration, and must be easy to discover before
+  somebody knows what the curl contains.
+- Font scaling still changes typography utilities rather than the root `rem`, so
+  the wider frame does not enlarge padding, controls or card dimensions.
+
+**Deviations.**
+
+- None from Mike's corrected direction. The earlier 2× default and curl-only
+  control were replaced.
+
+**Checklist.**
+
+- `src/lib/portal/demo-preview.test.ts`: 7 of 7.
+- `pnpm typecheck`: passed.
+- Focused ESLint on the new control, both layouts and its regression test:
+  passed.
+- `pnpm build`: passed using the existing protected review-deployment
+  environment; no secret was copied into source control.
+
+**Uncertain.**
+
+- Mike's own browser is the acceptance surface for the balance between the new
+  1.5× type and 72rem-wide administrator frame. The control can immediately move
+  that preference down to 125% or up to 175% without another release.

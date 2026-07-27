@@ -82,7 +82,7 @@ export default async function AdminLayout({
         <PortalPreviewSwitch mode="ADMIN" role={admin.role} />
       ) : null}
 
-      <div className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6 sm:py-10">
+      <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-10">
         <header>
           <p className="pr-24 text-[11px] font-bold uppercase tracking-[0.22em] text-orange">
             Flipit Global SPV

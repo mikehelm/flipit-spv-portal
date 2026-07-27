@@ -72,7 +72,6 @@ describe('John Doe investor preview', () => {
     expect(menu).toContain('!z-20')
     expect(menu).toContain('z-10')
     expect(menu).toContain('opacity-0')
-    expect(menu).toContain('<TextSizeControl />')
     expect(menu).toContain('onPointerEnter={() => setHovered(true)}')
     expect(menu).toContain('hidden={!visible}')
     expect(menu).toContain("event.key === 'Escape'")
@@ -96,14 +95,20 @@ describe('John Doe investor preview', () => {
     expect(switcher).not.toContain('preview=')
   })
 
-  it('defaults text to twice the previous size and keeps hover controls in the curl', () => {
+  it('defaults text to 50% above the previous size and keeps a visible hover control on every page', () => {
     const styles = read('src/app/globals.css')
     const control = read('src/components/text-size-control.tsx')
+    const rootLayout = read('src/app/layout.tsx')
+    const adminLayout = read('src/app/(admin)/layout.tsx')
 
-    expect(styles).toContain('--user-text-scale: 2')
+    expect(styles).toContain('--user-text-scale: 1.5')
     expect(styles).toContain('calc(0.875rem * var(--user-text-scale))')
-    expect(control).toContain('const DEFAULT_TEXT_SCALE = 2')
+    expect(control).toContain('const DEFAULT_TEXT_SCALE = 1.5')
+    expect(control).toContain("const STORAGE_KEY = 'flipit-text-scale-v2'")
+    expect(control).toContain('group-hover:max-w-24')
     expect(control).toContain('Make text larger')
     expect(control).toContain('Make text smaller')
+    expect(rootLayout).toContain('<TextSizeControl />')
+    expect(adminLayout).toContain('max-w-6xl')
   })
 })

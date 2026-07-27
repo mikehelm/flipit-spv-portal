@@ -35,7 +35,6 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Correct 1.5x default text sizing, visible page control, and wide-screen admin layout | Codex font-width repair | 2026-07-27 10:19 UTC | `CLAIMS.md`, `src/app/globals.css`, `src/app/layout.tsx`, `src/app/(admin)/layout.tsx`, `src/components/account-curl-menu.tsx`, `src/components/text-size-control.tsx`, `src/lib/portal/demo-preview.test.ts`, `PROGRESS.md` |
 
 ## Done, so nobody starts it again
 

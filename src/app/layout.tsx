@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { TextSizeControl } from '@/components/text-size-control'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -69,6 +70,7 @@ export default function RootLayout({
           Skip to content
         </a>
         <div className="flex-1">{children}</div>
+        <TextSizeControl />
       </body>
     </html>
   )

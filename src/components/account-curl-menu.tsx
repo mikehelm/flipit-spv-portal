@@ -3,7 +3,6 @@
 import { usePathname } from 'next/navigation'
 import { type FocusEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { CurlCorner } from '@/components/effects/CurlCorner'
-import { TextSizeControl } from '@/components/text-size-control'
 
 /**
  * The account controls live physically beneath the signature page curl.
@@ -106,7 +105,6 @@ export function AccountCurlMenu({
         <p className="mt-1 break-words text-xs text-dim">{email}</p>
         <p className="mt-1 text-xs text-silver2">{roleLabel}</p>
         <div className="mt-4 border-t hairline pt-4">{children}</div>
-        <TextSizeControl />
       </section>
     </div>
   )
