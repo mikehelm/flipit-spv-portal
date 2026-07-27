@@ -840,7 +840,26 @@ It is now looked at on purpose, and the thing being checked is that you can tell
 
 Those two land on the same screen and mean very different things. The run now checks that the refusal screen says the whole file is stopped and does *not* use the word held; that it names the exact number that is wrong and what to change; that the import button is switched off; that it does not quietly offer to import just the surviving rows; and that nothing was created by any of it.
 
-**The whole phone-sized run is now 427 checks**, up from 357 at the start of the day.
+**The whole phone-sized run is now 441 checks**, up from 357 at the start of the day.
+
+---
+
+## And the same breakage, on an investor's own page
+
+The section above broke the application and looked at what an *administrator* sees. The more important question is what an **investor** sees, because there is one rule in this project that matters more than any other: nothing an investor is ever shown may reveal that any other investor exists.
+
+That rule has been checked on every ordinary page for months. It had never been checked on an **error**, for the simple reason that nobody had ever produced one.
+
+Now it has been. With the database gone, an investor's portal is opened and the whole response is read — not just what is drawn on screen, but everything sent to the browser. It is checked for: any person's name, any email address, any money figure, any count of anybody ("3 investors", "2 offers"), and any hint of what actually went wrong. None of it is there.
+
+Two other things are checked on that same screen, and both are promises the page has always made and nobody had tested under real failure:
+
+- it says **"nothing has been sent anywhere"** — which is the sentence somebody reads when they are wondering whether their money just moved;
+- it does **not** bounce them to a sign-in form asking who they are, which would be an alarming thing to meet when a page has just failed.
+
+**And one last screen, which turns out not to exist.** There is a second, deeper error page in the application, meant for the case where even the outer shell of the page fails. Nothing had ever made it appear — and looking into why, it turns out **nothing can**. The outer shell of this application reads nothing at all: no database, no settings, no cookies. It is just the page frame. So it cannot fail, and the deeper error page can never be reached.
+
+It has been left in place — it costs nothing, and the day it is ever needed is the day nothing else is working. But the note inside it, which used to describe a way of reaching it that does not actually work, has been corrected. And there is now a test that fails the moment somebody makes the outer shell read something, because that would quietly change which of the two error pages a broken application shows you.
 
 ---
 

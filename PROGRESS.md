@@ -7316,3 +7316,147 @@ and only its docstring.
   sessions on Michael's own machine, neither on any Uncertain list.
 - *The password-reset journey is still not built, and is now question 10 in
   OPEN_DECISIONS.md.*
+
+## The same failure, on the investor's portal — and the screen that cannot be reached
+
+The last entry's first Uncertain item, and its fourth, in one go.
+
+> *"The error page has never been reached by an investor's route. `/admin` is an
+> operator's screen. `/portal/...` is where the sentence 'nothing has been sent
+> anywhere' matters most."*
+
+> *"`global-error.tsx` is still unrendered by anything … It is the last
+> unrendered screen in the application."*
+
+**The investor's error, first, because it is the one that matters.** The review
+checklist's fifth question is *"does any investor-facing response, page or error
+reveal that another investor exists?"* — and the word **error** in that sentence
+had never been tested, for the plain reason that until the last entry no error
+had ever been produced.
+
+It is now. The same broken second server, a cookie that is not a portal session,
+and `/portal` answers 500 inside a real render. Then the fifth question, asked of
+a failure for the first time: the response is read whole — payload and attributes
+— and asserted to contain **no name, no address, no amount, no count of anybody,
+and no fact about the fault**. The seeded investor is a row in the *working*
+database, which this server cannot reach at all, so none of those strings could
+be present by accident. That is the point of the shape: what is being checked is
+that the failure path does not reach for a name in order to be helpful.
+
+Two more on the same screen: the branded page carries the sentence *"nothing has
+been sent anywhere"*, which is what a person reads when they are wondering
+whether their money moved; and it does **not** send them to a form asking who
+they are, which is `error.tsx`'s oldest stated promise and had never been checked
+under fault.
+
+**And the screen that cannot be reached.** `global-error.tsx` handles a failure
+of the root layout. Nothing had ever rendered it, and the reason turns out to be
+that **nothing can**.
+
+Its own docstring said: *"the realistic way to reach it is a failure in `env()` —
+the boot-time validation the root layout's children depend on."* That is wrong,
+and it is wrong in a way that reads as right. `env()` is called by the layout's
+**children**. A failure there renders `error.tsx` — which the last entry drove
+against a real database fault and measured — and never reaches this file. The
+root layout itself imports nothing, awaits nothing and reads nothing: it is
+markup, a language attribute, a skip link and a `viewport` object.
+
+So `global-error.tsx` is a net under a wire nobody walks. It is **kept**, because
+it costs nothing, because the framework can reach it for a failure that is not
+this application's code at all, and because the day it is reached is the day
+nothing else works. What is added is the thing that keeps the statement true:
+`root-layout-purity.test.ts` fails if the root layout ever grows an application
+import, an `await`, or a call that reads the environment, the database, a cookie
+or a header. The moment somebody adds a footer that checks a service flag, the
+failure mode moves from a screen that has been rendered under fault to a screen
+that has not, and they have to come and decide that deliberately.
+
+Both docstrings now say what is true rather than what was assumed.
+
+`pnpm verify:viewport` is **441**, up from 427.
+
+**Decisions.**
+
+- ***`global-error.tsx` was kept, not deleted.*** Unreachable code is normally
+  worth removing, and the argument for deleting it is real: a file nothing can
+  render is a file nothing can prove. It stays because the cost is a few lines
+  and the alternative — reaching the framework's own unstyled default on the one
+  day everything else has failed — is the exact outcome `not-found.tsx` and
+  `error.tsx` were both written to avoid. The conservative reading of an
+  ambiguous case, recorded here as §the rules require.
+- ***The purity test checks imports and calls, not rendered output.*** A layout
+  that reads nothing cannot throw for a reason a test could simulate. The import
+  list is what a future change actually touches, so that is what is pinned.
+- ***The investor leak patterns name the seeded fixture's own strings.*** Generic
+  patterns — any capitalised pair of words, any number with a comma — would fire
+  on the framework's own payload. Naming the three fixture surnames and the
+  seeded amount makes the check specific enough to mean something and blunt
+  enough to fail loudly if the failure path ever renders a row.
+- ***Cookies are cleared before the portal cookie is set.*** The same context had
+  an administrator's cookie on it. Leaving both would have made it ambiguous
+  which lookup produced the fault, and the check is about the investor's route.
+
+**Deviations.** None. Two production files touched, both docstrings only.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here computes.
+2. *A send path bypassing a gate?* No. Nothing here sends, and the check that the
+   error page says *"nothing has been sent anywhere"* is a check on a sentence,
+   not on a gate.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does any investor-facing response, page or error reveal that another investor
+   exists?* **This entry is that question, asked of an error.** Five patterns
+   against the whole response on the investor's own route: no name, no address,
+   no amount, no count, no fault.
+6. *Tokens?* Untouched. The cookie is not a session and is rejected as one.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2476, up from 2472) and `pnpm build`
+are green. `pnpm verify:viewport` is 441 of 441.
+
+**Uncertain.**
+
+- ***The purity test cannot see a transitive read.*** It forbids an application
+  import in `layout.tsx`. It cannot stop somebody putting a data read inside a
+  component that the layout renders through `children`, which is the whole design
+  and is fine — but it also cannot stop a future `layout.tsx` importing something
+  from `node_modules` that reads at module scope. That is remote and it is not
+  covered.
+- ***`global-error.tsx` remains unrendered, and that is now a stated position
+  rather than a gap.*** If it is ever wanted under measurement, the way in is a
+  build-time fault rather than a runtime one, and this session did not try it.
+- ***One fault shape, now on two screens.*** A database that is not there. A
+  throw inside a server action, a media stream failing mid-response and an
+  out-of-memory each reach a different boundary and none is driven.
+- ***The investor error page was reached with a cookie, not with a claim.*** A
+  genuinely claimed portal session on a server whose database has gone is a
+  fixture ordering problem — the claim needs the database that the fault removes.
+  What is measured is the render, which is the same render; what is not measured
+  is a failure *part way through* a session that was working a second ago.
+- *The blank pre-hydration body is recorded and not decided.*
+- *The refusal screen is measured with one kind of refusal.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS.md
+  §11 — and three checks now depend on the current behaviour.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *The six newly-wired scripts are wired, not scheduled; there is no
+  `verify:all`, and `DEPLOYMENT.md` names none of them.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *The image upload preview and the email template preview are still
+  unexercised.* This is now the oldest item on the list that nobody has started.
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *Nothing measures how long a 20 MB upload takes.*
+- *`waitFor` on a locator whose appearance depends on server state has still not
+  been read with that question in mind.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`mustShow` is set on nine screens and absent on twenty-six.*
+- *Two rows in CLAIMS.md are past the six-hour staleness rule and were left
+  alone.*
+- *The password-reset journey is still not built — OPEN_DECISIONS.md §10.*

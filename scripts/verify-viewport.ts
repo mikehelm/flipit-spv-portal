@@ -2319,8 +2319,83 @@ async function verifyTheErrorPage(browser: Browser): Promise<void> {
       servedText.replace(/Admin — Flipit SPV/, '').trim().length < 40,
       `the served 500 body drew ${servedText.length} characters: ${servedText.slice(0, 200)}`,
     )
+
+    await verifyTheErrorAnInvestorGets(page, origin)
   } finally {
     await context?.close()
     stopServer(broken)
   }
+}
+
+/**
+ * The same failure, on the investor's own portal.
+ *
+ * Everything above is an operator's screen. §16 and the review checklist's fifth
+ * question are about **an investor's**: *"does any investor-facing response, page
+ * or error reveal that another investor exists?"* — and the word `error` in that
+ * sentence had never been tested, because no error had ever been produced.
+ *
+ * It is the sharpest instance of the rule there is. An investor whose portal
+ * fails to render is the one reader in this system who must be told nothing:
+ * not that a database exists, not what is in it, and above all not that anybody
+ * else is in it. The page's own promise — *"nothing has been sent anywhere"* —
+ * is the sentence a person reads when they are wondering whether their money
+ * moved, so it has to be there and it has to be the whole of what they get.
+ *
+ * Reached the same way as the operator's: a cookie that is not a session, which
+ * makes the lookup happen before anything asks whether the cookie is any good.
+ */
+async function verifyTheErrorAnInvestorGets(page: Page, origin: string): Promise<void> {
+  await page.context().clearCookies()
+  await page.context().addCookies([
+    { name: 'spv.portal_session', value: 'not-a-session', domain: '127.0.0.1', path: '/' },
+  ])
+  complaints.length = 0
+
+  const response = await page.goto(`${origin}/portal`, { waitUntil: 'networkidle' })
+  check(
+    "an investor's portal answers 500 rather than something worse",
+    response?.status() === 500,
+    `returned ${response?.status()}`,
+  )
+
+  const shown = await onScreen(page)
+  check(
+    'and the investor gets the branded page with the sentence that matters',
+    /Something went wrong at our end/.test(shown) && /nothing has been sent anywhere/.test(shown),
+    shown.slice(0, 300),
+  )
+
+  await measureScreen(page, "error page, on an investor's portal", {
+    expected: 500,
+    expectedComplaint: /An error occurred in the Server Components render/,
+  })
+
+  /*
+   * The fifth question, asked of an error for the first time. The seeded
+   * investor is a real row in the working database — a different database from
+   * the one this server is failing to reach — so none of this could be here by
+   * accident, which is the point: what is being checked is that the failure path
+   * does not reach for a name to be helpful with.
+   */
+  const sent = await everythingSent(page)
+  for (const [what, pattern] of [
+    ['a name', /Fenwick-Harrington|Ravensworth-Cole|Ashby-Lowell/],
+    ['an address', /@example\.test|@flipthepage\.com|@gmail\.com/],
+    ['an amount', /127,500|\$[\d,]{4,}/],
+    ['a count of anybody', /\b\d+ (investor|recipient|account|offer)/i],
+    ['a fault', /does not exist|relation|postgres(ql)?:\/\/|spv-no-such-database/i],
+  ] as const) {
+    check(
+      `the investor's error response contains no ${what}`,
+      !pattern.test(sent),
+      `${pattern} matched what was sent to an investor`,
+    )
+  }
+
+  check(
+    'and it does not send them to a form asking who they are',
+    !/Sign in|email address|password/i.test(shown),
+    'an investor whose portal failed was asked to identify themselves',
+  )
 }
