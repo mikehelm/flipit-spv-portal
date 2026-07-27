@@ -21,16 +21,65 @@ available on both, which is what makes the testing deployment useful at all.
 
 ## 0. Before anything
 
-- [ ] `pnpm check` passes — typecheck, lint, 1,300+ tests, and a production build.
-- [ ] `pnpm verify:deployment` passes. It builds under `/SPV`, serves it, and
-      asks a running server whether every link, cookie path and indexing header
-      is right. **The configuration and the served response have disagreed
-      before**; this is the check that noticed.
-- [ ] `pnpm verify:restore` passes. It dumps, restores into a scratch database
-      and reads the figures back out.
-- [ ] The database verification scripts pass: `verify-qa`, `verify-register`,
-      `verify-updates`, `verify-reminders`, `verify-rounds`, `verify-export`,
-      `verify-certificate`, `verify-lifecycle`.
+- [ ] `pnpm check` passes — typecheck, lint, 2,500+ tests, and a production build.
+- [ ] **`pnpm verify:all` passes.** One command, every verification, one at a
+      time. Read the summary table at the end rather than the scroll: it names
+      each script, what it proves, how long it took and how many checks it ran.
+
+      **A skip is not a pass, and the exit code says so.** If Chromium is not
+      installed or `pg_restore` is not on the PATH, the scripts that need them
+      are skipped *by name, with the fix printed beside them*, and the command
+      still exits non-zero. Do not release on a run that reported skips — four
+      of them are the browser-driven ones, and between them they are the only
+      proof that every screen works at 375px, that the upload limits refuse what
+      they claim to, and that the recorder records.
+
+      It runs them **serially on purpose**: they all seed fixtures into the same
+      database and clean up by prefix, so two at once would delete each other's
+      rows intermittently. Do not run two verification commands side by side, for
+      the same reason.
+
+      It builds **once** if there is no `.next`, for the five scripts that need
+      one, and deliberately does not rebuild when one already exists — discarding
+      a build somebody was mid-way through examining is not its decision. It says
+      which it did.
+
+      `pnpm verify:all media qa` runs only the ones whose names match, which is
+      what to use while fixing one of them.
+
+The list below is what `verify:all` runs, and it is kept in step by
+`src/lib/verify/verify-all.test.ts` — a script added to `package.json` and not to
+the runner fails that test rather than quietly never being run again.
+
+| Command | What it proves | Needs |
+| --- | --- | --- |
+| `verify:reminders` | the reminder window, the cap and the lock | |
+| `verify:rounds` | a round's modes, and that no deadline closes anything on its own | |
+| `verify:register` | the interest register's computed order and its isolation | |
+| `verify:qa` | the Q&A anonymisation rule, with a second investor present | |
+| `verify:updates` | an update reaching a portal, and the notification that follows | |
+| `verify:certificate` | the participation certificate, rendered and read back | |
+| `verify:acknowledgements` | the acknowledgement wording and what it records | |
+| `verify:email-change` | an investor changing their address, both halves of it | |
+| `verify:lifecycle` | suspension, closure and read-only sign-in | |
+| `verify:export` | the CSV and XLSX exports, and that no secret is in one | |
+| `verify:documents` | a document package issued, served and revoked | |
+| `verify:roadmap` | the portal roadmap tiles | |
+| `verify:2fa` | the second factor, enrolled and demanded | |
+| `verify:health` | the health endpoint, present and absent | |
+| `verify:media` | ingest, metadata stripping and serving, against a real store | |
+| `verify:object-store` | the S3 client against a real socket that verifies signatures | |
+| `verify:restore` | a dump restored into a scratch database and read back | `pg_restore` |
+| `verify:memory` | what the server holds after a long run | a build |
+| `verify:deployment` | every route, link and header under a base path | a build |
+| `verify:account-access` | who can reach what, driven in a browser | a build, Chromium |
+| `verify:uploads` | every upload limit, from a browser, at its real size | a build, Chromium |
+| `verify:recorder` | the video recorder, recording and playing back | a build, Chromium |
+| `verify:viewport` | every screen at 375px, in a real browser | a build, Chromium |
+
+`pnpm acceptance` is deliberately **not** in that list. It prints the §22
+acceptance table rather than checking anything, and it is worth reading once
+before a release on its own.
 
 ---
 
@@ -325,6 +374,15 @@ Worth knowing before you meet one at speed.
 Two entries. `pnpm reminders:run` sends the reminders that are due and, on a
 deadline date, the §6.6 digest to the operator. `pnpm check:health` watches it,
 and everything else that can go quietly wrong.
+
+**`pnpm verify:all` is deliberately not one of them**, and the reason is worth
+stating so that nobody adds it later without meaning to. Every one of those
+scripts *writes to the database* — it seeds fixtures, drives them and deletes
+them by prefix — and several bind a fixed port and start a second copy of the
+application. On a production host, on a schedule, that is a job creating and
+destroying investor-shaped rows in the live database beside real ones, unattended,
+in the middle of the night. It is a release gate run by a person on a machine
+they are looking at, and §0 is where it belongs.
 
 ```cron
 # Reminders and the deadline digest. Hourly, on the hour.

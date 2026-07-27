@@ -8145,3 +8145,233 @@ application's.
 - *Two rows in CLAIMS.md are past the six-hour staleness rule and were left
   alone.*
 - *The password-reset journey is still not built — OPEN_DECISIONS.md §10.*
+
+## One command for twenty-three, and the two things it found on its first use
+
+The previous entry's oldest unstarted item, and the note it inherited:
+
+> *The six newly-wired scripts are wired, not scheduled; there is no
+> `verify:all`, and `DEPLOYMENT.md` names none of them.*
+
+> *"There is no command that runs every verification in turn, and with
+> twenty-three of them there probably should be — but several need a built
+> application and one needs an object store, so an honest `verify:all` is a piece
+> of work rather than a line."*
+
+`pnpm verify:all` runs all twenty-three, one at a time, and prints a table: each
+script, what it proves, its duration and its own tally. **23 passed, 0 failed, 0
+skipped — 1,556 checks in five minutes.**
+
+That last sentence is new. Before this entry nothing in this repository had ever
+run all twenty-three, and two of them had been quietly broken for an unknown
+length of time.
+
+### What makes it honest rather than a `&&` chain
+
+***Serially, and that is not a performance oversight.*** Every one of these seeds
+fixtures into the same database and deletes them by prefix. Two at once would
+interleave and delete each other's rows, intermittently — the worst kind of
+failure. Three of them additionally bind a fixed port. The order puts the fast
+ones first, so a repository broken in an ordinary way says so in five seconds
+rather than in five minutes.
+
+***One build, not five.*** Five scripts start a server from `.next`. It builds
+once if there is none, and deliberately does **not** rebuild when one exists —
+discarding a build somebody was mid-way through examining is not its decision.
+It prints which it did.
+
+***A prerequisite is proved by using it, never by looking for it.*** This was
+learnt twice in one session, both times the hard way. See below.
+
+***A skip is not a pass.*** A missing prerequisite produces a named skip with the
+fix printed beside it, the skip is listed in the summary, and **the exit code is
+non-zero**. A machine without Chromium would otherwise have reported success
+while four scripts — including every screen at 375px — never ran. This is the one
+command somebody runs before a release, and a green total over 19 of 23 is the
+exact shape this repository keeps being caught by.
+
+`verify-all.test.ts` keeps the declared table in step with `package.json` in both
+directions, and asserts every prerequisite flag against what each script's source
+actually does — a new browser-driven script that forgets `'BROWSER'` fails a test
+rather than failing confusingly on somebody's laptop.
+
+### The first thing it found: a verification that poisoned itself
+
+**`verify:certificate` passed on its first full run and failed on the second.**
+
+It asserts *"issuing is refused while no signatory name is configured"*, then
+configures a name to continue — and put the name back **at the end of the happy
+path**, not in a `finally`. So the first time that script failed for any reason
+at all, the name stayed configured, and every run afterwards failed at that
+check, on a perfectly correct application, with an error about a certificate that
+*"already states these figures"*.
+
+A verification that breaks the database it verifies, using its own failure as the
+poison, is worse than no verification. And nothing could have found it except
+running the thing twice, which is what a `verify:all` makes cheap.
+
+Fixed in two places, and the second is the more important:
+
+- the restore is now a `finally` on `main()`'s chain, awaited **before**
+  `process.exit` — a `process.exit` in the next link would cut a pending write
+  off mid-flight.
+- the check now **arranges its precondition** rather than assuming it. It used to
+  rely on the seed configuring no name, which made it a check on the starting
+  state of the database wearing the name of a check on the application. It now
+  remembers what was there, clears it, asserts the refusal against a state it
+  created, and puts the original back.
+
+Run four times consecutively from three different starting states — no name, a
+name it set, and `'Somebody Else'` — passing every time and restoring exactly
+what it found.
+
+### The second thing it found: a browser that is not a browser
+
+**`verify:recorder` and one check in `verify:viewport` need a camera, and
+Playwright's default headless browser has not got one.**
+
+Playwright launches `chrome-headless-shell` in headless mode. It exposes
+`navigator.mediaDevices.getUserMedia` — so any check for the API's *presence*
+passes — and every call throws `NotSupportedError: Not supported`, because the
+shell has no capture backend and `--use-fake-device-for-media-stream` does not
+give it one. The full Chromium build has one.
+
+The symptoms were two different confusing failures: `verify:recorder` timing out
+after twenty seconds waiting for a *Start recording* button that could never
+appear, and `verify:viewport` reporting 531 of 532 with the detail
+`NotSupportedError: Not supported`, which reads like the application refusing
+rather than the browser being unable. **Both are 107 of 107 and 532 of 532 under
+a full Chromium.**
+
+`CAMERA` is now a declared prerequisite, checked up front by opening a camera on
+a secure origin — `localhost`, with every request fulfilled from memory, so no
+server is needed — and reported as a named skip naming `CHROMIUM_PATH`.
+
+***And the browser check itself was wrong first.*** Its first version compared
+`chromium.executablePath()` against the filesystem and declared Chromium missing
+on a machine where all four browser scripts then ran perfectly by hand. A
+prerequisite check that guesses turns a working run into a skip, and a skip is
+the thing this script shouts about. Both checks now do the thing rather than look
+for it.
+
+### Documented
+
+`DEPLOYMENT.md` §0 now leads with `pnpm verify:all` and carries the full
+twenty-three-row table — command, what it proves, what it needs — with the skip
+rule spelled out. §8 states, with the reason, that **it is deliberately not a
+cron entry**: every one of these writes to the database and several start a
+second copy of the application, so on a production host on a schedule it would be
+a job creating and destroying investor-shaped rows beside real ones, unattended,
+overnight. It is a release gate run by a person at a machine.
+
+### A correction
+
+The note this entry started from said *"one needs an object store."* That has
+stopped being true: `verify:object-store` runs against `FakeS3`, a real socket
+that verifies every signature, and needs no bucket and no credentials. **Nothing
+in this repository requires an external service.** Recorded in the runner's
+docstring so the next person does not go looking for one.
+
+**Decisions.**
+
+- ***`acceptance` is not in the list.*** It prints the §22 table rather than
+  checking anything. A command that runs every *verification* should not also
+  print a document, and `pnpm acceptance` remains its own thing.
+- ***A skip exits non-zero even when nothing failed.*** The tempting alternative
+  is to exit zero when nothing actually broke. It is the wrong call for a release
+  gate, and the summary distinguishes the two cases in words so nobody has to
+  guess which they are looking at.
+- ***The prerequisite table lives in the runner, not in each script.*** A script
+  that declared its own would be read only when it ran, which is too late to
+  report a skip before a twenty-minute run. The test is what stops the two
+  drifting.
+- ***`verify:all` builds but never migrates or seeds.*** Several scripts refuse
+  outright without an open round and say `Run pnpm db:seed first`. Seeding on
+  their behalf would mean this command silently reshaping a database somebody was
+  using.
+- ***The camera check does not pass `--use-fake-ui-for-media-stream`.*** That flag
+  auto-accepts a request a Permissions-Policy header has already refused, and an
+  earlier entry found it making a broken `camera=()` header look fine. The
+  prerequisite check uses the same flags `verify:recorder` uses, for the same
+  reason.
+
+**Deviations.** None. No production code changed in this entry — one runner, one
+test, one fix to a verification script, and the documents.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here computes.
+2. *A send path bypassing a gate?* No. The runner spawns `pnpm run` and nothing
+   else; `verify:certificate`'s change is to a display name, and the §8 mail gate
+   is untouched by both.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No. The summary prints script names,
+   durations and tallies. The `verify:certificate` fix touches one configuration
+   field and no investor record.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The runner passes
+   each script's own output straight through and adds only its own summary.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched, and `verify:deployment` — which exercises it —
+    is now run by the same command as everything else.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2526, up from 2509) and `pnpm build`
+are green. `pnpm verify:all` is **23 of 23, 0 skipped**, twice consecutively.
+
+**Uncertain.**
+
+- ***`verify:certificate` was the one that was broken. Nothing has asked the
+  question of the other twenty-two.*** Two consecutive clean runs say they are
+  idempotent *today*, on a database seeded today. What is not established is
+  whether any of them leaves something behind that only matters to a script that
+  runs later in the order, or to a run a week from now. The certificate defect
+  was invisible for exactly that reason, and it was found by accident.
+- ***The order is declared, not derived.*** Fast ones first, browser ones last.
+  Nothing asserts that a script does not depend on one earlier in the list having
+  run — and if one did, reordering would break it silently. The dependency would
+  be a defect either way; nothing looks for it.
+- ***Five minutes is this machine.*** Two of the three builds `verify:deployment`
+  performs dominate it. On a slower laptop this is a different proposition, and
+  nothing warns before starting.
+- ***A skip and a failure are different, and the exit code is the same.*** One
+  bit for two states. A caller that wanted to tolerate skips but not failures —
+  a CI job on a machine deliberately without a camera — has to read the summary.
+  Distinct exit codes were considered and not taken, because a number nobody
+  documents is a number nobody reads.
+- ***The camera prerequisite is proved on Chromium and nothing else.*** As is
+  everything else in this repository that touches a browser.
+- ***`verify:all` is not run by anything either.*** It is a release gate in
+  `DEPLOYMENT.md` §0, which is a checklist a person follows. That is the right
+  place for it and it is still a person remembering.
+- *One image, one format, one size in the media library; the edit and remove
+  forms are present and unpressed.*
+- *The styles in the email preview are proved applied by absence, not by
+  measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *The refusal screen is measured with one kind of refusal.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS.md
+  §11.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *Nothing measures how long a 20 MB upload takes.*
+- *`waitFor` on a locator whose appearance depends on server state has still not
+  been read with that question in mind.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*
+- ***Nothing else in OPEN_DECISIONS.md has been checked against the code***; §7 is
+  the one to read first. This is now the oldest item on this list that nobody has
+  started.
+- *Two rows in CLAIMS.md are past the six-hour staleness rule and were left
+  alone.*
+- *The password-reset journey is still not built — OPEN_DECISIONS.md §10.*

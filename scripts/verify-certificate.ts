@@ -76,6 +76,24 @@ function today(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+/**
+ * The signatory name as this script found it, put back on every path out.
+ *
+ * At module scope rather than inside `main` so the `finally` below can reach it.
+ * See the note where it is read: the restore used to sit at the end of the happy
+ * path, which meant one failure left the name configured and every subsequent
+ * run failed on a database this script had broken itself.
+ */
+let signatoryBefore: string | null | undefined
+
+async function restoreTheSignatory(): Promise<void> {
+  if (signatoryBefore === undefined) return
+  await db
+    .update(serviceConfig)
+    .set({ defaultSenderName: signatoryBefore })
+    .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
+}
+
 async function main(): Promise<void> {
   await cleanup()
 
@@ -266,13 +284,43 @@ async function main(): Promise<void> {
 
   console.log('\nThe certificate (§5.1)')
 
-  // The certificate is signed off by the operator in his stated role. The seed
-  // configures no name, and the refusal for that is itself worth asserting.
-  const configBefore = await db.query.serviceConfig.findFirst()
+  /*
+   * The certificate is signed off by the operator in his stated role, and the
+   * refusal while no name is configured is itself worth asserting.
+   *
+   * **The precondition is arranged, not assumed, and that is a fix rather than a
+   * tidy-up.** This used to rely on the seed configuring no name, which made it
+   * a check on the *starting state of the database* wearing the name of a check
+   * on the application. Two things went wrong with that, and the second one is
+   * nasty:
+   *
+   *   - anything else that had configured a sender — the operator's own
+   *     onboarding form, or `verify:viewport`'s email-preview fixture mid-run —
+   *     turned this into a silent false pass or a confusing failure.
+   *   - the restore at the end of `main` was **not in a `finally`**. So the
+   *     first time this script failed for any reason at all, the name stayed
+   *     set, and every run afterwards failed here — on a machine where the
+   *     application was perfectly correct, with an error about a certificate
+   *     that "already states these figures". A verification that poisons the
+   *     database it verifies, using its own failure as the poison, is worse than
+   *     no verification. Found by running `pnpm verify:all` twice.
+   *
+   * So: whatever was there is remembered, the name is cleared, the refusal is
+   * asserted against a state this script created, and the `finally` in `main`
+   * puts the original value back on every path out.
+   */
+  signatoryBefore = (await db.query.serviceConfig.findFirst())?.defaultSenderName ?? null
+
+  await db
+    .update(serviceConfig)
+    .set({ defaultSenderName: null })
+    .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
+
   const unsigned = await issueCertificate({ offerId: offer!.id, actor })
   check(
     'issuing is refused while no signatory name is configured',
     !unsigned.ok && unsigned.message.includes('signed off by the operator'),
+    unsigned.ok ? 'a certificate was issued with nobody signing it' : unsigned.message,
   )
 
   await db
@@ -437,11 +485,6 @@ async function main(): Promise<void> {
     !JSON.stringify(otherView).includes(issued.certificateId),
   )
 
-  await db
-    .update(serviceConfig)
-    .set({ defaultSenderName: configBefore?.defaultSenderName ?? null })
-    .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
-
   await cleanup()
 
   const orphans = await db
@@ -459,4 +502,7 @@ main()
     console.error(error)
     process.exitCode = 1
   })
+  // Before the exit, and awaited: `process.exit` in the next link would cut a
+  // pending write off mid-flight.
+  .finally(restoreTheSignatory)
   .finally(() => process.exit(process.exitCode ?? 0))

@@ -1,0 +1,182 @@
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+/**
+ * `verify:all` against the scripts it claims to run.
+ *
+ * The failure this exists for is a **silent** one, and it is the ordinary way a
+ * runner like this rots: somebody adds `verify:whatever` to `package.json`,
+ * `pnpm verify:whatever` works, and `pnpm verify:all` — the command run before a
+ * release — never runs it and never says so. The total stays green and the
+ * coverage quietly shrinks.
+ *
+ * So the list in `verify-all.ts` is asserted to be exactly the set of
+ * `verify:*` scripts, in both directions, and the prerequisite flags are
+ * asserted against what each script's source actually does. A new browser-driven
+ * script that forgets `'BROWSER'` would be *run* on a machine without Chromium
+ * and fail with a stack trace instead of a named skip, which is a smaller
+ * problem than the first one and still not one anybody should have to diagnose.
+ */
+
+const root = process.cwd()
+const runner = readFileSync(join(root, 'scripts/verify-all.ts'), 'utf8')
+const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+  scripts: Record<string, string>
+}
+
+/** The declared table, read out of the source rather than imported. */
+const declared = [...runner.matchAll(/\{ name: '([^']+)', proves: '([^']*)'(?:, needs: \[([^\]]*)\])? \}/g)].map(
+  (match) => ({
+    name: match[1]!,
+    proves: match[2]!,
+    needs: (match[3] ?? '')
+      .split(',')
+      .map((need) => need.trim().replace(/'/g, ''))
+      .filter(Boolean),
+  }),
+)
+
+/** Every `verify:*` in package.json, except the runner itself. */
+const wired = Object.keys(packageJson.scripts)
+  .filter((name) => name.startsWith('verify:') && name !== 'verify:all')
+  .map((name) => name.slice('verify:'.length))
+
+function sourceOf(name: string): string {
+  const command = packageJson.scripts[`verify:${name}`]!
+  const path = /tsx (scripts\/[\w-]+\.ts)/.exec(command)![1]!
+  return readFileSync(join(root, path), 'utf8')
+}
+
+describe('verify:all', () => {
+  it('parsed its own table — the regex above is not silently matching nothing', () => {
+    // Every check below is vacuous if this is empty, and a runner asserted
+    // against an empty list is the exact shape of failure this file is about.
+    expect(declared.length).toBeGreaterThan(20)
+  })
+
+  it('exists as a script', () => {
+    expect(packageJson.scripts['verify:all']).toBe('tsx scripts/verify-all.ts')
+  })
+
+  it('runs every verification that is wired up', () => {
+    const missing = wired.filter((name) => !declared.some((entry) => entry.name === name))
+    expect(
+      missing,
+      `these are in package.json and would never be run by verify:all: ${missing.join(', ')}`,
+    ).toEqual([])
+  })
+
+  it('and claims none that is not', () => {
+    const invented = declared.filter((entry) => !wired.includes(entry.name))
+    expect(invented.map((entry) => entry.name)).toEqual([])
+  })
+
+  it('names each one once', () => {
+    expect(new Set(declared.map((entry) => entry.name)).size).toBe(declared.length)
+  })
+
+  it('and every one of them points at a file that is there', () => {
+    for (const entry of declared) {
+      const command = packageJson.scripts[`verify:${entry.name}`]!
+      const path = /tsx (scripts\/[\w-]+\.ts)/.exec(command)?.[1]
+      expect(path, `verify:${entry.name} is not a tsx script`).toBeDefined()
+      expect(existsSync(join(root, path!)), path).toBe(true)
+    }
+  })
+
+  it('says what each one proves, in the summary line', () => {
+    for (const entry of declared) {
+      expect(entry.proves.length, entry.name).toBeGreaterThan(10)
+    }
+  })
+
+  // -------------------------------------------------------------------------
+  // The prerequisite flags, against what the scripts actually do
+  // -------------------------------------------------------------------------
+
+  it('marks every script that starts a server as needing a build', () => {
+    for (const entry of declared) {
+      const source = sourceOf(entry.name)
+      const startsAServer = /\[\s*'start'/.test(source) && /next/.test(source)
+      expect(entry.needs.includes('BUILD'), `${entry.name}: BUILD flag`).toBe(startsAServer)
+    }
+  })
+
+  it('marks every script that drives a browser as needing one', () => {
+    for (const entry of declared) {
+      const source = sourceOf(entry.name)
+      const drivesABrowser = /from 'playwright'/.test(source)
+      expect(entry.needs.includes('BROWSER'), `${entry.name}: BROWSER flag`).toBe(drivesABrowser)
+    }
+  })
+
+  it('marks every script that opens a camera as needing one', () => {
+    // Not the same flag as BROWSER, and the difference cost this repository a
+    // confusing half-hour twice. Playwright's headless shell exposes
+    // `getUserMedia` and throws `NotSupportedError` on every call, so
+    // `verify:recorder` timed out on a button that could never appear and
+    // `verify:viewport` reported a failure that read like the application
+    // refusing rather than the browser being unable.
+    for (const entry of declared) {
+      const source = sourceOf(entry.name)
+      const opensACamera = /getUserMedia/.test(source)
+      expect(entry.needs.includes('CAMERA'), `${entry.name}: CAMERA flag`).toBe(opensACamera)
+    }
+  })
+
+  it('and a camera is proved by opening one, never by checking the API exists', () => {
+    // `typeof navigator.mediaDevices.getUserMedia` is `function` in the shell
+    // that cannot capture. Only the call tells them apart.
+    // Comments explain what the code avoids; they must not trip a check for it.
+    //
+    // Stripped line by line rather than with a `/* … */` regex, because this
+    // file contains the glob `'**/*'` — which holds a `/*` and would open a
+    // comment that swallowed the call being looked for. Found by watching this
+    // check fail on code that was correct.
+    const code = runner
+      .split('\n')
+      .filter((line) => !/^\s*(\/\/|\/?\*)/.test(line))
+      .join('\n')
+    expect(code).toContain('getUserMedia({ video: true })')
+    expect(code).not.toContain('typeof navigator.mediaDevices')
+  })
+
+  it('marks the one that shells out to pg_restore', () => {
+    for (const entry of declared) {
+      const source = sourceOf(entry.name)
+      // `backup.ts` is where `pg_dump` and `pg_restore` are spawned; a script
+      // that imports from it inherits the requirement.
+      const usesPgTools = /from '\.\/backup'/.test(source)
+      expect(entry.needs.includes('PG_TOOLS'), `${entry.name}: PG_TOOLS flag`).toBe(usesPgTools)
+    }
+  })
+
+  // -------------------------------------------------------------------------
+  // The two decisions that make the runner honest
+  // -------------------------------------------------------------------------
+
+  it('a skip is not a pass', () => {
+    // A machine without Chromium would otherwise report success while four
+    // scripts — including every screen at 375px — never ran. This is the one
+    // command somebody runs before a release.
+    expect(runner).toContain('failed.length > 0 || skipped.length > 0')
+  })
+
+  it('and every skip is named with its reason', () => {
+    expect(runner).toContain('SKIPPED')
+    expect(runner).toContain('outcome.reason')
+  })
+
+  it('runs them one at a time, which is not an oversight', () => {
+    // They seed fixtures into the same database and delete them by prefix. Two
+    // at once would interleave and delete each other's, intermittently.
+    expect(runner).not.toContain('Promise.all')
+    expect(runner).toContain('for (const verification of selected)')
+  })
+
+  it('builds at most once', () => {
+    // Five of them start a server. Each building its own would be five builds.
+    expect((runner.match(/await run\('build'\)/g) ?? []).length).toBe(1)
+  })
+})

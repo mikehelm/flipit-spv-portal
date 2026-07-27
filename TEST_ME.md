@@ -898,6 +898,35 @@ Three things worth knowing about that private address, all of them checked in a 
 
 ---
 
+## One command that checks everything
+
+There are twenty-three separate verification programs in this project. Between them they drive a real web browser, a real database, a real file store, a real backup restore and two full copies of the application — and they check things no ordinary test can reach: that every screen works on a phone, that the upload limits refuse what they say they refuse, that the video recorder records.
+
+**Nothing ran them.** They existed, each had to be started by hand and by name, and nobody was doing it. A check nobody runs stops working without anybody finding out.
+
+There is now one command:
+
+```
+pnpm verify:all
+```
+
+It runs all twenty-three, one at a time, and prints a table at the end: each one, what it proves, how long it took and how many checks it made. On this machine that is **1,556 individual checks in about five minutes**, and it currently passes completely.
+
+Three things about it are worth knowing.
+
+**If it cannot run one of them, it says so and refuses to call the run a success.** Some need a browser installed; one needs the PostgreSQL command-line tools. If those are missing, the affected programs are named, the fix is printed next to them, and the command still reports failure. A run that quietly skipped a third of the checks and printed a green total would be worse than no command at all — this is the one you would run before going live.
+
+**It runs them one at a time on purpose.** They all put test records into the same database and clean up afterwards, so two at once would delete each other's work. For the same reason, do not run two of these side by side.
+
+**It found two real problems the first time it was used**, which is rather the point:
+
+- *A verification that broke itself.* One of them changed a setting and only put it back if everything went well. So the first time it failed for any reason, the setting stayed changed and it then failed **forever after** — on a perfectly healthy application, with a confusing message about a certificate that already existed. It now puts the setting back on every path out, and sets up its own starting conditions rather than assuming them. It has been run four times in a row from three different starting states and passes every time.
+- *A browser that was not really a browser.* Two of the programs need a camera. The browser they were using reports that it has one and then refuses every request to use it — so one program hung waiting for a button that could never appear, and another reported a failure that read like the application misbehaving. That is now checked up front, by actually opening a camera, and reported as a named skip with the fix rather than as a mysterious failure twenty minutes in.
+
+`DEPLOYMENT.md` now lists all twenty-three with what each one proves, and a test keeps that list honest: adding a new verification without adding it to the runner fails the test rather than quietly never being run.
+
+---
+
 ## The media library, with a picture actually in it
 
 Uploading a logo or a headshot is one of the few things in here that is purely for you, and until now **nothing had ever put a file in it successfully**. The screen had been checked many times and checked *empty* every time, so what was being measured was the "nothing uploaded yet" message, under the name of the real screen.
