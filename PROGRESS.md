@@ -6444,3 +6444,179 @@ still read the full payload.
   asked what an attacker could do with them.*
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
+
+## Four widenings in the policy, three of them for nothing
+
+The item had been on the Uncertain list for four entries:
+
+> *"`img-src data:`, `media-src blob:` and `worker-src blob:` have never been
+> asked what an attacker could do with them."*
+
+Asked. The interesting answer was not about attackers. It was that **the policy
+was one string for every response**, so the two administration screens with an
+unusual requirement set the policy for the investor's portal as well — and three
+of the four sources were not required by anything at all.
+
+**What the grep found.** Two commands, and they settle it:
+
+- **There is not one `data:` URL in this repository** except the two-factor QR on
+  `/admin/security`, which `qrcode` renders as a data URL into an `<img>`.
+  `font-src data:` was for a font nobody added — no `@font-face`, no
+  `next/font`. `img-src data:` was documented as being *"for the inline brand
+  marks"*, and the brand marks are inline `<svg>` **elements**, which no fetch
+  directive governs.
+- **There is one `createObjectURL` in the repository**, in the recorder on
+  `/admin/video`. `img-src blob:` sat beside it and no `<img>` was ever involved:
+  the blob goes on a `<video>`.
+- `worker-src blob:` carried the comment *"MediaRecorder **may** run off a worker
+  created from a blob."* *May* was doing a lot of work. It was a guess.
+
+So an investor's portal — the page §15 is about, the page holding a claim token
+and a transfer amount — was being served `data:` on images and fonts and `blob:`
+on images, media and workers, for two features on two screens they cannot reach.
+
+**Built.** The policy takes named capabilities and the middleware derives them
+from the path:
+
+    /admin/security   img-src 'self' data:      the two-factor QR
+    /admin/video      media-src 'self' blob:    the recorder's playback
+    everything else   neither
+
+`font-src data:`, `img-src blob:` and **`worker-src blob:` are gone everywhere**,
+with no capability that restores them.
+
+***The worker one is the removal worth having.*** It is the only one of the four
+whose subject was **code** rather than pixels. `script-src` refuses an inline
+script without the nonce, and a worker is a separate execution context reached by
+a different directive — so of the four, it was the one where being wrong would
+have mattered. It was granted on a guess, on every page. `verify:recorder` records
+through the real component with the real headers and passes **107 of 107** without
+it, reporting no violation of any directive: Chromium implements MediaRecorder
+natively and creates no worker the policy can see.
+
+**And the check that was guarding the QR turned out to be guarding nothing.**
+`/admin/security` is one of the thirty-two screens `auditScreen` visits, listening
+for CSP violations, and it has been green since it was added. The QR renders
+**only while an account is enrolling** — a secret stored, not yet confirmed — and
+`verify:viewport` signs in as an owner who is not. There was no image on the
+screen it audited. A missing `img-src data:` would have produced no violation
+because there was nothing to refuse.
+
+That was tolerable while every page carried `data:`. It is not tolerable now that
+one path does, because that path is the only place it can be got wrong, and a
+two-factor code that will not render is a release gate that cannot be passed.
+
+`verifyTheQrCodeLoads` now starts enrolment through the real form, waits on **the
+row**, loads the screen, and asks the browser whether the image *decoded* —
+`naturalWidth > 0`, which is false both for a refused request and for a broken
+data URL — then restores the account as it found it. `verify:viewport` is 336, up
+from 332.
+
+***Confirmed by breaking it.*** With `QR_DATA_IMAGE` commented out of
+`capabilitiesFor` and the application rebuilt, the run reports:
+
+    ok    the QR is a data: image on the page
+    FAIL  and the browser decoded it — complete=true naturalWidth=0
+    FAIL  and no directive refused anything — CSP refused img-src: data
+
+Restored, and 336 of 336 again. A check that has been watched failing is worth
+more than one that has only been watched passing, and this repository has now been
+caught twice with the other kind.
+
+**Decisions.**
+
+- ***Capabilities are additions, and the default is none.*** A caller who forgets
+  to pass them gets the *narrow* policy. The safe direction: the failure is a
+  visible refusal on one screen rather than a silent widening on every screen.
+- ***The path is matched on a segment boundary, never by equality.*** Under a base
+  path the middleware sees `/SPV/admin/video`. An equality check would have handed
+  the narrow policy to the one screen needing the wide one — invisible to every
+  test that reads source, and visible only as a recorder that plays nothing back
+  on the one deployment facing the internet. This trap has now been sprung three
+  times in this repository, in `next.config.ts`, in the middleware matcher, and
+  nearly here. `verify:deployment` gained four checks that ask a served response
+  under the prefix, which is the only place it can be proved: **the recorder gets
+  `media-src blob:` and not the QR's `data:`, the QR gets `data:` and not the
+  recorder's `blob:`, and a portal page gets neither.**
+- ***Named after the reason, not the directive.*** `QR_DATA_IMAGE` and
+  `MEDIA_BLOB` rather than `ALLOW_DATA_IMG`. A capability named after what it
+  permits invites being reused by the next thing that wants a data URL; one named
+  after the QR code does not.
+- ***`worker-src blob:` was removed rather than moved behind `MEDIA_BLOB`.*** The
+  safe-looking option was to keep it on `/admin/video` in case MediaRecorder needs
+  it on some browser this container does not have. That would have preserved a
+  widening nothing has ever been shown to need, on the evidence of a comment
+  saying *may*. If a browser somewhere does need it, the recorder fails loudly on
+  that browser and a capability adds it back in one line. A test asserts no
+  combination of capabilities produces it.
+- ***`img-src data:` was not extended to the whole `/admin` tree.*** One screen
+  needs it. `/admin` is where every investor's name and every amount is on screen,
+  and it is a phishing target in its own right.
+
+**Deviations.** None. Nothing was widened; four sources were removed and two were
+narrowed to one path each.
+
+**Checklist.**
+
+1. *Money as a `number`?* No.
+2. *A send path bypassing a gate?* No. Nothing here touches sending. Two-factor is
+   a *release gate* on sending, which is why the QR check being vacuous mattered
+   — but the gate itself is untouched.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No — and this is the entry that makes
+   an investor's page harder to abuse rather than only checking that it is not.
+   The portal is now served the narrowest policy in the application: no `data:`,
+   no `blob:`, workers from this origin only, and a served response is asserted to
+   say so under the prefix.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The nonce is still a
+   header value that is never stored or logged, and the new checks print policy
+   strings, which contain a nonce that dies with the response.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched — but the *base-path* trap is the subject of two
+    Decisions above and four new served-response checks.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2446, up from 2440) and `pnpm build`
+are green. `pnpm verify:viewport` is 336 of 336; `pnpm verify:deployment` 103 of
+103 under the `/SPV` prefix; `pnpm verify:recorder` 107 of 107;
+`pnpm verify:account-access` 42 of 42; `pnpm verify:2fa` 25 of 25;
+`pnpm verify:uploads` 55 of 55.
+
+**Uncertain.**
+
+- ***How many other checks are vacuous the way the QR one was?*** This is the
+  third defect of this family in three entries — a wait that never waited, a check
+  reading a payload instead of a page, and now a check whose subject was not on the
+  screen. All three were green. The shape to look for is a check that would still
+  pass if the thing it names were **absent**, and there is no mechanical test for
+  it: it needs someone to read each screen's audit and ask what is actually on that
+  screen when the script visits it. `/admin/invites` with no invites, `/audit` with
+  an empty log, `/questions` with no questions and `/register` with nothing in it
+  are the obvious candidates — all four are audited, and all four may well have
+  been audited empty.
+- ***`worker-src 'self'` has been proved only on Chromium.*** One engine, one
+  version. If Safari or Firefox implements MediaRecorder over a blob worker, the
+  recorder breaks there and nothing here would know. The recorder is one
+  operator's screen on a machine he chooses, so the exposure is small and the
+  statement should still be "Chromium" rather than "browsers".
+- ***`style-src 'self'` and the two removals are all now enforced by
+  `verify:viewport` alone.*** That script is where the CSP claims live, and it is
+  a single point of failure for four separate decisions. A second script that
+  loaded three screens and asserted the served policy header string would be cheap
+  and is not written.
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *The image upload preview and the email template preview are still
+  unexercised.*
+- *The error page has never been rendered by a real error.*
+- *Nothing measures bundle size, and nothing measures what the middleware
+  costs* — now a slightly sharper question again, since the middleware does one
+  more thing per request than it did.
+- *Nothing measures how long a 20 MB upload takes.*
+- *`waitFor` on a locator whose appearance depends on server state is the same
+  shape as the wait that failed, and none have been read with that in mind.*
+- *The password-reset journey is still not built,* and belongs in
+  OPEN_DECISIONS.md as a question for Michael.

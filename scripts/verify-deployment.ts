@@ -158,6 +158,48 @@ async function verifyTheBrowserPolicyOnAServedResponse(): Promise<void> {
     )
   }
 
+  /**
+   * The policy varies by path now, and **under the prefix is the only place that
+   * can be proved wrong.**
+   *
+   * `capabilitiesFor` matches `/admin/video` on a segment boundary rather than by
+   * equality, precisely so that `/SPV/admin/video` still gets `media-src blob:`.
+   * A unit test asserts the function; only a served response asserts that the
+   * path the middleware sees is the path the function was written for. If Next
+   * ever handed the middleware a pathname with the prefix stripped, or the other
+   * way round, these are what notice — and the symptom otherwise is a recorder
+   * that plays nothing back on the one deployment facing the internet, with every
+   * check at a domain root passing.
+   *
+   * Both screens redirect an unauthenticated request to sign-in, and that does
+   * not matter: `header()` does not follow redirects, the middleware has already
+   * run, and the header on that response was built from the path asked for.
+   */
+  for (const [label, path, expected, forbidden] of [
+    ['the recorder', '/admin/video', /media-src [^;]*blob:/, /img-src [^;]*data:/],
+    ['two-factor', '/admin/security', /img-src [^;]*data:/, /media-src [^;]*blob:/],
+  ] as const) {
+    const policy = (await header(`${BASE_PATH}${path}`, 'content-security-policy')) ?? ''
+    check(
+      `${label} gets its one extra source under the prefix`,
+      expected.test(policy),
+      policy.slice(0, 260),
+    )
+    check(`and not the other screen’s`, !forbidden.test(policy), policy.slice(0, 260))
+  }
+
+  const portalPolicy = (await header(`${BASE_PATH}/portal/signin`, 'content-security-policy')) ?? ''
+  check(
+    'an investor-facing page is served neither blob: nor data:',
+    portalPolicy !== '' && !/blob:/.test(portalPolicy) && !/data:/.test(portalPolicy),
+    portalPolicy.slice(0, 260),
+  )
+  check(
+    'and workers there may come from this origin only',
+    /worker-src 'self'(;|$)/.test(portalPolicy),
+    portalPolicy.slice(0, 260),
+  )
+
   // Two requests, one URL.
   const first = await header(`${BASE_PATH}/signin`, 'content-security-policy')
   const second = await header(`${BASE_PATH}/signin`, 'content-security-policy')

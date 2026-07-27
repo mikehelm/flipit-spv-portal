@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { contentSecurityPolicy, generateNonce } from '@/lib/security/csp'
+import { capabilitiesFor, contentSecurityPolicy, generateNonce } from '@/lib/security/csp'
 
 /**
  * The first middleware in this application, and it does exactly one thing:
@@ -34,8 +34,25 @@ import { contentSecurityPolicy, generateNonce } from '@/lib/security/csp'
  * and a static header belongs in the static place.
  */
 export function middleware(request: NextRequest): NextResponse {
+  /**
+   * The policy varies by path now, and this is the only thing in this file that
+   * reads the request.
+   *
+   * Two administration screens need one extra source each — the two-factor QR
+   * needs `data:` on images, the recorder needs `blob:` on media — and until now
+   * every page in the application carried both, plus two more that nothing used
+   * at all. `capabilitiesFor` holds the mapping and the reasoning; see `csp.ts`.
+   *
+   * It reads `nextUrl.pathname` and matches on a segment boundary rather than by
+   * equality, because under a base path the path here is `/SPV/admin/video`.
+   * Getting that wrong would serve the *narrow* policy to the screen that needs
+   * the wide one — invisible to any check that reads source, and visible only as
+   * a recorder that will not play back on the deployment facing the internet.
+   * `pnpm verify:deployment` is the one thing here that serves under a prefix.
+   */
   const policy = contentSecurityPolicy({
     nonce: generateNonce(),
+    capabilities: capabilitiesFor(request.nextUrl.pathname),
     development: process.env.NODE_ENV === 'development',
   })
 

@@ -34,6 +34,58 @@
  * would have to be safe in both.
  */
 
+/**
+ * A widening that exactly one screen needs, named after the screen's reason.
+ *
+ * The policy used to be one string for every response, which meant the two
+ * administration screens with an unusual requirement set the policy for the
+ * investor portal as well. Asking what those widenings were actually for
+ * produced a shorter answer than the comments claimed:
+ *
+ *   - **There is not one `data:` URL in this application** except the two-factor
+ *     QR code on `/admin/security`, which `qrcode` renders as a data URL into an
+ *     `<img>`. `font-src data:` was for a font nobody added, and `img-src data:`
+ *     was described as being "for the inline brand marks" — the brand marks are
+ *     inline `<svg>` elements, which no fetch directive governs at all.
+ *   - **There is one `createObjectURL` in the repository**, in the recorder on
+ *     `/admin/video`. `img-src blob:` was allowed alongside it and no `<img>`
+ *     was ever involved: the blob goes on a `<video>`.
+ *
+ * So an investor's portal was carrying `data:` on images and fonts and `blob:`
+ * on images, for features living on two screens they cannot reach. None of the
+ * three is a script vector — `script-src` refuses everything without the nonce
+ * — but §15 rests on the portal being the hardest page in this application to
+ * abuse, and a source a page has no use for is a source it should not be
+ * offered. The specification is silent, so this is the conservative reading.
+ */
+export type CspCapability =
+  /** `/admin/security` renders the two-factor QR as `<img src="data:image/png…">`. */
+  | 'QR_DATA_IMAGE'
+  /** `/admin/video` plays a recording back from an object URL before uploading it. */
+  | 'MEDIA_BLOB'
+
+/**
+ * Which widenings a path may have — the whole of the mapping, in one place.
+ *
+ * Matched on a segment boundary rather than by equality, for the reason both
+ * `next.config.ts` and the middleware matcher carry a note about: under a base
+ * path the served path is `/SPV/admin/video`, and a check for
+ * `=== '/admin/video'` would quietly hand the *narrow* policy to the one screen
+ * that needs the wide one. That failure is invisible to a test that reads source
+ * and shows up as a camera that does not work on the only deployment facing the
+ * internet.
+ *
+ * Erring wide on a path that does not exist — `/anything/admin/video` — costs
+ * nothing: it is a 404, and no investor-facing route can be made to match, since
+ * every one of them is under `/portal`, `/verify`, `/privacy` or the root.
+ */
+export function capabilitiesFor(pathname: string): CspCapability[] {
+  const capabilities: CspCapability[] = []
+  if (/(^|\/)admin\/security(\/|$)/.test(pathname)) capabilities.push('QR_DATA_IMAGE')
+  if (/(^|\/)admin\/video(\/|$)/.test(pathname)) capabilities.push('MEDIA_BLOB')
+  return capabilities
+}
+
 export interface CspOptions {
   /**
    * The per-request nonce, base64, as it appears inside `'nonce-…'`. Required:
@@ -42,6 +94,15 @@ export interface CspOptions {
    * serve every page dead.
    */
   nonce: string
+  /**
+   * What this path may load beyond the base policy.
+   *
+   * Defaults to none, which is the policy every investor-facing page gets. A
+   * caller that forgets it gets the narrow policy rather than the wide one — the
+   * safe direction for a default, and the reason this is a list of additions
+   * rather than a list of exclusions.
+   */
+  capabilities?: readonly CspCapability[]
   /**
    * `next dev` only. The development server hot-reloads by evaluating code and
    * injects script elements this policy would otherwise refuse.
@@ -101,7 +162,13 @@ export const STYLE_SRC = "style-src 'self'"
  * `frame-ancestors 'none'` says what `X-Frame-Options: DENY` says, for browsers
  * that prefer the modern spelling. Both are kept.
  */
-export function contentSecurityPolicy({ nonce, development = false }: CspOptions): string {
+export function contentSecurityPolicy({
+  nonce,
+  capabilities = [],
+  development = false,
+}: CspOptions): string {
+  const may = (capability: CspCapability): boolean => capabilities.includes(capability)
+
   const directives = [
     "default-src 'self'",
     "base-uri 'self'",
@@ -126,14 +193,46 @@ export function contentSecurityPolicy({ nonce, development = false }: CspOptions
      */
     `script-src 'self' 'nonce-${nonce}'`,
     STYLE_SRC,
-    // `data:` for the inline brand marks; `blob:` for a video preview held in
-    // memory before it is uploaded (§13.3).
-    "img-src 'self' data: blob:",
-    "media-src 'self' blob:",
-    "font-src 'self' data:",
+    /**
+     * `data:` only where the two-factor QR is drawn.
+     *
+     * Every other image in this application is a file this origin serves or an
+     * inline `<svg>`, and an `<svg>` element in the markup is not a fetch, so no
+     * directive governs it. `blob:` was here as well and nothing ever put a blob
+     * on an `<img>`.
+     */
+    may('QR_DATA_IMAGE') ? "img-src 'self' data:" : "img-src 'self'",
+    /**
+     * `blob:` only where a recording is played back before being uploaded.
+     *
+     * `verify:viewport` loads a blob onto a `<video>` on `/admin/video` and
+     * fails if the policy refuses it, so this is checked in a browser on the one
+     * path that carries it — and `verify:recorder` drives the real component.
+     */
+    may('MEDIA_BLOB') ? "media-src 'self' blob:" : "media-src 'self'",
+    // No `@font-face` anywhere, and no `next/font`. `data:` was here for a font
+    // that was never added.
+    "font-src 'self'",
     "connect-src 'self'",
-    // MediaRecorder may run off a worker created from a blob.
-    "worker-src 'self' blob:",
+    /**
+     * `worker-src 'self'`, with no `blob:`.
+     *
+     * The comment that used to sit here said "MediaRecorder may run off a worker
+     * created from a blob". *May* was doing a lot of work: it was a guess, and
+     * `verify:recorder` — which records, stops, plays back and uploads through
+     * the real component with the real headers — passes 107 of 107 without it,
+     * reporting no violation of any directive. Chromium implements MediaRecorder
+     * natively and creates no worker the policy can see.
+     *
+     * This is the widening worth having removed. A blob worker is the only one of
+     * the four that runs **script**: `script-src` refuses an inline script
+     * without the nonce, and a worker is a separate execution context reached by
+     * a different directive. It was never reachable — an attacker who could call
+     * `new Worker` has already run script — but it was the one allowance whose
+     * subject was code rather than pixels, it was granted on a guess, and it was
+     * granted on every page in the application.
+     */
+    "worker-src 'self'",
   ]
 
   // Next's development server evaluates code to hot-reload. Never in a

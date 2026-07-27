@@ -697,6 +697,29 @@ Look for the section headed *The nonce, proved by injecting what it refuses*. It
 
 > **The first version of that check was wrong on every screen, which is worth saying.** It flagged an invisible element Next.js adds for screen readers, on all thirty-one pages, and looked like a real finding. It was not: the browser rule covers styling written into the page's text, and this one is set afterwards by the page's own code, which no such rule inspects. Nothing was broken and nothing needed fixing. The check was corrected to look at what the rule actually covers — and a test was added that deliberately asserts the exempt case still works, so that the next person to see it does not spend an afternoon on it.
 
+### The portal is now the most locked-down page in the application, which it was not
+
+The rules above are a list of what a page is allowed to load — images from here, video from here, and so on. Until now there was **one list, used for every page**, and something worth knowing had crept into it: two administration screens need one unusual permission each, and because there was only one list, the investor's own portal was being given both of them. Plus two more that nothing in the application has ever used.
+
+Counted properly, four of the permissions on that list were being handed to every page:
+
+- **Images from a data URL** — genuinely needed by *one* screen: the two-factor setup page, which draws its QR code that way.
+- **Video from browser memory** — genuinely needed by *one* screen: David's recorder, which plays your recording back before uploading it.
+- **Fonts from a data URL** — needed by nothing. It was there for a font nobody ever added.
+- **Background code loaded from browser memory** — needed by nothing. The note beside it said the recorder *may* need it. It does not, and that is now proved rather than assumed: the whole recorder — camera on, record, play back, upload — runs its 107 checks with the permission removed and reports no complaint from the browser.
+
+The last of those four is the one worth removing. Three of them are about pictures and fonts. That one is about **running code**, which is the thing this whole policy exists to prevent, and it had been granted to every page in the application on the strength of a guess.
+
+**Now each page gets only what it needs.** The two-factor page gets its QR permission. The recorder gets its video permission. Everything else — and in particular every page an investor ever sees — gets neither, and none of the other two at all.
+
+**And one of the checks meant to protect the QR code turned out to be checking nothing.** The two-factor screen is one of thirty-two the automated run visits, watching for the browser refusing anything. It had always passed. But the QR code only appears while you are *part way through* setting two-factor up, and the run signs in as an account that is not — so the screen it was inspecting had no QR code on it. There was nothing to refuse.
+
+That was harmless while every page had the permission. It is not harmless now that one page does, because a QR code that will not draw is a step nobody can complete. So the run now starts the setup for real, looks at the page, and asks the browser whether the image actually *decoded*. Then it puts the account back as it found it.
+
+**Then the check was deliberately broken to make sure it works.** With the permission removed and the application rebuilt, the run says exactly what it should: *the image did not decode*, and *the browser refused it*. Put back, and it passes again. That is worth more than a check that has only ever been seen passing — this is the third time in a row that something reported green turned out to be looking at the wrong thing, and the pattern is now being actively hunted rather than waited for.
+
+> **And under a sub-path.** Because these permissions now depend on *which page* you are on, and the application will eventually be served at `mikehelm.com/SPV` rather than its own domain, there was an obvious way to get this wrong: check for the address `/admin/video` and miss `/SPV/admin/video`. That would give the recorder the wrong rules on the only deployment anyone can actually reach, while every check on a plain domain passed. It has been written to survive the prefix, and `pnpm verify:deployment` — which stands the application up under `/SPV` and asks a live server — now confirms all three cases there: the recorder gets its permission, the two-factor page gets its own and not the recorder's, and a portal page gets neither. This exact trap has now been sprung twice in this project and nearly a third time.
+
 > **And this found a real fault, on a part of the site nobody had been able to test until now.** The application will eventually be served under a sub-path — `mikehelm.com/SPV` rather than a domain of its own — and there is a separate run, `pnpm verify:deployment`, that stands it up that way and asks a live server questions. It now checks the security headers, and it reported that the **front page had no security policy at all** under a sub-path. Not a weak one — none. Every equivalent check on a plain domain passed, which is why nothing had caught it: the rule that decides which addresses the policy applies to has a quirk where an address with nothing after the prefix falls through the gap. One line fixed it. The same trap had been sprung once before in this project, in a different file, and was found the same way — by asking a running server rather than by reading the code.
 
 Open your own portal link on your phone and look for:

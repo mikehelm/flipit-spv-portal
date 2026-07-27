@@ -756,6 +756,8 @@ async function main(): Promise<void> {
 
     await verifyThePolicyInPractice(page)
 
+    await verifyTheQrCodeLoads(page)
+
     await verifyTheNonce(page)
 
     await verifyTheStylePolicy(page)
@@ -826,6 +828,86 @@ async function main(): Promise<void> {
  * Permissions-Policy header before it reaches any camera, real or fake, so a
  * wrong header fails here exactly as it would on the machine this deploys to.
  */
+/**
+ * The two-factor QR code, actually decoded by the browser.
+ *
+ * `/admin/security` is one of the thirty-two screens `auditScreen` visits, and it
+ * has been reported green since the day it was added. **The check was vacuous.**
+ * The QR is rendered only while an account is *enrolling* — a secret stored and
+ * not yet confirmed — and this script signs in as an owner who is not, so the
+ * screen it audited had no image on it at all. A missing `img-src data:` would
+ * have produced no violation, because there was nothing to refuse.
+ *
+ * That matters more now than it did. `img-src data:` used to be granted to every
+ * page in the application; it is now granted to this path alone, which makes this
+ * the only place it can be got wrong — and a two-factor code that will not render
+ * is a release gate that cannot be passed.
+ *
+ * So this starts enrolment through the real form, loads the screen, and asks the
+ * browser whether the image **decoded** — `naturalWidth > 0`, which is false both
+ * for a refused request and for a broken data URL. Then it puts the account back
+ * as it found it: the secret it created is cleared, so a developer's own database
+ * does not end up half-enrolled by a script about layout.
+ */
+async function verifyTheQrCodeLoads(page: Page): Promise<void> {
+  console.log('\nThe two-factor QR, which the policy now allows on one path only')
+
+  const before = await db.query.users.findFirst({ where: eq(users.email, ADMIN_EMAIL) })
+
+  try {
+    complaints.length = 0
+    await page.goto(`${ORIGIN}/admin/security`, { waitUntil: 'networkidle' })
+
+    await page.getByRole('button', { name: /Start setting up two-factor|Start again/ }).click()
+
+    // The row, not the screen. See the page-text entry in PROGRESS.md.
+    const deadline = Date.now() + 20_000
+    let enrolling = false
+    while (Date.now() < deadline && !enrolling) {
+      const row = await db.query.users.findFirst({ where: eq(users.email, ADMIN_EMAIL) })
+      enrolling = row?.totpSecretEncrypted != null && row?.totpConfirmedAt == null
+      if (!enrolling) await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+    check('enrolment starts, so there is a QR to render', enrolling)
+
+    await page.goto(`${ORIGIN}/admin/security`, { waitUntil: 'networkidle' })
+
+    const qr = await page.evaluate(() => {
+      const image = Array.from(document.querySelectorAll('img')).find((element) =>
+        element.currentSrc.startsWith('data:') || element.src.startsWith('data:'),
+      )
+      if (!image) return { found: false, complete: false, width: 0 }
+      return { found: true, complete: image.complete, width: image.naturalWidth }
+    })
+
+    check('the QR is a data: image on the page', qr.found, 'no <img> with a data: source')
+    check(
+      'and the browser decoded it — img-src data: is served on this path',
+      qr.complete && qr.width > 0,
+      `complete=${qr.complete} naturalWidth=${qr.width}`,
+    )
+
+    const refused = complaints
+      .filter((c) => !isEnvironmental(c))
+      .filter((c) => /CSP refused|Content Security Policy/i.test(c))
+    check(
+      'and no directive refused anything on the way',
+      refused.length === 0,
+      refused.slice(0, 3).join(' | '),
+    )
+  } finally {
+    // Back as it was. An enrolment left half-finished by this script would make
+    // the next sign-in ask for a code nobody has.
+    await db
+      .update(users)
+      .set({
+        totpSecretEncrypted: before?.totpSecretEncrypted ?? null,
+        totpConfirmedAt: before?.totpConfirmedAt ?? null,
+      })
+      .where(eq(users.email, ADMIN_EMAIL))
+  }
+}
+
 async function verifyThePolicyInPractice(page: Page): Promise<void> {
   console.log('\nThe policy, in a browser rather than in a header')
 

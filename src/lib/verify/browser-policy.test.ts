@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { contentSecurityPolicy, generateNonce } from '@/lib/security/csp'
+import {
+  capabilitiesFor,
+  contentSecurityPolicy,
+  generateNonce,
+  type CspCapability,
+} from '@/lib/security/csp'
 import { MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from '@/lib/media/formats'
 
 /**
@@ -94,13 +99,85 @@ describe('Content-Security-Policy', () => {
     }
   })
 
-  it('permits blob: exactly where §13.3 needs it and nowhere else', () => {
-    // A recorded video is held in memory as a blob before it is uploaded.
-    expect(directive('media-src')).toContain('blob:')
-    expect(directive('img-src')).toContain('blob:')
-    expect(directive('worker-src')).toContain('blob:')
-    expect(directive('connect-src')).not.toContain('blob:')
-    expect(directive('script-src')).not.toContain('blob:')
+  /**
+   * `policy` is the base policy — what an investor's portal is served. It used to
+   * be what *everything* was served, and it carried `data:` on images and fonts
+   * and `blob:` on images, media and workers. Two of those five were for one
+   * administration screen each; three were for nothing at all.
+   */
+  it('the portal is served no blob: and no data: anywhere', () => {
+    for (const name of [
+      'img-src',
+      'media-src',
+      'font-src',
+      'worker-src',
+      'connect-src',
+      'script-src',
+    ]) {
+      expect(directive(name), name).not.toContain('blob:')
+      expect(directive(name), name).not.toContain('data:')
+    }
+  })
+
+  it('and workers may come from this origin only, on every path there is', () => {
+    // The one widening whose subject was code rather than pixels. It was granted
+    // on a guess about MediaRecorder — see the note in csp.ts — and nothing in
+    // the application needs it, so no capability restores it.
+    const combinations: readonly CspCapability[][] = [
+      [],
+      ['QR_DATA_IMAGE'],
+      ['MEDIA_BLOB'],
+      ['QR_DATA_IMAGE', 'MEDIA_BLOB'],
+    ]
+    for (const capabilities of combinations) {
+      const value = contentSecurityPolicy({ nonce: NONCE, capabilities })
+      expect(directive('worker-src', value)).toBe("worker-src 'self'")
+    }
+  })
+
+  it('media-src carries blob: only with the recorder’s capability', () => {
+    const withRecorder = contentSecurityPolicy({ nonce: NONCE, capabilities: ['MEDIA_BLOB'] })
+    expect(directive('media-src', withRecorder)).toContain('blob:')
+    // And it does not bring the QR's data: along with it.
+    expect(directive('img-src', withRecorder)).not.toContain('data:')
+  })
+
+  it('img-src carries data: only with the two-factor capability', () => {
+    const withQr = contentSecurityPolicy({ nonce: NONCE, capabilities: ['QR_DATA_IMAGE'] })
+    expect(directive('img-src', withQr)).toBe("img-src 'self' data:")
+    expect(directive('media-src', withQr)).not.toContain('blob:')
+    // Never a script source, whatever the capability.
+    expect(directive('script-src', withQr)).not.toContain('data:')
+  })
+
+  it('the path mapping names the two screens and nothing else', () => {
+    for (const path of ['/', '/portal', '/verify', '/privacy', '/investors', '/admin', '/admin/media']) {
+      expect(capabilitiesFor(path), path).toEqual([])
+    }
+    expect(capabilitiesFor('/admin/video')).toEqual(['MEDIA_BLOB'])
+    expect(capabilitiesFor('/admin/security')).toEqual(['QR_DATA_IMAGE'])
+  })
+
+  it('and it survives a base path, which is how this would silently break', () => {
+    // The trap `next.config.ts` and the middleware matcher both carry a note
+    // about. An equality check here hands the narrow policy to the recorder on
+    // the only deployment that faces the internet.
+    expect(capabilitiesFor('/SPV/admin/video')).toEqual(['MEDIA_BLOB'])
+    expect(capabilitiesFor('/SPV/admin/security')).toEqual(['QR_DATA_IMAGE'])
+    expect(capabilitiesFor('/SPV/portal')).toEqual([])
+    // A nested route under the screen keeps its screen's capability.
+    expect(capabilitiesFor('/admin/video/abc')).toEqual(['MEDIA_BLOB'])
+    // A path that merely contains the word does not, and the investor's own
+    // video route — which serves bytes, not a document — gets nothing.
+    expect(capabilitiesFor('/admin/videos')).toEqual([])
+    expect(capabilitiesFor('/portal/video/some-id')).toEqual([])
+  })
+
+  it('the middleware is what applies the mapping', () => {
+    // A policy that varies by path and a middleware that never reads the path
+    // would be a mapping with no effect and tests that pass.
+    expect(middlewareSource).toContain('capabilitiesFor(')
+    expect(middlewareSource).toContain('nextUrl.pathname')
   })
 
   it('never allows unsafe-eval, in either build', () => {
