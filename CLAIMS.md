@@ -123,6 +123,19 @@ and not the batch through the operator's own screen. `verify:qa`,
 six pass, all six now have one, and a test fails the suite if a seventh arrives
 without one.
 
+**Four screens that nothing had ever drawn are now drawn**, as of 27 July: step
+4 of the import wizard and the wizard's refusal screen; the error page, under a
+real fault, on both an operator's route and an investor's; and the email preview,
+in both its blocked and its rendered state. `pnpm verify:viewport` is 497, up
+from 357 that morning. **`global-error.tsx` is unreachable and now says so**,
+with `root-layout-purity.test.ts` keeping it that way.
+
+**One defect is recorded and deliberately not fixed:** the preview frame inherits
+`style-src 'self'`, so the designed invitation's 69 inline styles are refused and
+an operator sees an unstyled email. The fix is a route with its own narrow policy,
+not a wider one — **it is the next session's first item**, written up in
+PROGRESS.md.
+
 **`media:check` is folded into the health report**, as of 26 July. The comparing
 moved out of the script into `src/lib/media/reconcile.ts`, the command writes one
 counts-only line to the audit log when it runs, and `pnpm check:health` and the

@@ -7634,3 +7634,48 @@ they were told to tolerate so a caller can insist it happened.
 - *Two rows in CLAIMS.md are past the six-hour staleness rule and were left
   alone.*
 - *The password-reset journey is still not built — OPEN_DECISIONS.md §10.*
+
+### Addendum to the entry above — a flake, caught before it was left behind
+
+The first full run after that entry landed reported **495 of 497**, and the second
+reported 497. The difference was one console message on three screens:
+
+    Blocked script execution in 'about:srcdoc' because the document's frame is
+    sandboxed and the 'allow-scripts' permission is not set.
+
+Two things had to be established before it could be filed anywhere.
+
+**It is not the email.** The invitation body was read: 15,497 characters, four
+links, and **no `<script>`, no `javascript:`, no event handler, no `<form>`, no
+`<style>` element and no nested frame**. There is nothing in it for a browser to
+refuse. What tries to run script in that frame is **Playwright**, which installs
+its own init script into every frame it can see; a sandboxed frame refuses it,
+and Chromium says so.
+
+**It is the sandbox working.** The message is the browser reporting that
+`sandbox=""` did the thing the entry above went to some trouble to prove
+indirectly through `contentDocument`. The one thing it is not is a fault.
+
+So it is in `isEnvironmental`, with the measurement written down beside it — and
+it is in `isEnvironmental` rather than tolerated per-screen because it is a
+**race** between the harness reaching the frame and the check reading the
+console. A check that fails one run in three teaches people to press the button
+again rather than to read the output, which is a worse outcome than the check not
+existing. Two consecutive clean runs at 497.
+
+The cleanup also grew one line it should always have had: `cleanUp` now removes
+the audit rows naming the **seeded offer** before deleting it. Opening the email
+preview writes `email.previewed` against that offer — a read is audited, and
+correctly — and the offer is deleted at the end of every run, so every run since
+this morning was leaving rows pointing at an offer that no longer existed. Same
+by-id rule as the import fixture and the banner fixture; nothing else in the log
+is touched.
+
+**Uncertain, added.**
+
+- ***`isEnvironmental` now has three entries and its own docstring says a list
+  like it "is how a real fault gets ignored."*** Three is still short. The third
+  is the first one that is a *race* rather than a constant, and a racing filter
+  hides a racing fault. If the sandbox attribute were ever dropped, this message
+  would stop — and nothing asserts that it appears, because it cannot be relied
+  on to. `contentDocument` is what carries that claim, and it is not a race.

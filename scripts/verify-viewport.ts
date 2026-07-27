@@ -322,7 +322,29 @@ function isEnvironmental(complaint: string): boolean {
     // No favicon is served, and the browser says so on every page.
     /favicon\.ico/.test(complaint) ||
     // Chromium's own devtools probe, absent in this build.
-    /\.well-known\/appspecific/.test(complaint)
+    /\.well-known\/appspecific/.test(complaint) ||
+    /*
+     * The harness looking into a sandboxed frame.
+     *
+     * *"Blocked script execution in 'about:srcdoc' because the document's frame
+     * is sandboxed and the 'allow-scripts' permission is not set."*
+     *
+     * It appears on the email preview, intermittently, and it is not the
+     * application's doing. The email body was checked: 15,497 characters, four
+     * links, and **no `<script>`, no `javascript:`, no event handler, no
+     * `<form>`, no `<style>` and no nested frame**. There is nothing in it for
+     * the browser to refuse. What is trying to run script in that frame is
+     * Playwright, which installs its own init script into every frame it can
+     * see; a sandboxed frame refuses it and Chromium says so.
+     *
+     * It is intermittent because it is a race between the harness reaching the
+     * frame and the check reading the console — which is exactly why it is
+     * listed here rather than tolerated per-screen. A flake that fails one run
+     * in three teaches people to re-run rather than to read.
+     *
+     * And it is the sandbox **working**. The one thing it is not is a fault.
+     */
+    /Blocked script execution in 'about:srcdoc'/.test(complaint)
   )
 }
 
@@ -608,6 +630,23 @@ async function cleanUp(): Promise<void> {
       .where(eq(offers.accountId, account.id))
     for (const offer of seeded) {
       await db.delete(reminderEvents).where(eq(reminderEvents.offerId, offer.id))
+    }
+
+    // Audit rows naming an offer that is about to stop existing.
+    //
+    // Opening the email preview writes `email.previewed` against the offer — a
+    // read is audited, correctly — and the portal claim and the stage screens
+    // write their own. The offer goes below. An audit row pointing at a row that
+    // was never really there is worse than no audit row, so these go by the same
+    // by-id rule the import fixture and the overview-banner fixture follow, and
+    // nothing else in the log is touched.
+    if (seeded.length > 0) {
+      await db.delete(auditEvents).where(
+        inArray(
+          auditEvents.entityId,
+          seeded.map((offer) => offer.id),
+        ),
+      )
     }
 
     await db.delete(offers).where(eq(offers.accountId, account.id))
