@@ -8375,3 +8375,218 @@ are green. `pnpm verify:all` is **23 of 23, 0 skipped**, twice consecutively.
 - *Two rows in CLAIMS.md are past the six-hour staleness rule and were left
   alone.*
 - *The password-reset journey is still not built — OPEN_DECISIONS.md §10.*
+
+## The document nobody had checked, and the promise with no procedure behind it
+
+The previous entry's oldest unstarted item, inherited from the correction two
+entries before it:
+
+> ***Nothing else in OPEN_DECISIONS.md has been checked against the code.*** It is
+> version 6.0 and dates from before the build. Items 1, 3, 4, 6, 7, 8 and 9, and
+> everything under "Settled on 2026-07-25", are assertions about a system that has
+> changed underneath them for two days. §7 is the one to read first — it is
+> already marked *"half-answered by the build"*, which suggests others have moved
+> too and nobody has looked.
+
+Every statement in it has now been read against the code, one at a time.
+**Five were wrong.** §7 — the one that entry said to read first — turned out to be
+the *best*-supported claim in the document, all four of its sub-claims true. The
+wrong ones were elsewhere, which is the ordinary way of it.
+
+### What had stopped being true
+
+***§4 described a list the application has never held.*** It read *"Known so far:
+Australia, England, France, Thailand, USA (blocked)"* as though that were
+configuration. There is **no list in the application**: approved countries are
+data the owner types while recording the approval, the seed ships an empty array,
+and those four names appear only in test fixtures. Two practical consequences are
+now written down — nothing sends to anybody until the list is entered, and it
+takes **ISO codes** (`AU, GB, FR, TH`) rather than country names, because guessing
+which country somebody meant by "England" is not a thing to do quietly on a
+securities offer.
+
+***§6 asked for a privacy policy that was already written.*** `/privacy` is
+roughly 490 words of finished prose across eight sections, reads the configured
+sending address rather than hard-coding one, and is one of only two indexable
+pages. What is left is a read, not a draft — and reading it is what found §12
+below.
+
+***"Who may delete investor data … currently owner-only" described a control that
+does not exist.*** There is no deletion path for an investor record by any role.
+The only deletes in application code are media assets, document packages,
+reminder events, sessions, sign-in attempts, operator videos and portal updates.
+Account lifecycle is a status change: a closed account keeps every row and turns
+read-only.
+
+***§1 was right about the mechanism and wrong about the default.*** The
+per-recipient jurisdiction block is real and structural — a block is written to
+one offer row and the batch is untouched. But there is no US-by-default rule (the
+only US-specific thing is the *wording* of the refusal an operator reads), and
+with no approval recorded the default state is not *"everyone else proceeds"* —
+it is **nobody proceeds**.
+
+***And the settled list contradicted itself.*** *"Hosting: `invest.flipit.com`"*
+sat seven lines above *"Hosting: `mikehelm.com/SPV` to test, `spv.flipit.com`
+before anything is sent."* The old hostname is in no source file and not in
+`.env.example` — but it does survive, unmarked, in BUILD_SPEC §11.3's line about
+where email images are served from. Noted rather than edited: the spec is the
+document the build was written from and is not a build session's to quietly
+amend.
+
+### The new item, and it is the one that matters
+
+**§12 — the privacy policy promises a deletion that has no procedure.**
+
+`/privacy` tells an investor, in their own section, that they may *"ask for it to
+be deleted"* and that a request for removal *"will be — subject only to anything
+that has to be retained to meet a legal or regulatory obligation."*
+
+The tempting reading is that the page over-promises. **It does not, and being
+precise about that is the whole of this item.** It says *a person* will deal with
+it, not that a button exists — and a person can. What is missing is the part that
+makes it real: **nobody has written down how.** As it stands it means somebody
+typing `DELETE` against a live Postgres holding every investor's figures,
+improvised, at the moment somebody has asked for something they are entitled to.
+
+Three ways out are recorded, and the cheapest is a runbook step: which rows, in
+which order, what the foreign keys require, what the audit log must keep — an
+erasure is itself a consequential action — and what the retention carve-out
+actually excludes. The durable answer is an owner-only erasure that anonymises
+and records itself, which is real work and a *destructive* path in the one system
+where that word carries the most. Narrowing the wording is the option to be slow
+about: the sentence as written is the ordinary expectation under UK and EU
+data-protection law.
+
+It is marked *nothing is blocked on this, and nothing should be sent while it is
+unanswered*, because the page saying it goes live before the first invitation
+does.
+
+### And the document now has a test
+
+This is the part that stops the whole exercise from being something somebody has
+to remember to repeat.
+
+`open-decisions.test.ts` pins the **falsifiable** sentences. None of them checks
+that the application is correct; each checks that a sentence written for Michael
+to act on is still true, and each failure message names the item to go and fix:
+
+- no application path deletes an `investorAccounts`, `offers` or `recipients` row
+  — **the day somebody builds one, §12 has to be rewritten**, and it carries a
+  commitment to investors, so it must not go stale silently a second time;
+- the privacy policy still contains the sentence §12 is written around, so
+  narrowing the wording forces the decision to be recorded;
+- the seed ships an empty approved-country list, and nothing in
+  `lib/compliance/` declares a fixed one;
+- `invest.flipit.com` is in no source file and in no `.env.example`;
+- published Q&A defaults to visible during an open round;
+- publishing a video is `requireOperator` and not `requireAdmin`;
+- the compliance gate refuses on `NO_APPROVAL` before considering anything else,
+  and the authority module grants to `OWNER`.
+
+**Watched failing before it was trusted.** A `db.delete(investorAccounts)` was
+temporarily added to `src/actions/accounts.ts` and `invest.flipit.com` to
+`lib/media/urls.ts`; the run reported `2 failed | 8 passed`, naming exactly those
+two. Both were removed and the run is 10 of 10. This repository has been caught
+five times with a check that was green about something it was not reading, and a
+document-pinning test nobody has seen fail is precisely that shape.
+
+**Decisions.**
+
+- ***BUILD_SPEC was not edited.*** Its §11.3 carries the superseded hostname and
+  is not marked as such. It is the document the build was written from; a build
+  session amending it is how a specification stops being a specification. Noted
+  in OPEN_DECISIONS with the section number, for Michael to change or to decline.
+- ***The privacy wording was not narrowed.*** It would have been a one-line edit
+  and it is the one option of the three that removes an investor's stated
+  entitlement. That is a decision to take on advice.
+- ***No erasure path was built.*** Destructive, in the money path, on a securities
+  record, unattended, at the end of a session. Recorded with the shape it would
+  need.
+- ***The test pins sentences, not behaviour.*** Every check in it duplicates
+  something the unit suite already proves. That is deliberate: the *value* is the
+  failure message, which names the document item rather than the code, and points
+  whoever broke the link at the thing that now has to be updated.
+- ***"Verified" and "Corrected" are marked on each item.*** A reader of v7 can see
+  which sentences somebody stood behind and which were repaired, which is what v6
+  could not tell anybody about itself.
+
+**Deviations.** None. No production code changed in this entry.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here computes.
+2. *A send path bypassing a gate?* No — and §3 was checked from the other side:
+   the gate refuses with `NO_APPROVAL` before anything else, both send paths run
+   it, reminders are gated against their **own** approval rather than borrowing
+   the invitation's, and the only unguarded path is a test send to the operator's
+   own address, which the refusal message names.
+3. *One recipient or the whole batch?* **This is the entry that checked the
+   sentence in the document.** Compliance is evaluated one offer at a time and a
+   block is written to a single row.
+4. *Can an operator record an approval?* **Asked of all three verbs, not one.**
+   Recording, amending and voiding are owner-only; amending voids-and-supersedes;
+   voiding re-runs the block sweep immediately. An operator can do none of them.
+5. *Does anything reveal another investor?* Untouched. Q&A publication was
+   re-checked: anonymisation is structural — the object an investor receives has
+   no field capable of carrying an identity.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched, and §7's four sub-claims about the suspended and
+   closed states were each verified separately.
+8. *Does any log line contain a token, a body or a key?* No.
+9. *Indexable routes?* Unchanged — and confirmed that `/privacy` is deliberately
+   one of the two that are.
+10. *Published Q&A?* **Checked, and the document was corrected where its two
+    halves disagreed** — the settled list said "visible from the start", the
+    worth-deciding list asked the same question again as though open. The settled
+    one wins and the code agrees with it.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (2536, up from 2526) are green.
+
+**Uncertain.**
+
+- ***§9 is the one item on the list that cannot be checked from here.*** *"Confirm
+  the brand palette against the live site."* flipit.com returns nothing useful to
+  an automated fetch, which is why the colours came from the demo file in the
+  first place. It needs Michael's eyes and nothing else will do.
+- ***The pinning test covers seven sentences out of a document with forty-odd.***
+  The ones left unpinned are the ones that are not falsifiable in code — *"get
+  advice before sending to them"*, *"ask David whether he wants to do a video"* —
+  and a handful that are but were judged not worth a check nobody would read. The
+  boundary was drawn by hand and nothing marks it.
+- ***Nothing checks that the document's *prose* matches its own pinned claims.***
+  Somebody could rewrite item 4 to say the opposite and the test would still pass,
+  because the test reads the code and one heading. Two of the checks look for a
+  specific sentence; the rest do not.
+- ***`CLAIMS.md` has not had this treatment.*** It is the other document making
+  statements about the build, it is named in the previous entries as having two
+  rows past their staleness rule, and nobody has read it against the code at all.
+  It is now the obvious next one.
+- *The deletion procedure is unwritten and is §12 — the largest open item.*
+- *One image, one format, one size in the media library; the edit and remove
+  forms are present and unpressed.*
+- *The styles in the email preview are proved applied by absence, not by
+  measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *`verify:certificate` was the one that was broken; nothing has asked the
+  idempotence question of the other twenty-two.*
+- *The `verify:all` order is declared, not derived.*
+- *A skip and a failure share one exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *The refusal screen is measured with one kind of refusal.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS.md
+  §11.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`waitFor` on a locator whose appearance depends on server state has still not
+  been read with that question in mind.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*
+- *The password-reset journey is still not built — OPEN_DECISIONS.md §10.*

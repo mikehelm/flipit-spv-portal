@@ -898,6 +898,38 @@ Three things worth knowing about that private address, all of them checked in a 
 
 ---
 
+## One thing to read before anything is sent
+
+There is a document in this project called `OPEN_DECISIONS.md` — the list of things only you and David can answer. It was written before the build started, the build then ran for two days underneath it, and **nobody had ever checked whether it was still true.**
+
+It has now been read against the code, statement by statement. **Five of them were wrong.** The document is now version 7, and each item is marked either *verified* (somebody read the code and it says this) or *corrected* (it did not).
+
+Two of the corrections change what you would actually do:
+
+**There is no list of approved countries in the application.** The old note read as though it knew about Australia, England, France and Thailand. It knows nothing. The list is typed in by you when you record the compliance approval, it ships empty, and **until it is entered nothing sends to anyone** — not one recipient, not to test. It also takes country *codes*, not names: `AU, GB, FR, TH`, with the US left off. It refuses a name rather than guessing which country you meant, which on a securities offer is the right instinct.
+
+**The privacy policy was already written.** The note asked for it to be drafted. It has been, and it is live at `/privacy` — about 490 words, eight sections, finished. What is left is for you to read it, because it makes promises on your behalf. Which brings us to the one new item.
+
+### The new item, and it is the important one
+
+The privacy policy tells an investor they can **ask for their record to be deleted, and it will be**. It says a person will handle it rather than a form — which is honest, because a person can.
+
+**But nobody has written down how.** There is no delete-an-investor function in the application, by any role, deliberately: a closed account keeps every row and turns read-only, which is the right default for a record of a securities transaction. So today, honouring that request means somebody typing a deletion straight into the live database, improvised, at the moment an investor has asked for something they are entitled to.
+
+Three ways out, in the document, and the cheapest is a written procedure rather than a feature — which rows, in what order, what the audit log has to keep. Building an erasure feature is the durable answer and it is real work. Narrowing the wording is the option to be slow about, because what it currently says is the ordinary expectation under UK and EU data-protection law.
+
+**Nothing is blocked on this.** But the page saying it goes live before the first invitation does, so it is worth an answer before then.
+
+### And the document now has a test
+
+The reason it drifted is that nothing was holding it to anything, while every check in the codebase was being held to *"would this still pass if the thing it names were absent?"*
+
+Seven of its statements are now pinned by a test. If somebody builds an investor-deletion feature, the test fails and says *update item 12*. If somebody narrows the privacy wording, the test fails and says the same. If the approved-country list stops shipping empty, or the old hosting domain comes back into the code, or published questions stop being visible during the round — each fails and names the item to go and fix.
+
+It was watched failing before it was trusted: a deletion and an old domain were temporarily added, the run reported exactly those two failures, and they were removed.
+
+---
+
 ## One command that checks everything
 
 There are twenty-three separate verification programs in this project. Between them they drive a real web browser, a real database, a real file store, a real backup restore and two full copies of the application — and they check things no ordinary test can reach: that every screen works on a phone, that the upload limits refuse what they say they refuse, that the video recorder records.

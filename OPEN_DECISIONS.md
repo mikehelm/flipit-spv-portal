@@ -1,6 +1,20 @@
-# Open Decisions — before the build starts
+# Open Decisions
 
-**Version 6.0 · 2026-07-25**
+**Version 7.0 · 2026-07-27**
+
+> **Every statement in this document has now been checked against the code**, one
+> at a time, and five of them were wrong. That is the point of this version.
+>
+> It was written as *"before the build starts"* and dated 2026-07-25, and the
+> build has been moving underneath it for two days. A note written for a person to
+> act on is a claim like any other, and this one was being held to nothing while
+> every check in the repository was being held to *"would this still pass if the
+> thing it names were absent?"* Items 4, 6 and 12 had quietly stopped being true,
+> item 1 was true of the mechanism and wrong about the default state, and one line
+> in the settled list contradicted another seven lines below it.
+>
+> What each item is now marked with: **verified** means somebody read the code
+> and it says what this says. **Corrected** means it did not.
 
 Settled in v2: owner is Michael Helm `mike@flipthepage.com`; operator is David Serene `serenedavid@gmail.com`; investors hold persistent accounts; the two pre-launch gates are specified in Build Spec §8.
 
@@ -14,7 +28,7 @@ What follows is what still needs an answer. Ordered by how much rework a late an
 - Same response deadline for everyone
 - Automatic reminders to non-responders: **in v1**
 - AI-assisted spreadsheet import with an owner-supplied API key: **in v1**
-- Hosting: `invest.flipit.com`, managed Postgres and queue, roughly USD 20–50/month
+- ~~Hosting: `invest.flipit.com`~~ — **superseded** by the line below, which is the current answer. Managed Postgres, roughly USD 20–50/month. (The old hostname also survives in BUILD_SPEC §11.3, in the line about where email images are served from. It is stale there too and is not marked as superseded — worth a one-word fix to the spec next time it is open.)
 - Retention: indefinite — the portal becomes David's ongoing surface for SPV members
 - Compliance: David, via the BVI/HK formation agents
 - Branding: FLIPIT palette from the demo file, plus an admin image library
@@ -28,8 +42,8 @@ What follows is what still needs an answer. Ordered by how much rework a late an
 - Round closes when **David presses the button** — the app reminds him, never closes it for him
 - Invitation is a **designed HTML email**, not plain text
 - Build: **in-house, here**
-- **Shared Q&A**: investors ask, answers private by default, David ticks a box to publish anonymised — **visible from the start**
-- Extras in v1: **participation certificate PDF**, **anti-phishing verification page**, and a **register of interest** (§5.2) — explicitly non-promissory
+- **Shared Q&A**: investors ask, answers private by default, David ticks a box to publish anonymised — **visible from the start**. *Verified: visible during an open round by default, the switch is owner-only, and hiding it queues entries rather than losing them.*
+- Extras in v1: **participation certificate PDF**, **anti-phishing verification page**, and a **register of interest** (§5.2) — explicitly non-promissory. *All three built and verified; the register's non-promissory sentence is locked to the spec by a test, and the word "waitlist" is asserted absent from everything an investor sees.*
 - US recipient: **held**, with an in-app explanation to David
 - No hard close date — David closes when ready
 - Product demo in the portal: **decide after seeing the build**
@@ -41,41 +55,64 @@ What follows is what still needs an answer. Ordered by how much rework a late an
 
 ### 1. The US recipient — get advice before sending to them
 
-One recipient is a US person. That is the highest-risk item in the project and the app now blocks that recipient by default (§8.3) while everyone else proceeds. **Recommendation: send to the other recipients, hold the US one pending advice.** One conversation, one person delayed. The alternative is unwinding an offer already made.
+**Corrected.** Still the highest-risk item, and the recommendation is unchanged: **send to the other recipients, hold the US one pending advice.** One conversation, one person delayed; the alternative is unwinding an offer already made.
+
+What was wrong was the sentence *"the app blocks that recipient by default while everyone else proceeds."* Half of that is right and the half that is wrong matters:
+
+- **The per-recipient block is real and structural.** Compliance is evaluated one offer at a time and a block is written to that one offer row. A held recipient stops that recipient and leaves the batch alone — this is checked in three places and is one of the twelve questions asked of every change.
+- **There is no US-by-default rule.** The block is entirely data-driven off the countries on the recorded approval. The only US-specific thing in the codebase is the *wording* of the refusal an operator reads.
+- **And the default state is not "everyone else proceeds" — it is nobody proceeds.** The seed ships an empty approved-country list, and with no approval recorded the gate refuses every send to everybody. The US recipient will be blocked because the US will not be on the list, not because the code singles them out.
 
 ### 2. ~~Google verification~~ — no longer needed
 
-Sending now goes over Gmail SMTP with an app password (spec §8.1). No verification, no waiting period, no demo video, no 7-day expiry. **This is off the critical path entirely.** All David has to do is turn on 2-Step Verification if it is not already on, and generate an app password — a two-minute job the onboarding walks him through.
+**Verified.** Sending goes over Gmail SMTP with an app password (spec §8.1). No Google review, no waiting period, no demo video, no 7-day expiry. **This is off the critical path entirely.** All David has to do is turn on 2-Step Verification if it is not already on, and generate an app password — a two-minute job the onboarding walks him through.
+
+One thing to know that this item did not say, because it is the application's rule rather than Google's: **the app tests the connection and the test goes stale after twelve hours.** Sending refuses on a stale one and the onboarding re-tests in a click. Long enough that David is not re-testing between two sends; short enough that a password revoked this morning cannot still be trusted this evening. (The Gmail-API path still exists as a named stub that refuses; there is no OAuth code anywhere and no `googleapis` dependency.)
 
 The only remaining item on the critical path is the compliance approval below.
 
 ### 3. Confirm the formation agents are reviewing the *email*, not just the structure
 
-BVI/HK formation agents set up the SPV. That is not the same as approving the wording of a solicitation sent to named individuals in their own countries. Worth one direct question to David: *has anyone read the investor email and confirmed we can send it to these particular people, in these particular countries?* Nothing sends until that approval is recorded.
+BVI/HK formation agents set up the SPV. That is not the same as approving the wording of a solicitation sent to named individuals in their own countries. Worth one direct question to David: *has anyone read the investor email and confirmed we can send it to these particular people, in these particular countries?*
+
+**Verified: nothing sends until that approval is recorded**, and recording, amending and voiding one are all owner-only — the operator can do none of the three. Reminders are gated against their own separate approval rather than borrowing the invitation's. Voiding an approval immediately re-blocks every recipient. The one thing that works without an approval is a test send to the operator's own address, so the template can be prepared meanwhile, and the refusal message says so.
 
 ### 4. Approved jurisdiction list
 
-Known so far: Australia, England, France, Thailand, USA (blocked), and others to confirm. Each needs to be on the approved list before its recipient can be sent to. UK financial-promotion rules and Australian small-scale offer thresholds are the usual ones to check.
+**Corrected — and this is the one to read carefully, because it reads as though the application already knows something it does not.**
 
-### 5. ~~David's phone number~~ — resolved. Collected during his onboarding, along with whether he prefers phone, WhatsApp, or email only.
+There is **no list in the application**. The approved countries are data typed in by the owner when recording the compliance approval, and the seed ships **an empty list**. `Australia, England, France, Thailand, USA (blocked)` is a note about the recipients, not a configuration anybody has entered.
 
-### 6. Privacy policy text
+Two practical consequences:
 
-No longer required for Gmail verification, but still worth having given the personal and financial data held. Can be drafted here.
+- **Nothing sends until that list is typed in**, country by country, as part of recording the approval. Not one recipient, not to test the batch.
+- **It takes ISO country codes, not names.** `AU`, `GB`, `FR`, `TH` — and the defined blocs `EU`, `EEA`, `EFTA`. A country *name* is refused rather than guessed at, deliberately: guessing which country somebody meant by "England" is not a thing to do quietly on a securities offer. So the list to hand to the approval screen is `AU, GB, FR, TH`, with the US absent.
+
+Still to confirm, unchanged: UK financial-promotion rules and Australian small-scale offer thresholds are the usual ones to check.
+
+### 5. ~~David's phone number~~ — resolved, and **verified**
+
+Collected during his onboarding, along with whether he prefers phone, WhatsApp or email only. One precision worth having: choosing **email only** stores no number and removes the phone line from the invitation entirely, rather than rendering it blank.
+
+### 6. ~~Privacy policy text~~ — **corrected: it is written**
+
+`/privacy` renders roughly 490 words of finished prose across eight sections — what is held, what is not, who can see it, email, retention, storage, rights, and what to do about a suspicious message. It reads the configured sending address rather than hard-coding one, and it is deliberately one of only two indexable pages.
+
+**What is left is a read, not a draft.** It makes commitments on your behalf — see item 12, which is where one of them turned out to have no procedure behind it.
 
 ### 7. Fallback contact if David is unavailable
 
 The portal's closed and suspended states need an address someone will still be reading.
 
-**Half-answered by the build.** There is now a place to put it — the *service contact address* in settings — and it is rendered where it is needed: underneath the sending address on a suspended or concluded account, and *alone* once the portal is closing or closed, because that is the point at which the sending address stops being monitored. The health report says so when it is empty, and refuses in the settings form for sunset and disabled. **What is still open is whose address it should be.**
+**Half-answered by the build — and this time every part of that sentence was checked.** All four sub-claims below are true of the code as it stands: the field, both rendering rules, the health finding and the settings refusal. There is now a place to put it — the *service contact address* in settings — and it is rendered where it is needed: underneath the sending address on a suspended or concluded account, and *alone* once the portal is closing or closed, because that is the point at which the sending address stops being monitored. The health report says so when it is empty, and refuses in the settings form for sunset and disabled. **What is still open is whose address it should be.**
 
 ### 8. Ask David whether he wants to do a video
 
-Optional, and entirely his call — but it is the highest-impact thing on the list and costs him ten minutes with a phone. Worth asking before the build finishes so there is a slot for it.
+Optional, and entirely his call — but it is the highest-impact thing on the list and costs him ten minutes with a phone. **The slot is built and waiting**: he can record it in the browser, watch it back in the real portal layout, and publish it, and until he presses publish no investor can reach it by any means. **Publishing is operator-only — verified.** You deliberately cannot do it for him.
 
 ### 9. Confirm the brand palette against the live site
 
-The colours in §13.2 come from your demo file, not from flipit.com directly — the live site returned nothing useful to an automated fetch. A two-minute eyeball check before launch.
+The colours in §13.2 come from your demo file, not from flipit.com directly — the live site returned nothing useful to an automated fetch. A two-minute eyeball check before launch. **Not checkable from here**, and it is the only item on this list that is not.
 
 ---
 
@@ -121,13 +158,37 @@ Three ways out. The second is the one that is hardest to argue against — a num
 
 Nothing is blocked on this. It will only be met by a file with an awkward split in it, and no such file exists yet.
 
+### 12. The privacy policy promises a deletion that has no procedure
+
+**Found by checking this document against the code, and it is the item with somebody else's expectation attached to it.**
+
+`/privacy` says two things to an investor, in their own section:
+
+> *"Anyone who would rather their record were removed can say so, and it will be — subject only to anything that has to be retained to meet a legal or regulatory obligation."*
+
+> *"You can ask what is held about you, ask for it to be corrected, ask for a copy, or ask for it to be deleted … it will be dealt with by a person rather than a form."*
+
+**There is no way to delete an investor record in this application.** Not owner-only — none. The lifecycle actions change a status: an account can be suspended or closed, and a closed account keeps every row and turns read-only. That is deliberate and it is the right default for a securities record. But nothing removes one.
+
+**The wording is not a lie**, and that is worth being precise about, because the tempting reading is that the page over-promises. It says *a person* will deal with it, not that a button exists — and a person can. What is missing is the part that makes it real: **nobody has written down how.** Today it means somebody typing `DELETE` against a live Postgres holding every investor's figures, improvised, at the moment somebody has asked for something they are entitled to.
+
+Three ways out, and the first is nearly free:
+
+- **Write the procedure into `DEPLOYMENT.md`** — which rows, in which order, what the foreign keys require, what the audit log keeps (it must keep something: an erasure is itself a consequential action), and what "subject to a legal obligation to retain" actually excludes. A runbook step, reviewed once, calmly, rather than under a request.
+- **Build it** — an owner-only erasure that anonymises the account and its offers, keeps the audit trail, and records that it happened. This is the durable answer and it is a real piece of work, and it is a *destructive* path in the one system where that word matters most.
+- **Narrow the wording** — say what will be done rather than that it will be deleted. This is the option to be slow about: the sentence as written is the ordinary expectation under UK and EU data-protection law, and narrowing it is a decision to take on advice rather than to save an afternoon.
+
+**Nothing is blocked on this and nothing should be sent while it is unanswered**, because the page saying it goes live before the first invitation does.
+
+Related, and now corrected below: this document used to say deletion was *"currently owner-only"*, which described a control that does not exist.
+
 ---
 
 ## Worth deciding, not blocking
 
 - **Does the raise have a hard close date** the portal should display?
-- **Should the shared Q&A be visible during the raise, or held until the round closes?** It names nobody, but its existence implies other recipients. Default is visible — a well-answered Q&A probably does more for confidence than the inference costs. One switch either way.
-- **Who may delete investor data**, and after how long? Currently owner-only, indefinite retention.
+- ~~**Should the shared Q&A be visible during the raise, or held until the round closes?**~~ — **this is answered in the settled list above** ("visible from the start") and it is built that way: visible during an open round by default, with an owner-only switch, and hiding it queues entries rather than losing them. Publishing is anonymised structurally — the object an investor receives has no field capable of carrying an identity. Left here only to note that the two halves of this document disagreed and that the settled one wins.
+- **Who may delete investor data**, and after how long? **Corrected: nobody, by any path — see item 12.** Retention is indefinite, which is true, is deliberate, and is what the privacy page tells investors.
 - **Confirm the name spelling** — "David Serene" appears throughout and will sit on investment correspondence.
 
 ---
