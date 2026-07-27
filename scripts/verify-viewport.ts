@@ -1076,6 +1076,10 @@ async function verifyTheStylePolicy(page: Page): Promise<void> {
     el.remove()
     return applied
   })
+  // Same reason as the wait in `verifyTheScriptPolicy`: Chromium queues the
+  // violation report, so it has not arrived when `evaluate` resolves. This is a
+  // wait for a *browser event*, not a stand-in for a database read — the
+  // distinction the page-text entry in PROGRESS.md is about.
   await page.waitForTimeout(200)
   check(
     'a style attribute set from markup does not apply',
@@ -1102,6 +1106,7 @@ async function verifyTheStylePolicy(page: Page): Promise<void> {
     style.remove()
     return applied
   })
+  // As above: waiting for the queued violation report, not for a write.
   await page.waitForTimeout(200)
   check(
     'a <style> element with no nonce does not apply',

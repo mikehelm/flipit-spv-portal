@@ -58,7 +58,7 @@ import { mkdtempSync, rmSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { and, eq, like } from 'drizzle-orm'
+import { and, desc, eq, like } from 'drizzle-orm'
 import { chromium, type Browser, type Page } from 'playwright'
 import { db } from '@/db'
 import {
@@ -499,6 +499,37 @@ function storedFiles(): string[] {
 }
 
 /**
+ * Waits for the **row** to say something, and returns whether it did.
+ *
+ * The one rule this script keeps having to relearn. A server action re-renders
+ * in place and never navigates, so there is nothing to wait for except the thing
+ * it wrote — and every attempt to wait for the screen instead has gone wrong in
+ * a different way. `settled()` in `completeOnboarding` does this for onboarding;
+ * this is the same idea for the video row, and the four places that used to wait
+ * on page text before asking the video route now use it.
+ *
+ * Returning a boolean rather than throwing means the wait is itself a `check`
+ * with a name, so a timeout says which state never arrived instead of failing
+ * the run with a Playwright stack trace.
+ */
+async function waitForVideo(
+  predicate: (row: typeof operatorVideos.$inferSelect | undefined) => boolean,
+  timeoutMs = 30_000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const rows = await db
+      .select()
+      .from(operatorVideos)
+      .orderBy(desc(operatorVideos.createdAt))
+      .limit(1)
+    if (predicate(rows[0])) return true
+    if (Date.now() >= deadline) return false
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+}
+
+/**
  * The live camera tracks the page is currently holding, as the page sees them.
  *
  * **Every** video element, not the first one. Once a video has been stored the
@@ -675,6 +706,9 @@ async function main(): Promise<void> {
     const stopButton = page.locator('button', { hasText: 'Stop' })
     await stopButton.waitFor({ timeout: 10_000 })
     const firstLabel = (await stopButton.textContent()) ?? ''
+    // Real elapsed time, and there is nothing else it could be: the claim is
+    // that the timer counts *up while recording*, so the wait is the thing being
+    // measured rather than a stand-in for a state to poll.
     await page.waitForTimeout(RECORD_MS)
     const laterLabel = (await stopButton.textContent()) ?? ''
     check(
@@ -718,6 +752,9 @@ async function main(): Promise<void> {
     await armButton.click()
     await page.locator('button', { hasText: 'Start recording' }).click()
     await stopButton.waitFor({ timeout: 10_000 })
+    // Real elapsed time again, and for the reason given above: a MediaRecorder
+    // stopped immediately emits a header and no frames, and a two-hundred-byte
+    // fixture would not exercise what the rest of this section checks.
     await page.waitForTimeout(RECORD_MS)
     await stopButton.click()
     await useThis.waitFor({ timeout: 20_000 })
@@ -725,11 +762,7 @@ async function main(): Promise<void> {
 
     // The component reloads the page once the row exists, because the page and
     // not the component is the source of truth about what is stored.
-    await page.waitForFunction(
-      () => !document.body.innerText.includes('Nothing recorded yet'),
-      undefined,
-      { timeout: 30_000 },
-    )
+    check('a video row appears', await waitForVideo((row) => row !== undefined))
 
     const stored = await db.select().from(operatorVideos)
     check('one video row exists', stored.length === 1, `${stored.length} rows`)
@@ -931,14 +964,9 @@ async function main(): Promise<void> {
 
     await page.locator('input[name="confirm"]').check()
     await page.getByRole('button', { name: 'Publish to the portal' }).click()
-    await page.waitForFunction(
-      () => document.body.innerText.includes('Take it down'),
-      undefined,
-      { timeout: 20_000 },
-    )
     check(
-      'publishing records the moment',
-      (await db.select().from(operatorVideos))[0]?.publishedAt !== null,
+      'publishing is recorded before anything asks the route',
+      await waitForVideo((row) => row?.publishedAt !== null, 20_000),
     )
 
     const published = await ask(videoId)
@@ -1034,10 +1062,9 @@ async function main(): Promise<void> {
     await page.goto(`${ORIGIN}/admin/video`, { waitUntil: 'networkidle' })
     await page.locator('input[name="confirm"]').check()
     await page.getByRole('button', { name: 'Publish to the portal' }).click()
-    await page.waitForFunction(
-      () => document.body.innerText.includes('Take it down'),
-      undefined,
-      { timeout: 20_000 },
+    check(
+      'publishing is recorded before anything asks the route',
+      await waitForVideo((row) => row?.publishedAt !== null, 20_000),
     )
     check('published again, so there is something to replace', (await ask(videoId)).status === 200)
 
@@ -1160,10 +1187,9 @@ async function main(): Promise<void> {
     await page.goto(`${ORIGIN}/admin/video`, { waitUntil: 'networkidle' })
     await page.locator('input[name="confirm"]').check()
     await page.getByRole('button', { name: 'Publish to the portal' }).click()
-    await page.waitForFunction(
-      () => document.body.innerText.includes('Take it down'),
-      undefined,
-      { timeout: 20_000 },
+    check(
+      'publishing is recorded before anything asks the route',
+      await waitForVideo((row) => row?.publishedAt !== null, 20_000),
     )
     check(
       'published, and the investor can reach it',

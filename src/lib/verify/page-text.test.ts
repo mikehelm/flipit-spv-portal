@@ -102,6 +102,46 @@ describe('no verification script reads the body as textContent', () => {
   })
 
   /**
+   * The other half of the same rule, and the one the finding started from.
+   *
+   * `page.waitForFunction` on page content, used before an assertion about
+   * stored state, is the shape that failed on half its runs: it waits for a
+   * *rendering* of a fact, and the rendering can be there for reasons that have
+   * nothing to do with the fact. What a script should wait for is the row.
+   *
+   * `waitForTimeout` is allowed, because there is one thing it is genuinely for
+   * — a browser event Chromium queues, such as a Content-Security-Policy
+   * violation report, which no amount of polling a database will produce. The
+   * three in `verify-viewport` are all of that kind and each says so.
+   */
+  it('no script waits on page content with waitForFunction', () => {
+    const offenders = scripts().filter((file) =>
+      /waitForFunction\(/.test(withoutComments(read(file))),
+    )
+    expect(
+      offenders,
+      'wait for the row a server action wrote, not for the render of it — see PROGRESS.md',
+    ).toEqual([])
+  })
+
+  it('and every waitForTimeout says what it is waiting for', () => {
+    for (const file of scripts()) {
+      const source = read(file)
+      const lines = source.split('\n')
+      lines.forEach((line, index) => {
+        if (!/waitForTimeout\(/.test(line)) return
+        // A comment on one of the three lines above it. Cheap, and it is the
+        // thing that was missing: two of these had no reason written down.
+        const preceding = lines.slice(Math.max(0, index - 3), index).join('\n')
+        expect(
+          /\/\/|\*/.test(preceding),
+          `${file}:${index + 1} waits a fixed time with no reason given`,
+        ).toBe(true)
+      })
+    }
+  })
+
+  /**
    * The scripts that drive a browser must be reading page text through one of
    * the two functions, or through a scoped locator. A script that stops using
    * either has almost certainly gone back to `textContent`.

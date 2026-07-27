@@ -6345,3 +6345,102 @@ are green. `pnpm verify:recorder` 104 of 104; `pnpm verify:viewport` 332 of 332;
   asked what an attacker could do with them.*
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
+
+## Finishing the sweep the last entry started and then abandoned
+
+The last entry's first Uncertain item was an admission:
+
+> *"The original question has still not been answered. This entry answered a
+> better one. 'How many checks wait on a rendering rather than on a fact' is about
+> `waitForFunction` and `waitForTimeout` standing in for a database read, and
+> while the one known instance is fixed, `verify:viewport` still has three bare
+> `waitForTimeout(200)` calls that nothing has justified."*
+
+Answered now, and the answer is short enough to be worth the reading it took.
+
+**Every `waitForFunction` in this repository was the bad shape.** Four remained
+in `verify:recorder` after the last entry, all of them waiting on page text
+before an assertion about stored state — one for a row to appear, three for
+publishing to have happened before asking the video route whether the video was
+reachable. The three were sound only by luck: the string they waited for was
+absent from the payload *because* the page had last been loaded in the other
+state. Change the order of two sections and they become the bug that failed on
+half its runs.
+
+All four now wait on the row, through one named function — `waitForVideo`, which
+takes a predicate and **returns a boolean rather than throwing**, so the wait is
+itself a named `check`. A timeout now says *which state never arrived* instead of
+failing the run with a Playwright stack trace pointing at a lambda. One check
+that duplicated what the wait already asserted was removed. There are now no
+`waitForFunction` calls in any script, and `page-text.test.ts` fails the build if
+one comes back.
+
+**Every `waitForTimeout` was the good shape, and two of five said so.** Five
+across two scripts. All five wait for something no amount of polling a database
+would produce:
+
+- three in `verify:viewport` wait for **Chromium to deliver a queued
+  Content-Security-Policy violation report**, which has not arrived when
+  `evaluate` resolves — so without the wait the *execution* checks pass and the
+  *reporting* check fails, which reads as a broken detector rather than a race;
+- two in `verify:recorder` wait for **real elapsed recording time**, once because
+  the claim under test is that the timer counts up while recording, and once
+  because a MediaRecorder stopped immediately emits a header and no frames.
+
+Three of the five had no reason written down. They do now, and a test asserts
+every `waitForTimeout` in every script has a comment within three lines above it.
+That test is deliberately crude — it checks for the presence of a comment, not
+its content — because the failure it prevents is not a wrong explanation but the
+absence of one.
+
+**Decisions.**
+
+- ***`waitForTimeout` was not banned.*** The obvious move after the last entry was
+  to forbid fixed waits outright. It would have deleted five correct checks and
+  the two things they measure: that a policy violation is *reported*, and that a
+  recording timer advances. Elapsed time is sometimes the thing under test. The
+  rule that survives contact with these five is "say what you are waiting for",
+  and that is what the test enforces.
+- ***`waitForVideo` returns a boolean.*** Throwing would have been shorter.
+  A wait that throws makes the failure look like a harness fault; a wait that is
+  a `check` makes it a finding with a sentence attached, which is the difference
+  between "Playwright timed out" and "publishing is recorded before anything asks
+  the route — FAIL".
+- ***The three sound-by-luck waits were changed anyway.*** They pass today and
+  would keep passing. They were rewritten because the property that makes them
+  work is the *order of two sections in a 1,300-line file*, and nothing anywhere
+  says so.
+
+**Deviations.** None. No production code changed.
+
+**Checklist.** Items 1 to 12: all untouched by this entry, which changes only
+three verification scripts and one test. Item 5 is worth one line: the three
+investor-facing leak checks strengthened in the last entry are unchanged here and
+still read the full payload.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2440) and `pnpm build` are green.
+`pnpm verify:recorder` is 107 of 107, twice; `pnpm verify:viewport` 332 of 332.
+
+**Uncertain.**
+
+- ***`waitFor` on a locator is the same shape and was left alone.*** There are
+  many — `stopButton.waitFor(...)`, `useThis.waitFor(...)` — and each waits for a
+  *control* to exist before pressing it, which is legitimate and is what
+  Playwright is for. But a `waitFor` on a control whose appearance depends on
+  server state is the bug again in a third costume, and nobody has read them with
+  that question in mind. This is the same item as before, one level down, and it
+  is the last level.
+- ***The comment test cannot tell a reason from a noise.*** `// wait` satisfies
+  it. It was still worth adding, because the three that were wrong had nothing at
+  all, but it is a nudge rather than a check.
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *The image upload preview and the email template preview are still
+  unexercised.*
+- *The error page has never been rendered by a real error.*
+- *Nothing measures bundle size, and nothing measures what the middleware
+  costs.*
+- *Nothing measures how long a 20 MB upload takes.*
+- *`img-src data:`, `media-src blob:` and `worker-src blob:` have never been
+  asked what an attacker could do with them.*
+- *The password-reset journey is still not built,* and belongs in
+  OPEN_DECISIONS.md as a question for Michael.
