@@ -2,10 +2,12 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { signOutAction } from '@/actions/auth'
 import { AccountCurlMenu } from '@/components/account-curl-menu'
+import { AdminMainFrame } from '@/components/admin/admin-main-frame'
 import { AdminNav } from '@/components/admin/admin-nav'
 import { PortalPreviewSwitch } from '@/components/portal-preview-switch'
 import { SiteFooter } from '@/components/site-footer'
 import { requireReader } from '@/lib/auth/guards'
+import { countSubmittedEmailReviewProposals } from '@/lib/email-review/data'
 import { ROLE_LABELS, VIEWER_BANNER } from '@/lib/roles'
 import { env } from '@/lib/env'
 
@@ -39,6 +41,8 @@ export default async function AdminLayout({
   // own guard, and a nested route handler never runs this at all.
   const admin = await requireReader()
   const config = env()
+  const emailReviewPendingCount =
+    admin.role === 'OWNER' ? await countSubmittedEmailReviewProposals() : 0
   const accountName =
     admin.name?.trim() ||
     (admin.role === 'OWNER'
@@ -82,8 +86,8 @@ export default async function AdminLayout({
         <PortalPreviewSwitch mode="ADMIN" role={admin.role} />
       ) : null}
 
-      <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-10">
-        <header>
+      <div className="w-full flex-1 py-6 sm:py-10">
+        <header className="mx-auto w-full max-w-6xl px-4 sm:px-6">
           <p className="pr-24 text-[11px] font-bold uppercase tracking-[0.22em] text-orange">
             Flipit Global SPV
           </p>
@@ -104,13 +108,14 @@ export default async function AdminLayout({
           ) : null}
 
           <div className="mt-6 border-t hairline pt-3">
-            <AdminNav role={admin.role} />
+            <AdminNav
+              role={admin.role}
+              emailReviewPendingCount={emailReviewPendingCount}
+            />
           </div>
         </header>
 
-        <main id="main" className="mt-8">
-          {children}
-        </main>
+        <AdminMainFrame>{children}</AdminMainFrame>
       </div>
 
       <SiteFooter surface="ADMIN" />

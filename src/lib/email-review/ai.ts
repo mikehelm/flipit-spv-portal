@@ -5,6 +5,8 @@ import {
   findEmailReviewClause,
   type EmailReviewClause,
 } from './document'
+import type { EmailDiffUnit } from './segments'
+import type { EmailPolicyOutcome } from '@/lib/email/policy'
 import {
   EMAIL_REVIEW_MODEL,
   MAX_EMAIL_REVIEW_OUTPUT_TOKENS,
@@ -41,7 +43,11 @@ function clauseContext(clause: EmailReviewClause): string {
   )
 }
 
-export function buildEmailReviewPrompt(question: string, clauseId?: string): {
+export function buildEmailReviewPrompt(
+  question: string,
+  clauseId?: string,
+  currentEmail: string = EMAIL_REVIEW_DOCUMENT.revised.text,
+): {
   prompt: string
   scope: 'DOCUMENT' | 'CLAUSE'
   scopeLabel: string
@@ -54,7 +60,7 @@ export function buildEmailReviewPrompt(question: string, clauseId?: string): {
     : JSON.stringify(
         {
           originalEmail: EMAIL_REVIEW_DOCUMENT.original,
-          currentEmail: EMAIL_REVIEW_DOCUMENT.revised,
+          currentEmail,
           clauseComparison: EMAIL_REVIEW_DOCUMENT.clauses.map((entry) => ({
             clause: entry.title,
             originalWording: entry.original,
@@ -75,10 +81,35 @@ export function buildEmailReviewPrompt(question: string, clauseId?: string): {
   }
 }
 
+function selectionContext(
+  selection: EmailDiffUnit,
+  clauses: readonly EmailReviewClause[],
+): string {
+  return JSON.stringify(
+    {
+      selectedChange: selection.id,
+      originalWording:
+        selection.original.length > 0 ? selection.original.join('\n\n') : 'No equivalent.',
+      currentWording:
+        selection.current.length > 0 ? selection.current.join('\n\n') : 'Removed.',
+      recordedEvidence: clauses
+        .filter((clause) => selection.clauseIds.includes(clause.id))
+        .map((clause) => ({
+          clause: clause.title,
+          recordedReason: clause.reason,
+          evidenceLabel: clause.evidenceKind,
+          evidenceCitation: clause.evidence,
+        })),
+    },
+    null,
+    2,
+  )
+}
+
 export interface EmailReviewAnswer {
   answer: string
   model: string
-  scope: 'DOCUMENT' | 'CLAUSE'
+  scope: 'DOCUMENT' | 'CLAUSE' | 'SELECTION'
   scopeLabel: string
   usage?: {
     inputTokens: number
@@ -91,8 +122,20 @@ export async function answerEmailReviewQuestion(input: {
   actorId: string
   question: string
   clauseId?: string
+  selection?: EmailDiffUnit
+  currentEmail?: string
 }): Promise<EmailReviewAnswer> {
-  const built = buildEmailReviewPrompt(input.question, input.clauseId)
+  const built = input.selection
+    ? {
+        prompt:
+          `<source_material>\n${selectionContext(
+            input.selection,
+            EMAIL_REVIEW_DOCUMENT.clauses,
+          )}\n</source_material>\n\n<question>\n${input.question}\n</question>`,
+        scope: 'SELECTION' as const,
+        scopeLabel: `Selected change ${input.selection.id.replace('change-', '')}`,
+      }
+    : buildEmailReviewPrompt(input.question, input.clauseId, input.currentEmail)
   const client = new OpenAI({ apiKey: input.apiKey, maxRetries: 1, timeout: 45_000 })
 
   const response = await client.responses.create({
@@ -121,5 +164,71 @@ export async function answerEmailReviewQuestion(input: {
     scope: built.scope,
     scopeLabel: built.scopeLabel,
     ...(usage ? { usage } : {}),
+  }
+}
+
+const PROPOSAL_REVIEW_INSTRUCTIONS = `${INSTRUCTIONS}
+
+You are reviewing one proposed wording replacement before the owner decides whether to promote it.
+- The deterministic policy results supplied below are authoritative. Never say a failed rule passes.
+- Give a compact review under exactly four headings: What changed; Recorded evidence; Rule impact; Questions for Mike.
+- Do not approve the change, describe it as legally sufficient, or invent a legal reason.
+- When the reason is not established by recorded evidence, say: "The legal or historical reason is not established by the recorded evidence."
+- Do not rewrite investor amounts, percentages, deadlines or template variables.`
+
+export async function reviewEmailProposal(input: {
+  apiKey: string
+  actorId: string
+  sectionLabel: string
+  beforeText: string
+  proposedText: string
+  davidReason: string
+  policyResults: readonly EmailPolicyOutcome[]
+  recordedEvidence: ReadonlyArray<{
+    clause: string
+    reason: string
+    evidenceLabel: string
+    evidenceCitation: string
+  }>
+}): Promise<{
+  answer: string
+  model: string
+  usage?: { inputTokens: number; outputTokens: number }
+}> {
+  const client = new OpenAI({ apiKey: input.apiKey, maxRetries: 1, timeout: 45_000 })
+  const response = await client.responses.create({
+    model: EMAIL_REVIEW_MODEL,
+    instructions: PROPOSAL_REVIEW_INSTRUCTIONS,
+    input: JSON.stringify(
+      {
+        selectedSection: input.sectionLabel,
+        currentWording: input.beforeText,
+        proposedWording: input.proposedText,
+        proposerReason: input.davidReason,
+        recordedEvidence: input.recordedEvidence,
+        deterministicPolicyResults: input.policyResults,
+      },
+      null,
+      2,
+    ),
+    reasoning: { effort: 'high' },
+    max_output_tokens: MAX_EMAIL_REVIEW_OUTPUT_TOKENS,
+    store: false,
+    safety_identifier: createHash('sha256').update(input.actorId).digest('hex'),
+  })
+
+  const answer = response.output_text.trim()
+  if (!answer) throw new Error('The model returned no readable proposal review.')
+  return {
+    answer,
+    model: EMAIL_REVIEW_MODEL,
+    ...(response.usage
+      ? {
+          usage: {
+            inputTokens: response.usage.input_tokens,
+            outputTokens: response.usage.output_tokens,
+          },
+        }
+      : {}),
   }
 }

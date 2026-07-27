@@ -7154,3 +7154,104 @@ brings a screen up to the standard every other screen already met.
 - Mike's own browser is the acceptance surface for the balance between the new
   1.5× type and 72rem-wide administrator frame. The control can immediately move
   that preference down to 125% or up to 175% without another release.
+
+## 2026-07-27 — David’s private email revision studio
+
+**Built.**
+
+- `/admin/email-review` is now a wide three-zone studio: a change map on the
+  left, David’s preserved Gmail draft and the actual current invitation source
+  in aligned columns, and evidence/AI/proposal/review tools on the right.
+- Selecting a change in the map scrolls it into view and selects both sides of
+  the same row. Added, removed, changed and unchanged passages use symbols and
+  labels as well as colour.
+- The right-hand inspector shows every recorded SPEC, TEST or UNVERIFIED reason.
+  UNVERIFIED remains visibly unverified; no missing rationale was reconstructed.
+- AI questions can be scoped to the selected paired change or the whole
+  document. The application names `OpenAI GPT-5.6 Sol`, sends the actual current
+  invitation rather than a stale duplicate, uses `store: false`, records token
+  usage, and treats the answer as advisory.
+- David can propose one bounded section at a time and must explain why. The
+  proposal updates the real subject/HTML/plain-text candidate together and runs
+  twelve deterministic policy checks before it can reach Mike.
+- Mike sees the exact before/after wording, David’s reason, policy results and
+  the advisory AI review. Request-changes and reject decisions preserve the live
+  source. Promotion is owner-only, rechecks the base hash, candidate hash and
+  every policy rule, creates a versioned current template, and leaves sending
+  disabled until a fresh exact-hash compliance approval is recorded.
+- Pending proposals are counted in the Communication menu for Mike. David sees
+  his own proposal status and Mike’s note, but no promotion control.
+- The review is available to David before optional media, SMTP and test-send
+  onboarding are complete. Those gates still govern sending; they no longer
+  block private document preparation.
+- Migration `0015_yummy_red_skull.sql` adds the private proposal record. Complete
+  candidate sources remain server-side and are never copied into the audit log
+  or any investor route.
+
+**Decisions.**
+
+- The comparison’s right side is derived from `loadCurrentTemplate('INVITATION')`,
+  the source that would actually be sent. `EMAIL_TEMPLATE.txt` remains provenance
+  material rather than a second editable truth.
+- Proposals are single-section changes, not an unrestricted email editor. This
+  makes the before/after review exact and lets the policy engine refuse a
+  protected-rule break before a proposal is stored.
+- The AI explains and reviews; it never approves, promotes, calculates investor
+  figures or supplies a missing legal reason. Deterministic checks and Mike’s
+  owner action remain the authority boundaries.
+- A promoted edit deliberately creates drift. The existing compliance gate is
+  not bypassed or rewritten; the UI warns Mike before promotion and confirms the
+  resulting send lock afterward.
+- Earlier promoted wording is resolved from the version history, so a later
+  proposal starts from the wording actually live rather than the shipped
+  default.
+
+**Deviations.**
+
+- No production deployment or production database migration was made in this
+  package. The full workflow was exercised against an isolated local copy of the
+  review database, including a preview-only subject promotion.
+- The isolated copy did not contain the stored OpenAI key, so the page showed
+  the honest disconnected state there. The protected production configuration
+  was checked read-only and reports that the key is configured; the provider
+  wrapper had already passed its live key/model check.
+
+**Checklist.**
+
+1. *Does David see the original and the source that is actually sent?* Yes.
+2. *Are unknown reasons still unknown?* Yes — six UNVERIFIED clauses are called
+   out and the AI instruction forbids guessing.
+3. *Can David change the live invitation?* No. He can submit a candidate only.
+4. *Can a viewer read or mutate this workspace?* No. The route and actions admit
+   owner/operator roles; the investor portal imports none of the review record.
+5. *Can an operator promote or record approval?* No. Promotion begins with
+   `requireOwner()`, and compliance approval remains a separate owner control.
+6. *Can a stale or altered proposal be promoted?* No. Base and candidate hashes
+   are recomputed and compared immediately before a version is created.
+7. *Can a promotion silently keep sending enabled?* No. The live hash changes,
+   and the existing exact-hash approval gate disables sending.
+8. *Does AI storage remain off?* Yes, for selected-change, whole-document and
+   proposal-review calls.
+9. *Does an audit event contain email bodies, David’s reason, a key or an AI
+   answer?* No. Audit metadata contains ids, hashes, model, counts and rule ids.
+10. *Focused verification?* TypeScript passed; focused ESLint passed; 52
+    email-review/template tests passed; the production build passed. Browser
+    checks at the project’s 150% text default verified the three-column layout,
+    synchronized pair selection, David’s no-promote boundary, Mike’s submit →
+    review → promote flow, stored version change, iterative second-edit source,
+    and the post-promotion send lock.
+
+**Uncertain.**
+
+- The migration and application commit still need a deliberate release/deploy
+  step before the production page contains this workspace. Deployment was not
+  inferred from approval to build.
+- David’s production account exists and is allowlisted, but it has no password
+  yet. Mike still needs to issue or resend David’s setup invitation before the
+  walkthrough.
+- No compliance approval is recorded for the invitation wording. The six
+  UNVERIFIED rationale rows remain the exact list for a qualified person to
+  confirm; this workspace does not reduce that queue.
+- SMTP remains a separate launch prerequisite. David can now review wording
+  before it is connected, but no real invitation should be enabled until the
+  sending account, test invitation and exact-hash approval have all passed.

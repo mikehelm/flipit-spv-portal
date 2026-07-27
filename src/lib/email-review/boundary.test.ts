@@ -21,9 +21,20 @@ function filesUnder(relativePath: string): string[] {
 describe('David’s private email-review boundary', () => {
   it('guards both the page and the server action as acting administrators', () => {
     expect(read('src/app/(admin)/admin/email-review/page.tsx')).toContain(
-      'requireOnboardedAdmin()',
+      'requireAdmin()',
     )
-    expect(read('src/actions/email-review.ts')).toContain('requireOnboardedAdmin()')
+    expect(read('src/actions/email-review.ts')).toContain('requireAdmin()')
+  })
+
+  it('reserves proposal promotion for Mike and requires a fresh wording acknowledgement', () => {
+    const action = read('src/actions/email-review.ts')
+    const reviewStart = action.indexOf('export async function reviewEmailProposalAction')
+    const review = action.slice(reviewStart)
+    expect(review).toContain('const owner = await requireOwner()')
+    expect(review).toContain("parsed.data.acknowledged !== 'on'")
+    expect(review).toContain('live.hash !== proposal.baseTemplateHash')
+    expect(review).toContain('hashOf(candidate) !== proposal.candidateTemplateHash')
+    expect(review).toContain('approvalRequired: true')
   })
 
   it('offers the page to Mike and David, never to a viewer', () => {
