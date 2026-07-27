@@ -5722,6 +5722,74 @@ and it restores a limit the middleware had lowered rather than raising one.
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
 
+## Approved physical curl, three-person view switcher and readable text
+
+Mike visually approved the corrected Package 1 curl on 27 July 2026 and asked
+for it to be put into the canonical David-review release. He also asked for one
+floating switch between Mike, David and the synthetic John Doe investor, and
+for the portal text to start at twice its previous size with a hover-accessible
+size control.
+
+**Built.**
+
+- The approved reflection-anchored curl geometry and its WebGL/SVG renderer are
+  now in the canonical source. The copied Package 1 files match the approved
+  checkpoint byte for byte.
+- The curl appears on the landing, sign-in and access-request screens. In the
+  admin and investor portal it conceals the name, email, role, password,
+  two-factor and sign-out controls; hovering or focusing the corner reveals the
+  panel, while clicking the corner keeps the native details control available.
+- The low-left switch now offers three explicit destinations: Mike's owner
+  overview, David's private email-review workspace and John Doe's guarded
+  investor preview. It closes on navigation, outside pointer input and Escape.
+- Text defaults to `2×`. The account panel contains smaller/larger controls
+  covering `1×`, `1.5×`, `2×` and `2.5×`, and remembers the browser's choice.
+  Typography utilities are scaled without changing rem-based widths or spacing.
+
+**Decisions.**
+
+- ***The view switcher navigates to truthful workspaces; it does not impersonate
+  another account.*** Mike leads to the owner overview, David to the email
+  review, and John Doe to the existing synthetic guarded portal.
+- ***Text is scaled at the typography-utility layer rather than by changing the
+  root font size.*** Doubling the root rem would also double card widths,
+  paddings and mobile gutters.
+- ***Development-only Curl Lab UI files are not part of this release.*** The
+  approved settings and geometry remain; the unreferenced lab page and its
+  route-only test were excluded. Packages 2, 3 and 6 remain future curl work.
+
+**Deviations.**
+
+- The broad viewport suite was not rerun. Mike requested proportionate testing,
+  so this release uses the focused curl/preview checks, TypeScript and a
+  production build. The final visual check belongs in the already-authenticated
+  live browser after deployment.
+
+**Checklist.**
+
+1. *Money, sends, approvals, recipient scope and tokens?* Untouched.
+2. *Does the preview create or mutate an investor?* No. John Doe remains
+   synthetic, behind `requireAdmin`, with every investor mutation disabled.
+3. *Does David gain owner authority?* No. The switch is navigation, and server
+   guards continue to enforce the signed-in role.
+4. *Can another investor be revealed?* No. The only investor option is the
+   fixed John Doe fixture.
+5. *Credentials, deployment settings or production data changed?* No.
+
+Focused verification is green: 697 assertions across the curl geometry,
+renderer integration and John Doe preview; `pnpm typecheck`; and a clean
+production `pnpm build`.
+
+**Uncertain.**
+
+- Mike should visually confirm the live admin page at the default `2×` setting
+  and try `1.5×` or `2.5×` from the curl panel. No synthetic login or broad
+  viewport run was created solely for that visual preference check.
+- Packages 2, 3 and 6 — direct thumb-and-finger dragging, general polygon
+  clipping and the Curl Lab A/B harness — are not in this release.
+- The saved text size is browser-local. A different browser or device starts at
+  the requested `2×` default.
+
 ## David can review the email without inheriting an invented rationale
 
 **Built.**

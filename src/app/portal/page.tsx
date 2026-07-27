@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { portalSignOutAction, recordResponseAction } from '@/actions/portal'
+import { AccountCurlMenu } from '@/components/account-curl-menu'
 import { ActionForm } from '@/components/admin/action-form'
 import { PageCurl } from '@/components/page-curl'
 import { PortalPreviewSwitch } from '@/components/portal-preview-switch'
@@ -25,6 +26,7 @@ import { ROADMAP_DISCLAIMER } from '@/lib/portal/roadmap'
 import { investorDocuments } from '@/lib/documents/data'
 import { shouldShowVideoSection, videoTextAlternative } from '@/lib/media/video'
 import { currentVideo } from '@/lib/media/video-store'
+import type { PrivilegedRole } from '@/lib/roles'
 import { loadInvestorUpdates } from '@/lib/updates/data'
 import { pendingEmailChange } from '@/lib/portal/email-change'
 import {
@@ -347,11 +349,13 @@ function OfferSection({
 export async function renderPortalPage(isDemoPreview = false) {
   let accountId: string
   let view: PortalView
+  let previewRole: PrivilegedRole = 'OPERATOR'
 
   if (isDemoPreview) {
     // This is the real access boundary. The switch being hidden from a viewer
     // is only presentation; a guessed or shared URL still reaches this guard.
-    await requireAdmin()
+    const admin = await requireAdmin()
+    previewRole = admin.role
     view = johnDoeDemoPortalView()
     accountId = view.accountId
   } else {
@@ -417,17 +421,15 @@ export async function renderPortalPage(isDemoPreview = false) {
 
   return (
     <>
-      <aside className="mx-auto mt-4 flex w-[min(42rem,calc(100%-2rem))] flex-wrap items-center justify-between gap-3 rounded-sm border hairline bg-panel/95 px-4 py-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-ftext">{view.name}</p>
-          <p className="truncate text-xs text-dim">
-            {view.email} · {isDemoPreview ? 'Demo investor' : 'Investor'}
-          </p>
-        </div>
+      <AccountCurlMenu
+        name={view.name}
+        email={view.email}
+        roleLabel={isDemoPreview ? 'Demo investor' : 'Investor'}
+      >
         {isDemoPreview ? (
           <Link
             href="/admin"
-            className="inline-flex min-h-11 items-center justify-center rounded-sm border border-orange/35 bg-orange/10 px-3 text-xs font-semibold text-orange"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-sm border border-orange/35 bg-orange/10 px-3 text-xs font-semibold text-orange"
           >
             Exit preview
           </Link>
@@ -435,15 +437,17 @@ export async function renderPortalPage(isDemoPreview = false) {
           <form action={portalSignOutAction}>
             <button
               type="submit"
-              className="inline-flex min-h-11 items-center justify-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
             >
               Sign out
             </button>
           </form>
         )}
-      </aside>
+      </AccountCurlMenu>
 
-      {isDemoPreview ? <PortalPreviewSwitch mode="INVESTOR" /> : null}
+      {isDemoPreview ? (
+        <PortalPreviewSwitch mode="INVESTOR" role={previewRole} />
+      ) : null}
 
       <main id="main" className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
         {isDemoPreview ? (

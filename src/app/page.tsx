@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { CurlCorner } from '@/components/effects/CurlCorner'
 
 /**
  * The public front door is deliberately non-identifying. It does not describe
@@ -7,6 +8,7 @@ import Link from 'next/link'
 export default function Home() {
   return (
     <>
+      <CurlCorner />
       <main
         id="main"
         className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col justify-center px-5 py-10"

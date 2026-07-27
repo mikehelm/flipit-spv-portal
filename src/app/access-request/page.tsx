@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { CurlCorner } from '@/components/effects/CurlCorner'
 import { AccessRequestForm } from './request-form'
 
 export const metadata: Metadata = {
@@ -10,6 +11,7 @@ export const metadata: Metadata = {
 export default function AccessRequestPage() {
   return (
     <>
+      <CurlCorner intro={false} />
       <main
         id="main"
         className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col justify-center px-5 py-10"

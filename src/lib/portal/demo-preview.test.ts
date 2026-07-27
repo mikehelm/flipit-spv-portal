@@ -47,7 +47,7 @@ describe('John Doe investor preview', () => {
   it('does not expose the switch to a read-only viewer', () => {
     const layout = read('src/app/(admin)/layout.tsx')
     expect(layout).toContain("admin.role !== 'VIEWER'")
-    expect(layout).toContain('<PortalPreviewSwitch mode="ADMIN" />')
+    expect(layout).toContain('<PortalPreviewSwitch mode="ADMIN" role={admin.role} />')
   })
 
   it('keeps every investor mutation disabled in preview mode', () => {
@@ -59,24 +59,51 @@ describe('John Doe investor preview', () => {
     expect(portal).toContain('Demo preview — no investor session has been created.')
   })
 
-  it('keeps account controls explicit while the unapproved curl stays outside the release', () => {
+  it('conceals every account beneath the curl and keeps the rocker low-left', () => {
     const portal = read('src/app/portal/page.tsx')
     const admin = read('src/app/(admin)/layout.tsx')
+    const menu = read('src/components/account-curl-menu.tsx')
     const switcher = read('src/components/portal-preview-switch.tsx')
 
-    expect(portal).not.toContain('<AccountCurlMenu')
-    expect(admin).not.toContain('<AccountCurlMenu')
-    expect(portal).toContain('portalSignOutAction')
-    expect(admin).toContain('signOutAction')
+    expect(portal).toContain('<AccountCurlMenu')
+    expect(admin).toContain('<AccountCurlMenu')
+    expect(menu).toContain('<CurlCorner')
+    expect(menu).toContain('data-testid="account-curl-toggle"')
+    expect(menu).toContain('!z-20')
+    expect(menu).toContain('z-10')
+    expect(menu).toContain('opacity-0')
+    expect(menu).toContain('group-hover:opacity-100')
+    expect(menu).toContain('group-focus-within:opacity-100')
+    expect(menu).toContain('<TextSizeControl />')
+    expect(menu).toContain('group-hover:block')
     expect(switcher).toContain('fixed bottom-4 left-14')
     expect(switcher).toContain("'-translate-x-2 opacity-25'")
   })
 
-  it('uses a static guarded path rather than putting identity in a query string', () => {
+  it('offers Mike, David and John Doe without putting identity in a query string', () => {
     const route = read('src/app/portal/demo/page.tsx')
+    const portal = read('src/app/portal/page.tsx')
     const switcher = read('src/components/portal-preview-switch.tsx')
     expect(route).toContain('renderPortalPage(true)')
+    expect(portal).toContain(
+      '<PortalPreviewSwitch mode="INVESTOR" role={previewRole} />',
+    )
     expect(switcher).toContain('JOHN_DOE_PREVIEW_PATH')
+    expect(switcher).toContain("name: 'Mike'")
+    expect(switcher).toContain("name: 'David'")
+    expect(switcher).toContain("name: 'John Doe'")
+    expect(switcher).toContain('usePathname')
     expect(switcher).not.toContain('preview=')
+  })
+
+  it('defaults text to twice the previous size and keeps hover controls in the curl', () => {
+    const styles = read('src/app/globals.css')
+    const control = read('src/components/text-size-control.tsx')
+
+    expect(styles).toContain('--user-text-scale: 2')
+    expect(styles).toContain('calc(0.875rem * var(--user-text-scale))')
+    expect(control).toContain('const DEFAULT_TEXT_SCALE = 2')
+    expect(control).toContain('Make text larger')
+    expect(control).toContain('Make text smaller')
   })
 })

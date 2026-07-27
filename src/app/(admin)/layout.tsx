@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { signOutAction } from '@/actions/auth'
+import { AccountCurlMenu } from '@/components/account-curl-menu'
 import { AdminNav } from '@/components/admin/admin-nav'
 import { PortalPreviewSwitch } from '@/components/portal-preview-switch'
 import { SiteFooter } from '@/components/site-footer'
@@ -48,14 +49,12 @@ export default async function AdminLayout({
 
   return (
     <div className="flex min-h-full flex-col">
-      <aside className="mx-auto mt-4 flex w-[min(56rem,calc(100%-2rem))] flex-wrap items-center justify-between gap-3 rounded-sm border hairline bg-panel/95 px-4 py-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-ftext">{accountName}</p>
-          <p className="truncate text-xs text-dim">
-            {admin.email} · {ROLE_LABELS[admin.role]}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <AccountCurlMenu
+        name={accountName}
+        email={admin.email}
+        roleLabel={ROLE_LABELS[admin.role]}
+      >
+        <div className="grid grid-cols-1 gap-2">
           <Link
             href="/admin/password"
             className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
@@ -68,18 +67,20 @@ export default async function AdminLayout({
           >
             Two-factor security
           </Link>
-          <form action={signOutAction}>
+          <form action={signOutAction} className="mt-4">
             <button
               type="submit"
-              className="inline-flex min-h-11 items-center justify-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
             >
               Sign out
             </button>
           </form>
         </div>
-      </aside>
+      </AccountCurlMenu>
 
-      {admin.role !== 'VIEWER' ? <PortalPreviewSwitch mode="ADMIN" /> : null}
+      {admin.role !== 'VIEWER' ? (
+        <PortalPreviewSwitch mode="ADMIN" role={admin.role} />
+      ) : null}
 
       <div className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6 sm:py-10">
         <header>

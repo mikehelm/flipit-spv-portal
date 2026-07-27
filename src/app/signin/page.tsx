@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { signInWithPasswordAction } from '@/actions/auth'
 import { ActionForm } from '@/components/admin/action-form'
 import { Field, TextInput } from '@/components/admin/ui'
+import { CurlCorner } from '@/components/effects/CurlCorner'
 import { SIGN_IN_FAILED_MESSAGE } from '@/lib/auth/credentials'
 import { currentAdmin } from '@/lib/auth/guards'
 
@@ -37,6 +38,7 @@ export default async function SignInPage({
 
   return (
     <>
+      <CurlCorner />
       <main
         id="main"
         className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col justify-center px-5 py-10"

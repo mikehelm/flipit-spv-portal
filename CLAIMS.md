@@ -35,8 +35,6 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Physical curl P1+P2+P3+P6 | Opus 5 via OTTO/Codex root | 2026-07-27 07:18 UTC | `src/components/effects/curl-logic.ts`; `src/components/effects/curl-logic.test.ts`; `src/components/effects/curl-renderer.ts`; `src/components/effects/CurlCorner.tsx`; `src/components/effects/CurlCorner.module.css`; `src/components/effects/CurlGrip.tsx`; `src/components/effects/curl-lab-settings.ts`; `src/components/effects/curl-lab-settings.test.ts`; `src/components/effects/CurlLab.tsx`; `src/components/effects/CurlLab.module.css`; `src/components/effects/curl-integration.test.ts`; `src/components/effects/curl-lab-integration.test.ts`; `src/components/account-curl-menu.tsx`; `src/app/page.tsx`; `src/app/signin/page.tsx`; `src/app/access-request/page.tsx`; `src/app/(admin)/layout.tsx`; `src/app/portal/page.tsx`; `src/lib/portal/demo-preview.test.ts` |
-| Mike, David, and John Doe view switcher | Codex root | 2026-07-27 08:59 UTC | `src/components/portal-preview-switch.tsx`; `src/components/text-size-control.tsx`; `src/app/globals.css`; `src/app/(admin)/layout.tsx`; `src/app/portal/page.tsx`; `src/lib/portal/demo-preview.test.ts`; `PROGRESS.md` |
 
 ## Done, so nobody starts it again
 

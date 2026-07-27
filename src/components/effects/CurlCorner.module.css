@@ -1,0 +1,92 @@
+/*
+ * The box the fold lives in, and the switch between the two ways of drawing it.
+ *
+ * `data-renderer` on the root says which is in charge:
+ *
+ *   webgl          the canvas is drawing; the SVG is hidden
+ *   svg-animated   the SVG is drawing and is being written to every frame
+ *   fallback       the SVG is showing its resting pose and nothing is running
+ *
+ * The shape itself lives in the SVG in CurlCorner.tsx, because the fold's
+ * silhouette is a curve and its surfaces have to taper. An earlier attempt
+ * built it from clip-path polygons and gradient stops and could only ever
+ * make a thin band across the corner. The contact shadow moved in there too,
+ * as an SVG filter, so the peel can deepen it without touching inline styles.
+ *
+ * At 62 of the SVG's 100 units the resting crease reaches the page edges, so
+ * the fold shows 62% of the box: 109–129px across the desktop clamp.
+ */
+
+.root {
+  /* Mike's approved Curl Lab receipt: size 490. */
+  --curl-size: 490px;
+
+  position: absolute;
+  z-index: 2;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  inline-size: var(--curl-size);
+  block-size: var(--curl-size);
+  contain: layout paint style;
+  isolation: isolate;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.fallback,
+.canvas {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+/*
+ * The drawn fold is the default, so it is what the server sends and what a
+ * machine with no WebGL keeps. The canvas only appears once the renderer has
+ * actually started, which is the whole point of reporting three states rather
+ * than two.
+ */
+.fallback {
+  display: block;
+}
+
+.canvas {
+  display: none;
+}
+
+.root[data-renderer="webgl"] .fallback {
+  display: none;
+}
+
+.root[data-renderer="webgl"] .canvas {
+  display: block;
+}
+
+@media (width <= 42rem) {
+  .root {
+    --curl-size: min(490px, 100vw);
+  }
+}
+
+/*
+ * Asked for less motion. The component will not start either runtime, and
+ * these rules make that visible rather than merely intended: same specificity
+ * as the webgl pair above and later in the file, so they win outright.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .root[data-renderer] .fallback {
+    display: block;
+  }
+
+  .root[data-renderer] .canvas {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .root {
+    display: none;
+  }
+}
