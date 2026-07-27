@@ -5722,6 +5722,101 @@ and it restores a limit the middleware had lowered rather than raising one.
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
 
+## The original invitation and the limits of the rewrite record
+
+The repository held only the current invitation. It could show what would be
+sent, but not the text David supplied or which reasons for changing it were
+actually recorded. That made a later explanation vulnerable to filling gaps
+with plausible language that nobody had approved.
+
+**Built.**
+
+- `David_Serene_Original_Email_2026-07-25.txt` preserves the Gmail plaintext
+  rendering verbatim, including David's covering note, attribution in
+  `SOURCE_RECEIPT.md`, and the original paragraph order and punctuation.
+- `SOURCE_RECEIPT.md` records what was retrieved, what was unavailable, what was
+  reported second-hand, and what remains unproved. It does not reconstruct the
+  missing Word or PDF files.
+- `EMAIL_PROVENANCE.md` carries an explicit internal-only warning, reproduces
+  both source texts verbatim, and compares twenty clauses without supplying an
+  uncited legal rationale.
+- The comparison has **8 `SPEC` rows, 6 `TEST` rows and 6 `UNVERIFIED` rows**.
+  Every evidence cell uses exactly one of those classifications.
+- A direct byte comparison proves both fenced source texts in
+  `EMAIL_PROVENANCE.md` match their source files. A repository search proves no
+  application source imports, links or names any of the three internal files.
+
+**Decisions.**
+
+- ***A regression test proves enforced wording, not legal advice.*** A `TEST`
+  row says only what the named assertion requires. It does not turn the
+  assertion into an invented explanation of why a lawyer or editor chose the
+  sentence.
+- ***A specification is cited only where it states the relevant product rule.***
+  Template variables, the private portal, document ordering and the
+  anti-phishing warning have named specification sections. Copy changes without
+  that support remain `UNVERIFIED`.
+- ***The source files remain repository-internal.*** Nothing in `src`, `public`
+  or an application route imports, renders, serves or links them. The original
+  names other investors and proportional allocation, so exposing it to an
+  investor would breach the isolation rule the current invitation enforces.
+- ***The canonical invitation was not touched.*** `EMAIL_TEMPLATE.txt` remains
+  3,249 bytes with SHA-256
+  `f1491501cdf2c8a2e00309fd53a14a6d3dbc3f9f884bf7eaf8a4084f5ff65554`,
+  as verified from canonical commit `4b58585`.
+
+**Deviations.**
+
+- The installed pnpm 11 runner refuses every repository script before it starts
+  because it no longer reads the existing `pnpm.onlyBuiltDependencies` setting
+  from `package.json`; its failed install also inserted unresolved
+  `allowBuilds` placeholders into `pnpm-workspace.yaml`. That incidental change
+  was removed, restoring the file byte-for-byte. The required `typecheck`,
+  `lint` and `test` scripts were run with pinned pnpm 10.32.1, which honours the
+  repository's existing `package.json` build allowlist. All three passed.
+
+**Checklist.**
+
+1. *Money as a `number`?* No code or data model changed.
+2. *A send path bypassing a gate?* No. Nothing in application source changed.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* The internal original does, which is
+   why all three new documents are explicitly marked internal and no
+   investor-facing source references them.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No logging changed.
+9. *Indexable routes?* Unchanged; no route was added.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+Pinned pnpm 10.32.1 ran `pnpm typecheck`, `pnpm lint` and `pnpm test`; all are
+green. Vitest reports 114 files and 2,446 tests passed.
+
+**Uncertain.**
+
+- ***Why the subject changed*** from “Investment opportunities in Flipit” to
+  “Private invitation to participate in Flipit” is not recorded anywhere.
+- ***Why the original greeting and interest statement were replaced*** with
+  company-development and selected-group context is not recorded anywhere.
+- ***Why the statement that this is a new investment governed by new
+  subscription and SPV documents was added*** is not recorded anywhere.
+- ***Why David's CEO appointment and authority were made conditional*** on
+  agreements and formal corporate approvals is not recorded anywhere.
+- ***Why David's personal investment statement and growth endorsement were
+  removed*** is not recorded anywhere.
+- ***Why “SPV Manager” and “Proposed Chief Executive Officer” were added to the
+  closing*** is not recorded anywhere.
+- The rewrite's author, exact time and source advice remain unproved.
+- Michael's account of the figure-presentation discussion and the intended use
+  of `indirect_flipit_percentage_override` has not been recorded.
+- `Flipit_Investor_Interest_Email.docx` was not retrieved and was not
+  reconstructed. Its wording cannot be compared with the current template.
+- `Flipit_Email_Revision_Rationale.pdf` was not retrieved and was not
+  reconstructed. The source of the remembered rationale remains unknown.
+
 ## Two limits nobody could reach, and the page nobody had written
 
 The previous entry's first Uncertain item was that the 10 MB proxy cap had been
