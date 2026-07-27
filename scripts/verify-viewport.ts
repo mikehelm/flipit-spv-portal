@@ -72,6 +72,7 @@ import { hashPassword } from '@/lib/auth/password'
 import { everythingSent, flatten, onScreen } from '@/lib/verify/page-text'
 import { issueToken } from '@/lib/crypto'
 import { AA_LARGE, AA_TEXT, contrastRatio, reportRatio } from '@/lib/contrast'
+import { EMAIL_BODY_POLICY } from '@/lib/security/csp'
 
 const PREFIX = 'wp18-viewport'
 const PORT = 3210
@@ -2593,27 +2594,22 @@ async function verifyTheEmailPreview(page: Page): Promise<void> {
       .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
 
     /*
-     * A known defect, asserted present rather than filtered away.
+     * The defect that used to be recorded here is fixed, and this is where the
+     * fix is proved rather than asserted.
      *
-     * A `srcdoc` frame inherits the embedding document's Content-Security-
-     * Policy, and this application serves `style-src 'self'` — deliberately, and
-     * an earlier entry spent a day removing the widenings that were there for
-     * nothing. A designed HTML email is inline styles by construction; the
-     * invitation carries **69** of them, because that is the only styling an
-     * email client will honour. So every one is refused inside the preview
-     * frame, and an operator reviewing the last screen before a real invitation
-     * goes to a real person is shown an **unstyled** version of it. The card
-     * above the frame says *"this is the markup that will be sent, byte for
-     * byte"* — and the markup is. The rendering is not.
+     * It was: a `srcdoc` frame inherits the embedding document's Content-
+     * Security-Policy, and this application serves `style-src 'self'`. A
+     * designed HTML email is inline styles by construction — the invitation
+     * carries 69 of them, because that is the only styling a mail client will
+     * honour — so every one was refused inside the preview frame, and the
+     * operator reviewing the last screen before a real invitation went to a real
+     * person saw an **unstyled** version of what the recipient would receive.
      *
-     * Recorded rather than fixed. The fix is not a wider policy: it is serving
-     * the body from its own authenticated route with its own narrow policy and
-     * pointing the frame at `src`, and that is a new surface serving untrusted
-     * markup, which is not a thing to build unattended. See PROGRESS.md.
-     *
-     * Asserted **present**, so the day somebody fixes it this check fails and
-     * sends them here to delete it. A filtered-away complaint would have been
-     * forgotten by the next entry.
+     * The body now comes from `…/preview/[offerId]/body`, its own authenticated
+     * route under its own narrow policy, and the frame points at `src`. So this
+     * screen is audited with **no tolerated complaint at all**: if one style is
+     * still refused anywhere on it, `measureScreen` fails on the console rather
+     * than having been told to expect it.
      */
     await auditScreen(
       page,
@@ -2621,13 +2617,12 @@ async function verifyTheEmailPreview(page: Page): Promise<void> {
       `/templates/preview/${offer.id}`,
       200,
       /Alexandra Fenwick-Harrington/,
-      /Refused to apply inline style/,
     )
 
     check(
-      "KNOWN DEFECT: the email's own inline styles are refused inside the preview frame",
-      expectedComplaintsHeard.length > 0,
-      'the refusals have stopped — if the preview now renders the designed email, delete this check and the note in PROGRESS.md',
+      "the email's own styling is no longer refused inside the preview frame",
+      expectedComplaintsHeard.length === 0,
+      'a complaint was tolerated on a screen that should now make none',
     )
 
     const shown = await onScreen(page)
@@ -2666,15 +2661,17 @@ async function verifyTheEmailPreview(page: Page): Promise<void> {
         sandbox: element.getAttribute('sandbox'),
         referrerPolicy: element.getAttribute('referrerpolicy'),
         reachable: element.contentDocument !== null,
-        hasBody: (element.getAttribute('srcdoc') ?? '').length > 0,
+        src: element.getAttribute('src') ?? '',
+        srcdoc: element.getAttribute('srcdoc'),
       }
     })
 
     check('the email is drawn in a frame at all', frame !== null)
     check(
-      'and the frame carries a body to draw',
-      frame?.hasBody === true,
-      'an empty preview frame would pass every check below and show nothing',
+      'and the frame is pointed at the body route, not at a srcdoc attribute',
+      /\/templates\/preview\/[^/]+\/body\?kind=INVITATION$/.test(frame?.src ?? '') &&
+        frame?.srcdoc === null,
+      `src="${frame?.src}" srcdoc=${frame?.srcdoc === null ? 'absent' : 'PRESENT'}`,
     )
     check(
       'the frame grants nothing — sandbox is present and empty',
@@ -2691,6 +2688,126 @@ async function verifyTheEmailPreview(page: Page): Promise<void> {
       frame?.referrerPolicy === 'no-referrer',
       `referrerPolicy="${frame?.referrerPolicy}"`,
     )
+
+    /*
+     * The frame is not empty, asked of the browser rather than of an attribute.
+     *
+     * `srcdoc` carried the body in the markup, so "is there anything to draw"
+     * used to be answerable by reading the page. A `src` is a promise that
+     * something will be fetched, and a fetch that 404s leaves a frame that is
+     * white, silent and passes every other check on this screen — which is the
+     * exact failure the old `hasBody` check existed to catch, in its new shape.
+     *
+     * Playwright can enumerate a frame it cannot script, so this is asked of
+     * `page.frames()`: the child frame exists and its URL is the route.
+     */
+    const childFrames = page.frames().filter((candidate) => candidate !== page.mainFrame())
+    check(
+      'the browser actually loaded a document into it',
+      childFrames.length === 1 && /\/templates\/preview\/[^/]+\/body\?/.test(childFrames[0]!.url()),
+      `${childFrames.length} child frames: ${childFrames.map((f) => f.url()).join(', ')}`,
+    )
+
+    /*
+     * The route itself, read directly — the part of this that a screenshot
+     * could never show and the console could only hint at.
+     *
+     * `page.request` carries the browsing context's cookies, so this is the
+     * administrator's own fetch of the same URL the frame fetched.
+     */
+    const bodyUrl = `${ORIGIN}${frame!.src}`
+    const bodyResponse = await page.request.get(bodyUrl)
+    const bodyHeaders = bodyResponse.headers()
+    const bodyMarkup = await bodyResponse.text()
+
+    check(
+      'the body route answers the administrator',
+      bodyResponse.status() === 200,
+      `${bodyResponse.status()} from ${frame!.src}`,
+    )
+    check(
+      'and it is served as a document rather than sniffed into one',
+      (bodyHeaders['content-type'] ?? '').startsWith('text/html') &&
+        bodyHeaders['x-content-type-options'] === 'nosniff',
+      `${bodyHeaders['content-type']} / ${bodyHeaders['x-content-type-options']}`,
+    )
+    check(
+      'and it carries the email body’s own policy, not the application’s',
+      bodyHeaders['content-security-policy'] === EMAIL_BODY_POLICY,
+      `policy was: ${bodyHeaders['content-security-policy']}`,
+    )
+    check(
+      'which grants inline style and nothing else at all',
+      /(^|;\s*)style-src 'unsafe-inline'(;|$)/.test(bodyHeaders['content-security-policy'] ?? '') &&
+        /(^|;\s*)default-src 'none'(;|$)/.test(bodyHeaders['content-security-policy'] ?? ''),
+      bodyHeaders['content-security-policy'] ?? 'no policy at all',
+    )
+    check(
+      'and the grant is what the email actually needs — it is inline styles throughout',
+      (bodyMarkup.match(/\sstyle="/g) ?? []).length > 20,
+      `${(bodyMarkup.match(/\sstyle="/g) ?? []).length} inline styles in the served body`,
+    )
+    /*
+     * §16's fifth question, asked of the body response as well as of the page.
+     *
+     * It used to be enough to ask it of the page: the email travelled in a
+     * `srcdoc` attribute, so `everythingSent` covered the markup too. The body
+     * is its own response now, and a leak check that stopped covering it would
+     * be green about something it was no longer reading — the shape this
+     * repository has been caught by four times. The other investor exists two
+     * rows away for the duration of this function, so there is something to find.
+     */
+    for (const [what, pattern] of [
+      ["the other investor's name", /Draycott-Pemberley/],
+      ["the other investor's address", new RegExp(`${PREFIX}-other@example\\.test`)],
+      ["the other investor's amount", /98,?765/],
+    ] as const) {
+      check(
+        `the served email body contains no ${what}`,
+        !pattern.test(bodyMarkup),
+        `${pattern} matched the body one recipient is about to be sent`,
+      )
+    }
+
+    check(
+      'this one path may be framed by this application, and DENY still holds elsewhere',
+      bodyHeaders['x-frame-options'] === 'SAMEORIGIN',
+      `X-Frame-Options: ${bodyHeaders['x-frame-options']}`,
+    )
+    check(
+      'one recipient’s correspondence is never stored on the way',
+      /no-store/.test(bodyHeaders['cache-control'] ?? '') &&
+        /noindex/.test(bodyHeaders['x-robots-tag'] ?? ''),
+      `${bodyHeaders['cache-control']} / ${bodyHeaders['x-robots-tag']}`,
+    )
+
+    /*
+     * And the guard, asked without a session.
+     *
+     * A new context with no cookies at all. This is a route that serves a named
+     * individual's correspondence — their address, the amount they are being
+     * offered, and the shape of the link they will be sent — and the id in the
+     * URL is the only thing between it and anybody who guesses one.
+     */
+    const anonymous = await page.context().browser()!.newContext()
+    try {
+      const refused = await anonymous.request.get(bodyUrl)
+      check(
+        'and without a session it refuses, with nothing in the response',
+        refused.status() === 404 && (await refused.text()).length === 0,
+        `${refused.status()}, ${(await refused.text()).length} bytes`,
+      )
+      const invented = await anonymous.request.get(
+        `${ORIGIN}/templates/preview/00000000-0000-4000-8000-000000000000/body`,
+      )
+      check(
+        'and an offer that does not exist refuses identically — no id is confirmed',
+        invented.status() === refused.status(),
+        `${invented.status()} for an invented id against ${refused.status()} for a real one`,
+      )
+    } finally {
+      await anonymous.close()
+    }
 
     /*
      * §16 and the fifth review question, on an operator's screen that renders

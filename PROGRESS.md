@@ -7729,3 +7729,239 @@ names were absent"*. **OPEN_DECISIONS.md was not being held to anything.**
 - *Whether a document being issued should notify the investor at all is still
   open and is not in OPEN_DECISIONS.md*, though CLAIMS.md names it as one of the
   two largest things left.
+
+## The email, drawn as the recipient will see it — a policy for one document
+
+The last entry's first Uncertain item, in its own words:
+
+> ***The preview frame's policy is the next session's first item.*** It needs a
+> route, an admin guard, a narrow policy of its own, a test that the route
+> refuses an unauthenticated request, and the deletion of the KNOWN DEFECT check
+> in `verify-viewport.ts`.
+
+All five, and two more the work turned up on the way.
+
+**The defect, restated.** A `srcdoc` frame inherits the embedding document's
+Content-Security-Policy. This application serves `style-src 'self'` — an earlier
+entry spent a day getting it there — and a designed HTML email is inline styles
+by construction, because that is the only styling a mail client honours. The
+invitation carries 69 of them and every one was refused inside the frame. The
+operator standing on the last screen before a real invitation goes to a named
+individual about their money was shown an **unstyled** document, above a card
+claiming it was what would be sent.
+
+**The one-line fix was not taken.** `style-src 'unsafe-inline'` would have put
+back on every page in the application — an investor's portal included, which is
+the page holding their claim token and their transfer amount — exactly what was
+removed from every page, for the benefit of one frame. So the body moved instead.
+
+### What was built
+
+**`…/templates/preview/[offerId]/body`**, an admin-guarded route returning the
+rendered HTML part as its own document, and `EMAIL_BODY_POLICY` in `csp.ts`:
+
+    default-src 'none'; style-src 'unsafe-inline'; img-src 'none';
+    frame-ancestors 'self'; form-action 'none'; base-uri 'none'; sandbox
+
+Every directive is a refusal except one. Note what `style-src` does *not* say:
+there is no `'self'`, so the email may style itself with its own attributes and
+may not pull a stylesheet from this origin — the only thing an injected `<link>`
+in an email body could usefully reach. There is no `script-src` at all, because
+`default-src 'none'` covers it and a nonce in this policy would be a nonce
+something could be made to carry.
+
+**The middleware chooses a policy rather than widening one.** `isEmailBodyPath`
+is checked *before* `capabilitiesFor`, and returns a different string — not a
+capability appended to the application policy. A capability would have meant the
+grant was spelled in the same string as `script-src 'self' 'nonce-…'`, one
+editing mistake from applying elsewhere. The two policies cannot now be confused
+for each other.
+
+**Three things had to be true at once, and each was a separate obstacle.**
+
+***The parent page had to be allowed to frame at all.*** The base policy is
+`frame-src 'none'` — a `srcdoc` frame is exempt from it, which is why this was
+never needed before and why the change is not the one-liner it looks like. A new
+capability, `EMAIL_BODY_FRAME`, grants `frame-src 'self'` on the preview page and
+on nothing else.
+
+***`X-Frame-Options: DENY` had to stop applying to one path.*** DENY refuses
+same-origin framing too — that is what DENY means — so the frame would have been
+empty. `next.config.ts` now narrows it to `SAMEORIGIN` on the body path, in an
+entry that **must come last**, because Next applies every matching entry in order
+and a later one overwrites. Above the catch-all it would have been silently
+undone with the configuration looking correct: the same shape as the `/verify`
+defect this file already carries a note about.
+
+***The frame element keeps `sandbox=""`.*** A route on this origin is
+same-origin with the page unless the frame says otherwise, which is the one thing
+the attribute was there to prevent. The policy repeats the restriction on the
+response, so it holds for a direct visit as well — a defence that exists only in
+the parent document is not a defence of the route.
+
+### What it is proved by
+
+`pnpm verify:viewport` is **510**, up from 497. The KNOWN DEFECT check is gone
+and the screen is now audited with **no tolerated complaint at all**: one refused
+style anywhere on it fails the console check rather than being expected.
+
+Nine new checks against a real browser and a real response — the frame points at
+the route and carries no `srcdoc`; the browser loaded a document into it, asked
+of `page.frames()` rather than of an attribute, because a `src` that 404s leaves
+a frame that is white, silent and passes everything else; the response is
+`text/html` with `nosniff`; it carries `EMAIL_BODY_POLICY` exactly; the grant is
+what the email actually needs (more than twenty inline styles in the served
+body); `X-Frame-Options: SAMEORIGIN`; `no-store` and `noindex`; and — from a
+**browser context with no cookies** — 404 with a zero-length body, identical to
+the 404 for an invented offer id.
+
+`pnpm verify:deployment` is **109 of 109**, and six of those are new and are the
+only place two of these can be proved wrong: under `/SPV` the body still gets its
+own policy, still gets `SAMEORIGIN`, the page that frames it still gets `DENY`,
+and the preview page still gets `frame-src 'self'`. If `isEmailBodyPath` stopped
+matching under a prefix the styles would be refused again with nothing on screen
+to say so; if Next stopped applying `basePath` to a header source the frame would
+be empty. Both now fail loudly.
+
+`preview-url.test.ts` — 26 tests — pins the third spelling. `emailBodyPath`
+builds the URL, `isEmailBodyPath` recognises it, `next.config.ts` names it: three
+files, one route, and the pairing is asserted at a domain root and under `/SPV`.
+
+### Two things found on the way
+
+***The leak check had stopped reading the email.*** §16's fifth question was
+asked of the preview by scanning the page response, which worked because the
+email travelled in a `srcdoc` attribute. Moving the body to its own response took
+it out of what `everythingSent` sees — a check that would have stayed green about
+something it no longer read, which is the shape this repository has now been
+caught by five times. The three patterns are now also run against the served body.
+
+***A direct fetch of somebody's correspondence would have gone unrecorded.***
+The page writes `email.previewed`; the route now writes `email.body_served`. Two
+rows for one screen, because two reads happened, and because this route can be
+fetched without the page by anybody holding the URL. `previewFor` was split into
+`renderPreview` (no side effect) and `auditPreviewRead`, so both callers render
+identically and each records its own read.
+
+**Decisions.**
+
+- ***`img-src 'none'`, and it is a decision rather than an omission.*** Both
+  templates are image-free by construction and `templates.test.ts` asserts it, so
+  it costs this build nothing. It is the conservative reading of a silent
+  specification: an `<img>` in untrusted markup is an outbound request from the
+  administrator's browser to whatever host the markup names, made before anything
+  has been sent, carrying their address to a third party. A custom template with
+  an image will show it broken — a visible gap, on a screen whose job is to show
+  gaps, rather than a silent ping.
+- ***`sandbox` on the response as well as on the element.*** It costs the harness
+  the ability to script inside the frame, which is why the styling is proved from
+  the served response and the console rather than from `getComputedStyle`. The
+  restriction holding on a direct visit was judged worth more than the easier
+  measurement.
+- ***`SAMEORIGIN` rather than removing `X-Frame-Options` on that path.*** A
+  browser reading no `X-Frame-Options` falls back to the CSP, which says
+  `frame-ancestors 'self'`. Both spellings, both saying the same thing, the way
+  DENY and `frame-ancestors 'none'` do everywhere else.
+- ***Two audit rows rather than one.*** The alternative was folding the body
+  fetch into the page's event, which is tidier and leaves a direct read of an
+  investor's correspondence unrecorded. Distinct names so the log reads as two
+  events rather than as double-counting.
+- ***The route refuses identically for every reason.*** No session, wrong role,
+  unfinished onboarding, unknown offer, an email that will not render: all the
+  same empty 404. A 404 for an unknown offer and a 403 for a known one is §15's
+  fifth question asked of a status code.
+- ***The onboarding rule is restated in the route rather than inherited.*** The
+  page is `requireOnboardedAdmin()`, which redirects; a redirect is the wrong
+  answer to a frame's request, and skipping the rule would leave a surface
+  reachable directly that is unreachable through the screen it belongs to.
+
+**Deviations.** None.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here computes; the amount is asserted as
+   the rendered string `12,500`, as before.
+2. *A send path bypassing a gate?* No. This route renders through the same
+   `renderPreview` the page uses, mints no token, and the §8 mail gate is
+   untouched. The §11.4 refusal — nothing renders with a gap in it — is asserted
+   on the screen and returns a 404 from the route.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does any investor-facing response, page or error reveal that another investor
+   exists?* **Asked of a new response.** The other investor's name, address and
+   amount are now checked against the served email body as well as against the
+   page — the gap this change would otherwise have opened.
+6. *Tokens?* **Asserted not issued.** The portal-token count is unchanged across
+   the preview, and the link in the body is the unusable `PREVIEW_CLAIM_TOKEN`.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. `email.body_served`
+   carries identifiers, the template hash and the outcome — `assertNoSecrets`
+   refuses a body outright, and nothing here passes one.
+9. *Indexable routes?* Unchanged. The new route carries
+   `noindex, nofollow, noarchive, nosnippet` on every response including its 404s.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched, and `verify:deployment` exercises this route
+    under the prefix with `APP_URL` deliberately not the production value.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2502, up from 2476) and `pnpm build`
+are green. `pnpm verify:deployment` is 109 of 109. `pnpm verify:viewport` is 509
+of 510 in this container — see the first Uncertain item.
+
+**Uncertain.**
+
+- ***One check fails in this container and it is not this application's.***
+  `the camera and microphone are permitted` calls `getUserMedia` and gets
+  `NotSupportedError: Not supported`. This container has no camera device, and
+  its Chromium is an aliased build — Playwright wanted revision 1234 and only
+  1194 is installed, so `chromium_headless_shell-1234` was symlinked at it. The
+  **header** is intact and proved: `verify:deployment` asserts
+  `camera=(self)` on a served response under the prefix and passes. Nothing was
+  changed to accommodate this, and it should pass on a machine with a camera.
+  If it does not, the aliasing is the first thing to suspect.
+- ***The styles are proved applied by absence, not by measurement.*** The console
+  reports no refusal and the served policy grants `'unsafe-inline'` over a body
+  carrying 69 inline styles. What is *not* done is reading a computed colour
+  inside the frame, because the document is sandboxed by both the element and the
+  response and cannot be scripted. A screenshot comparison would close it and is
+  a different kind of check from everything else in that script.
+- ***`img-src 'none'` has never met a template with an image in it.*** Nothing
+  drives the case, because no template in the repository has one. The day an
+  operator uploads a custom template with a remote image, the preview shows it
+  broken and no check says why.
+- ***The body route is measured for one recipient in one state.*** A **blocked**
+  recipient renders `· Blocked` in the heading and is the case where an operator
+  most needs the screen to be unambiguous; the reminder template goes through the
+  same route and its body is not fetched directly by anything.
+- ***Nothing measures the second audit row from the operator's side.*** The
+  route is asserted to contain `'email.body_served'` by a source-reading test,
+  and the row is written on every preview in `verify:viewport` — but nothing
+  opens `/audit` and looks for it, and nothing asserts the pair appears in the
+  right order for one screen view.
+- ***`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.***
+  Nothing attempts to frame the body from another origin and watch it be refused,
+  which would need a second origin the harness does not have.
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *The refusal screen is measured with one kind of refusal.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS.md
+  §11.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *The six newly-wired scripts are wired, not scheduled; there is no
+  `verify:all`, and `DEPLOYMENT.md` names none of them.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- ***The image upload preview on `/admin/media` is still unexercised***, and it is
+  now the oldest item on this list that nobody has started. It appears after a
+  file is chosen, and nothing has ever chosen one there.
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *Nothing measures how long a 20 MB upload takes.*
+- *`waitFor` on a locator whose appearance depends on server state has still not
+  been read with that question in mind.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*
+- *Nothing else in OPEN_DECISIONS.md has been checked against the code; §7 is the
+  one to read first.*
+- *Two rows in CLAIMS.md are past the six-hour staleness rule and were left
+  alone.*
+- *The password-reset journey is still not built — OPEN_DECISIONS.md §10.*

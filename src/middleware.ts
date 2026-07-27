@@ -1,5 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { capabilitiesFor, contentSecurityPolicy, generateNonce } from '@/lib/security/csp'
+import {
+  capabilitiesFor,
+  contentSecurityPolicy,
+  EMAIL_BODY_POLICY,
+  generateNonce,
+  isEmailBodyPath,
+} from '@/lib/security/csp'
 
 /**
  * The first middleware in this application, and it does exactly one thing:
@@ -50,11 +56,35 @@ export function middleware(request: NextRequest): NextResponse {
    * a recorder that will not play back on the deployment facing the internet.
    * `pnpm verify:deployment` is the one thing here that serves under a prefix.
    */
-  const policy = contentSecurityPolicy({
-    nonce: generateNonce(),
-    capabilities: capabilitiesFor(request.nextUrl.pathname),
-    development: process.env.NODE_ENV === 'development',
-  })
+  const pathname = request.nextUrl.pathname
+
+  /**
+   * One path is served a different policy rather than a wider one.
+   *
+   * `…/templates/preview/[offerId]/body` returns an email body, which is
+   * untrusted markup styled entirely by inline attributes because that is the
+   * only styling a mail client honours. It is served `EMAIL_BODY_POLICY` —
+   * `default-src 'none'` with a single grant — and it is the only document in
+   * this application that does not carry the application's own policy.
+   *
+   * It is a **replacement**, checked before `capabilitiesFor`, and not a
+   * capability added to the policy below. A capability would mean the grant was
+   * spelled in the same string as `script-src 'self' 'nonce-…'`, one editing
+   * mistake away from applying somewhere else; this way the two policies cannot
+   * be confused for one another, and the body document is never served a
+   * `script-src` that allows anything at all.
+   *
+   * No nonce is generated for it. Nothing in an email body may execute, so there
+   * is nothing for a nonce to permit — and a nonce present in a policy is a
+   * nonce something could be made to carry.
+   */
+  const policy = isEmailBodyPath(pathname)
+    ? EMAIL_BODY_POLICY
+    : contentSecurityPolicy({
+        nonce: generateNonce(),
+        capabilities: capabilitiesFor(pathname),
+        development: process.env.NODE_ENV === 'development',
+      })
 
   const requestHeaders = new Headers(request.headers)
   /**

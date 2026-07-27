@@ -166,6 +166,36 @@ const nextConfig: NextConfig = {
           ...strictTransportSecurity(),
         ],
       },
+      {
+        /**
+         * The one path in this application that may be framed, and only by this
+         * application.
+         *
+         * `X-Frame-Options: DENY` above refuses **all** framing, same-origin
+         * included — that is what DENY means, and it is the right default for
+         * every other path here. The email preview draws the body of a real
+         * invitation in a frame so that untrusted markup is rendered outside the
+         * administrator's document, and the body is now served by a route rather
+         * than pasted into a `srcdoc` attribute, so DENY would empty the frame.
+         *
+         * `SAMEORIGIN`, not a removal. A browser that reads no
+         * `X-Frame-Options` at all falls back to the Content-Security-Policy,
+         * which says `frame-ancestors 'self'` — and every browser this is served
+         * to reads one of the two. Both spellings, both saying the same thing,
+         * the way `frame-ancestors 'none'` and DENY do everywhere else.
+         *
+         * **This entry must come last.** Next applies every matching entry in
+         * order and a later one overwrites an earlier one for the same key, so
+         * the catch-all above sets DENY on this path first and this narrows it.
+         * Moving it above `/:path*` would leave the frame empty with the
+         * configuration looking correct — the same shape as the `/verify` defect
+         * this file already carries a note about, and equally invisible to a
+         * test that reads this array rather than a served response.
+         * `pnpm verify:deployment` asks a running server.
+         */
+        source: '/templates/preview/:offerId/body',
+        headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
+      },
     ]
   },
 }

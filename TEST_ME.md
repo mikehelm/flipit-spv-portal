@@ -124,7 +124,7 @@ Two kinds of problem are kept apart, on purpose:
 
 ## Seeing the email
 
-Go to **Email templates**, then preview any recipient. That is the real email, with their real amount, their real percentages and their real deadline — not a mock-up with placeholder text.
+Go to **Email templates**, then preview any recipient. That is the real email, with their real amount, their real percentages and their real deadline — not a mock-up with placeholder text, and now shown with its real design as well. (Until the sending name and address are set you will get a card explaining what is missing instead, which is correct — nothing renders an email with a gap in it.)
 
 The portal link in a preview is deliberately fake. A preview is a read, and reads do not issue credentials.
 
@@ -869,28 +869,32 @@ It has been left in place — it costs nothing, and the day it is ever needed is
 
 There is a screen that shows you the exact email one particular person will receive, with their real name and their real figures in it. It is the last thing you look at before pressing send on an invitation about somebody's money. **Nothing had ever opened it.**
 
-It has now been opened, driven and measured, and there is good news and one real problem.
+It has now been opened, driven and measured — and the one real problem it turned up has since been fixed.
 
-### The good news
+### What it does
 
 - **The email is drawn in a locked box.** An email is untrusted content by its nature, so this page puts it in a sealed frame that is meant to be unable to touch the page around it. That was written down and believed; it has now been *proved in a real browser*. The frame genuinely cannot reach the admin page it sits on.
 - **Looking does not create anything.** Opening a preview issues no sign-in link and no access of any kind — checked by counting before and after. The link shown in the preview is deliberately a dead one.
-- **It shows nobody else.** A second investor was deliberately put into the database while the preview was open, with a distinctive name, address and amount, and none of the three appeared anywhere in what the browser received.
+- **It shows nobody else.** A second investor was deliberately put into the database while the preview was open, with a distinctive name, address and amount, and none of the three appeared anywhere in what the browser received — not on the page, and not in the email itself.
 - **And what you will actually see today** is not the email at all — it is a card saying *"this email cannot be sent yet"* and naming exactly what is missing, which right now is the sending name and address. That is correct behaviour: nothing renders an email with a gap in it. That screen had also never been looked at, and now is.
 
-### The problem
+### The problem it found — now fixed
 
-**You cannot currently see what your email looks like.**
+**You could not see what your email actually looked like.**
 
-A designed HTML email carries all of its styling inline — that is the only kind of styling email programs respect, and this invitation has sixty-nine separate pieces of it. But the security rules this application applies to its own pages also apply *inside* that preview frame, and those rules refuse inline styling. So the preview strips every one of them out.
+A designed HTML email carries all of its styling inline — that is the only kind of styling email programs respect, and this invitation has sixty-nine separate pieces of it. The security rules this application applies to its own pages were also applying *inside* the preview frame, and those rules refuse inline styling. So the preview stripped every one of them out: the text was right, the figures were right, and **the picture was wrong**. You saw a plain, unstyled document; your recipient would have seen the designed one.
 
-The result: the text is right, the figures are right, the wording is right — and **the picture is wrong**. You see a plain, unstyled document. Your recipient sees the designed one. The card above the frame says "this is the markup that will be sent, byte for byte", and that is true of the content and not of the appearance.
+**The quick fix was refused and the proper one built.** Relaxing the styling rule would have relaxed it on every page in the application, including the ones holding investors' figures, to make one preview look right. Instead the email is now delivered into that frame from **its own private address**, which carries a rule of its own: it may style itself, and it may do nothing else at all — no scripts, no images, no forms, no connections of any kind — and it can only be displayed inside this application and nowhere else. Every other page is unchanged, and no rule anywhere was loosened.
 
-**It has not been fixed, on purpose.** The quick fix is to relax the security rule — but it is a rule that applies to every page in the application, including the one holding investors' figures, and relaxing it everywhere to make one preview look right is a bad trade. The proper fix is to serve the email into that frame from its own address with its own, much narrower rule. That is a new piece of plumbing that handles untrusted content, and it was not something to build at the end of an unattended session. **It is written up as the first thing for the next round of work.**
+**So the preview now shows you the designed email**, and the card above it is true of the appearance as well as of the words.
 
-In the meantime: the preview is trustworthy for *what it says* and not for *how it looks*. If you want to see the designed version before sending, the practical route is to send one to yourself once the sending account is connected.
+Three things worth knowing about that private address, all of them checked in a real browser:
 
-**The phone-sized run is now 497 checks**, up from 357 at the start of the day.
+- **It needs your sign-in.** Asked for without one, it returns nothing at all — the same nothing you get for an address that does not exist, so it cannot be used to find out which investors are real.
+- **It is never stored.** Somebody's correspondence is not cached, not kept, and not indexable.
+- **Looking is recorded.** Opening a preview writes to the audit log, and so does fetching the email body itself. Two entries, because two things were read — and the second one is what makes a direct look at somebody's correspondence visible rather than silent.
+
+**The phone-sized run is now 510 checks**, up from 497 — and the check that used to record this defect is gone, replaced by twelve that prove it is gone.
 
 ---
 

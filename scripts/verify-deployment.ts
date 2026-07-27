@@ -54,6 +54,7 @@ import { issueToken } from '@/lib/crypto'
 import { jpegWithMetadata, mp4WithLocation, pdfBytes } from '@/lib/media/fixtures'
 import { ingest } from '@/lib/media/ingest'
 import { mediaStore } from '@/lib/media/store'
+import { EMAIL_BODY_POLICY } from '@/lib/security/csp'
 
 const PREFIX = 'wp20-deploy'
 const BASE_PATH = '/SPV'
@@ -187,6 +188,59 @@ async function verifyTheBrowserPolicyOnAServedResponse(): Promise<void> {
     )
     check(`and not the other screen’s`, !forbidden.test(policy), policy.slice(0, 260))
   }
+
+  /**
+   * The email body route, which is the one path served a *different* policy
+   * rather than a wider one — and the one path that may be framed.
+   *
+   * Under the prefix is where this can be proved wrong, and it breaks quietly in
+   * both directions:
+   *
+   *   - if `isEmailBodyPath` stopped matching `/SPV/templates/preview/…/body`,
+   *     the body would be served the application's policy, every inline style in
+   *     the email would be refused, and the operator would be shown an unstyled
+   *     version of what the recipient will receive — with nothing on the screen
+   *     or in the network tab to say so. That was the defect this route removed.
+   *   - if Next stopped applying `basePath` to the `X-Frame-Options` entry, the
+   *     catch-all `DENY` would stand and the frame would simply be **empty**.
+   *
+   * The request is unauthenticated, so the route answers 404 — which does not
+   * matter here. The middleware has already run and `headers()` matches on path,
+   * so both headers on that response were chosen for the path asked for.
+   */
+  const previewPath = `${BASE_PATH}/templates/preview/00000000-0000-4000-8000-000000000000`
+  const bodyPath = `${previewPath}/body`
+  const bodyPolicy = (await header(bodyPath, 'content-security-policy')) ?? ''
+  check(
+    'the email body is served its own policy under the prefix',
+    bodyPolicy === EMAIL_BODY_POLICY,
+    bodyPolicy.slice(0, 260) || 'no policy at all',
+  )
+  check(
+    'and that policy is the one thing that lets an email style itself',
+    /(^|;\s*)style-src 'unsafe-inline'(;|$)/.test(bodyPolicy),
+    bodyPolicy.slice(0, 260),
+  )
+  check(
+    'and it carries no nonce, because nothing in an email may run',
+    !/nonce-/.test(bodyPolicy) && !/script-src/.test(bodyPolicy),
+    bodyPolicy.slice(0, 260),
+  )
+  check(
+    'the one framable path is framable under the prefix too',
+    (await header(bodyPath, 'x-frame-options')) === 'SAMEORIGIN',
+    String(await header(bodyPath, 'x-frame-options')),
+  )
+  check(
+    'and DENY still stands on the page that frames it',
+    (await header(`${BASE_PATH}/templates`, 'x-frame-options')) === 'DENY',
+    String(await header(`${BASE_PATH}/templates`, 'x-frame-options')),
+  )
+  check(
+    'the preview page is the only screen allowed to frame anything',
+    /frame-src 'self'/.test((await header(previewPath, 'content-security-policy')) ?? ''),
+    'the preview page carries frame-src none, so its own frame would be refused',
+  )
 
   const portalPolicy = (await header(`${BASE_PATH}/portal/signin`, 'content-security-policy')) ?? ''
   check(

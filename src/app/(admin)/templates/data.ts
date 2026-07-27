@@ -202,14 +202,16 @@ export type PreviewOutcome =
     }
 
 /**
- * Render the real email for a real recipient, and log that it was viewed.
+ * Render the real email for a real recipient. No audit, no side effect at all.
  *
- * §16 lists "preview and test sends" among the events that must be recorded.
- * The metadata carries identifiers and the template hash — never the rendered
- * body, which `assertNoSecrets` refuses outright.
+ * Split out of `previewFor` when the HTML part moved to its own route. Two
+ * callers now render the same email for the same screen — the page, which draws
+ * the headers and the resolution table, and `…/body`, which serves the markup
+ * into the frame — and they must agree byte for byte, because the page's whole
+ * claim is that what is framed is what will be sent. One function renders; each
+ * caller records its own read.
  */
-export async function previewFor(
-  admin: AdminIdentity,
+export async function renderPreview(
   row: PreviewRecipient,
   kind: EmailTemplateKind,
 ): Promise<PreviewOutcome> {
@@ -221,9 +223,8 @@ export async function previewFor(
   const input = toVariableInput(row, previewPortalLink())
   const context = resolveEmailVariables(input, defaults)
 
-  let outcome: PreviewOutcome
   try {
-    outcome = {
+    return {
       status: 'RENDERED',
       email: renderEmail(template, input, defaults),
       context,
@@ -231,31 +232,48 @@ export async function previewFor(
     }
   } catch (error) {
     if (error instanceof UnresolvedVariableError) {
-      outcome = {
+      return {
         status: 'UNRESOLVED',
         message: error.message,
         unresolved: error.unresolved,
         context,
         template,
       }
-    } else {
-      outcome = {
-        status: 'ERROR',
-        message: error instanceof Error ? error.message : String(error),
-        template,
-      }
+    }
+    return {
+      status: 'ERROR',
+      message: error instanceof Error ? error.message : String(error),
+      template,
     }
   }
+}
 
+/**
+ * Record that an administrator read one recipient's correspondence.
+ *
+ * §16 lists "preview and test sends" among the events that must be recorded.
+ * The metadata carries identifiers and the template hash — never the rendered
+ * body, which `assertNoSecrets` refuses outright.
+ *
+ * `action` is a parameter because the page and the body route are two reads and
+ * are logged as two events. See the note on `email.body_served` in the route.
+ */
+export async function auditPreviewRead(
+  admin: AdminIdentity,
+  row: PreviewRecipient,
+  kind: EmailTemplateKind,
+  outcome: PreviewOutcome,
+  action: 'email.previewed' | 'email.body_served',
+): Promise<void> {
   await audit({
     actor: { kind: 'user', id: admin.id, label: admin.email },
     entityType: 'offer',
     entityId: row.offerId,
-    action: 'email.previewed',
+    action,
     metadata: {
       templateKind: kind,
-      templateHash: template.hash,
-      templateOrigin: template.origin,
+      templateHash: outcome.template.hash,
+      templateOrigin: outcome.template.origin,
       outcome: outcome.status,
       unresolvedVariables:
         outcome.status === 'UNRESOLVED'
@@ -263,6 +281,20 @@ export async function previewFor(
           : [],
     },
   })
+}
 
+/**
+ * Render the real email for a real recipient, and log that it was viewed.
+ *
+ * The page's entry point, unchanged in behaviour: the same outcome and the same
+ * `email.previewed` row it has always written.
+ */
+export async function previewFor(
+  admin: AdminIdentity,
+  row: PreviewRecipient,
+  kind: EmailTemplateKind,
+): Promise<PreviewOutcome> {
+  const outcome = await renderPreview(row, kind)
+  await auditPreviewRead(admin, row, kind, outcome, 'email.previewed')
   return outcome
 }

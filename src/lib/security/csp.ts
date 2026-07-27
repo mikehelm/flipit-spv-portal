@@ -63,6 +63,19 @@ export type CspCapability =
   | 'QR_DATA_IMAGE'
   /** `/admin/video` plays a recording back from an object URL before uploading it. */
   | 'MEDIA_BLOB'
+  /**
+   * `/templates/preview/[offerId]` frames the email body from this origin.
+   *
+   * This is the one screen in the application that embeds a frame at all, and
+   * the frame is a route on this origin — `…/body` — rather than a `srcdoc`
+   * attribute. See `EMAIL_BODY_POLICY` below for why that changed, and for the
+   * policy the framed document is served under.
+   *
+   * `'self'` and nothing else. The preview page may frame a document from here;
+   * it may not frame anything from anywhere else, and no other page in the
+   * application may frame at all.
+   */
+  | 'EMAIL_BODY_FRAME'
 
 /**
  * Which widenings a path may have — the whole of the mapping, in one place.
@@ -83,8 +96,99 @@ export function capabilitiesFor(pathname: string): CspCapability[] {
   const capabilities: CspCapability[] = []
   if (/(^|\/)admin\/security(\/|$)/.test(pathname)) capabilities.push('QR_DATA_IMAGE')
   if (/(^|\/)admin\/video(\/|$)/.test(pathname)) capabilities.push('MEDIA_BLOB')
+  /**
+   * The preview page, and not the body route beneath it.
+   *
+   * `isEmailBodyPath` is checked first by the middleware and returns a policy of
+   * its own, so the two never both apply — but the pattern here is written to
+   * exclude the `…/body` segment anyway. A route that served the email body with
+   * `frame-src 'self'` bolted onto the application policy would be the defect
+   * this whole change exists to remove, arrived at from the other direction.
+   */
+  if (/(^|\/)templates\/preview\/[^/]+\/?$/.test(pathname)) {
+    capabilities.push('EMAIL_BODY_FRAME')
+  }
   return capabilities
 }
+
+/**
+ * The framed email body's own path — the one document in this application that
+ * is served under a different policy from every other.
+ *
+ * Matched on a segment boundary for the reason every other pattern in this file
+ * is: under a base path the served path is `/SPV/templates/preview/…/body`, and
+ * an equality check would hand this document the **application** policy, which
+ * is the policy that cannot render it. That failure is invisible to a test which
+ * reads source and shows up as an unstyled email on the last screen before a
+ * real invitation goes to a real person — which is exactly the defect this
+ * replaced.
+ */
+export function isEmailBodyPath(pathname: string): boolean {
+  return /(^|\/)templates\/preview\/[^/]+\/body\/?$/.test(pathname)
+}
+
+/**
+ * The policy the email body is served under — and the reason this route exists.
+ *
+ * **The defect.** A `srcdoc` frame inherits the embedding document's policy.
+ * This application serves `style-src 'self'`, deliberately, and an earlier entry
+ * spent a day removing the widenings that were there for nothing. A designed
+ * HTML email is inline styles by construction — the invitation carries 69 of
+ * them, because that is the only styling a mail client will honour — so every
+ * one was refused inside the preview frame. The operator reviewing the last
+ * screen before a real send saw an unstyled document, and the recipient would
+ * see something else entirely.
+ *
+ * **Why the policy was not widened instead.** The one-line fix is
+ * `style-src 'unsafe-inline'`, which would put back on every page — including
+ * an investor's portal, which holds their claim token and their transfer amount
+ * — exactly what was removed from every page, for the benefit of one frame. A
+ * defect on one screen is better than a widening on every screen. So the body
+ * moved to its own route with its own policy, and the widening reaches that
+ * document and nothing else.
+ *
+ * **Every directive here is a refusal except one.**
+ *
+ * - `default-src 'none'` — the email loads nothing. No script, no font, no
+ *   frame, no fetch, no worker, no plugin. Everything below either narrows a
+ *   specific case or is the single grant.
+ * - `style-src 'unsafe-inline'` — **the grant, and the whole point.** Note what
+ *   it does *not* say: there is no `'self'`. The email may style itself with its
+ *   own attributes and `<style>` blocks and may not pull a stylesheet from this
+ *   origin, which is the only thing an injected `<link>` in an email body could
+ *   usefully reach.
+ * - `img-src 'none'` — see the note on images below.
+ * - `frame-ancestors 'self'` — this document may be framed by this origin, which
+ *   is the preview page, and by nothing else. It replaces the blanket
+ *   `X-Frame-Options: DENY` for this one path; `next.config.ts` sets
+ *   `SAMEORIGIN` there for browsers that read the older header.
+ * - `form-action 'none'`, `base-uri 'none'` — an email body containing a form or
+ *   a `<base>` is markup nobody wrote on purpose.
+ * - `sandbox` — with no allowances. The frame element already carries
+ *   `sandbox=""`, and this is the same restriction applied by the *response*, so
+ *   it holds when an administrator opens the URL directly rather than through
+ *   the page. A defence that only exists in the parent document is not a defence
+ *   of the route.
+ *
+ * **Images are refused, and that is a decision rather than an omission.** Both
+ * templates in this repository are image-free by construction and
+ * `templates.test.ts` asserts it, so `'none'` costs this build nothing today. It
+ * is the conservative reading of a silent specification: the markup is untrusted,
+ * and an `<img>` in it is an outbound request from the administrator's browser to
+ * whatever host the markup names, made before anything has been sent and
+ * carrying the administrator's address to a third party. If a custom template
+ * ever carries an image, the operator will see it broken here — a visible gap,
+ * on a screen whose job is to show gaps, rather than a silent ping.
+ */
+export const EMAIL_BODY_POLICY = [
+  "default-src 'none'",
+  "style-src 'unsafe-inline'",
+  "img-src 'none'",
+  "frame-ancestors 'self'",
+  "form-action 'none'",
+  "base-uri 'none'",
+  'sandbox',
+].join('; ')
 
 export interface CspOptions {
   /**
@@ -175,7 +279,16 @@ export function contentSecurityPolicy({
     // Nothing in this application is a plugin or an applet, and a <frame> on an
     // investor's portal is somebody else's page wearing it.
     "object-src 'none'",
-    "frame-src 'none'",
+    /**
+     * `'self'` on exactly one screen, `'none'` on every other.
+     *
+     * The one frame in this application holds an email body, served from this
+     * origin by `…/preview/[offerId]/body` under `EMAIL_BODY_POLICY`. A frame on
+     * an investor's portal is still somebody else's page wearing it, and the
+     * portal is served the `'none'` version — the capability is granted by path,
+     * and the default when a caller forgets is the narrow one.
+     */
+    may('EMAIL_BODY_FRAME') ? "frame-src 'self'" : "frame-src 'none'",
     "frame-ancestors 'none'",
     // A form on this origin may only post back to this origin. Without it, an
     // injected form could post a password or a claim token elsewhere.

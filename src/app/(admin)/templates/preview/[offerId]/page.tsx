@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { z } from 'zod'
 import { Card, SectionHeading } from '@/components/admin/ui'
 import { requireOnboardedAdmin } from '@/lib/auth/guards'
+import { emailBodyPath } from '@/lib/email/preview-url'
 import { TEMPLATE_LABEL } from '@/lib/email/templates'
 import { EMAIL_VARIABLE_NAMES } from '@/lib/email/variables'
 import { loadPreviewRecipient, previewFor } from '../../data'
@@ -34,6 +35,13 @@ const SOURCE_LABEL: Readonly<Record<string, string>> = {
  * this page: an email body is untrusted markup by construction, and it must
  * not be able to reach the admin document. `sandbox=""` grants nothing —
  * no scripts, no forms, no same-origin.
+ *
+ * The frame's source is a **route**, `…/body`, and not a `srcdoc` attribute.
+ * A `srcdoc` document inherits this page's Content-Security-Policy, under which
+ * an email's own inline styles are refused — so the operator saw an unstyled
+ * version of what the recipient would receive, on the last screen before a real
+ * send. The route carries a policy of its own instead of this page carrying a
+ * wider one. See its docstring and `src/lib/security/csp.ts`.
  *
  * The portal link shown is deliberately not a working token. Previewing is a
  * read; a read does not issue credentials.
@@ -151,12 +159,29 @@ export default async function EmailPreviewPage({
 
           <Card
             title="HTML part"
-            description="Rendered in a sandboxed frame at 600px. This is the markup that will be sent, byte for byte."
+            description="Rendered in a sandboxed frame at 600px, with the email's own styling. This is what the recipient will see."
           >
             <div className="overflow-hidden rounded-sm border hairline bg-white">
+              {/*
+                `src`, not `srcDoc`, and the difference is the whole of what an
+                operator sees here.
+
+                A `srcdoc` frame inherits this document's Content-Security-Policy
+                — `style-src 'self'` — and a designed HTML email is inline styles
+                by construction, so every one of them was refused and this frame
+                showed an unstyled document while the recipient would receive the
+                designed one. The body is now its own route with its own narrow
+                policy; see `src/lib/security/csp.ts` and the route's docstring.
+
+                `sandbox=""` stays, and still grants nothing: no scripts, no
+                forms, no same-origin. A route on this origin would otherwise be
+                same-origin with this page, which is the one thing the attribute
+                was here to prevent. The route's own response repeats the
+                restriction, so it holds for a direct visit as well.
+              */}
               <iframe
                 title={`${TEMPLATE_LABEL[kind]} preview for ${recipient.name}`}
-                srcDoc={outcome.email.html}
+                src={emailBodyPath(recipient.offerId, kind)}
                 sandbox=""
                 referrerPolicy="no-referrer"
                 className="h-[70vh] w-full border-0"
