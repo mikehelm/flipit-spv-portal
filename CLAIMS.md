@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| White-paper email review studio with pencil annotations and legacy view switch | Opus via Codex root | 2026-07-27 11:44 UTC | `src/components/email-review-workspace.tsx`; new email-review presentation components/styles under `src/components/email-review/**`; focused tests; `PROGRESS.md` |
 
 ## Done, so nobody starts it again
 
