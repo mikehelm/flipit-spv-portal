@@ -3,7 +3,7 @@ import { Card, Notice, Pill, SectionHeading } from '@/components/admin/ui'
 import { requireReader } from '@/lib/auth/guards'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { documentsByAccount, type AccountOfferDocuments } from '@/lib/documents/data'
-import { previewErasure, type ErasurePreview } from '@/lib/erasure/erase'
+import { previewErasureMany, type ErasurePreview } from '@/lib/erasure/erase'
 import { mediaStore } from '@/lib/media/store'
 import { loadAdminAccounts, type AdminAccountRow } from '@/lib/portal/accounts-data'
 import { portalAccess } from '@/lib/portal/access'
@@ -202,14 +202,15 @@ export default async function InvestorsPage() {
    * do. The server action re-checks; this is manners, exactly as the status
    * form's confirmation word is. Counted here rather than in the client so no
    * count crosses to a browser that was not entitled to ask for it.
+   *
+   * One batched call, not one per account. The first version of this looped and
+   * cost about eighteen queries per card, which on a real round is seven hundred
+   * queries on a page that had been running three.
    */
-  const erasures = new Map<string, ErasurePreview>()
-  if (identity.role === 'OWNER') {
-    for (const account of accounts) {
-      const preview = await previewErasure(account.id)
-      if (preview) erasures.set(account.id, preview)
-    }
-  }
+  const erasures =
+    identity.role === 'OWNER'
+      ? await previewErasureMany(accounts.map((account) => account.id))
+      : new Map<string, ErasurePreview>()
 
   const suspended = accounts.filter((row) => row.status === 'SUSPENDED').length
 

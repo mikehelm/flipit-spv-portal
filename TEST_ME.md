@@ -244,7 +244,7 @@ The one thing that really is destroyed is **the files**: a signed subscription a
 
 **If it refuses to start**, the likely reason is that the investor holds uploaded documents and `MEDIA_STORE` is not configured, so the files cannot be destroyed. It stops before touching the database rather than doing most of the job, and says so.
 
-`pnpm verify:erasure` does the whole thing against a real database with **two** investors present and checks ninety-nine things, half of them being that the second investor is exactly as they were. `DEPLOYMENT.md §12` is the written procedure, including three things this does *not* reach — worth reading once, calmly, before it is ever needed.
+`pnpm verify:erasure` does the whole thing against a real database with **two** investors present and checks a hundred and nineteen things, half of them being that the second investor is exactly as they were. `DEPLOYMENT.md §12` is the written procedure, including three things this does *not* reach — worth reading once, calmly, before it is ever needed.
 
 **One thing to raise with the formation agents.** Under UK and EU data-protection law, pseudonymised data is still personal data. What is built here is the most that can be done while keeping a coherent record of a securities transaction, and keeping that record is exactly what the privacy policy's *"subject only to anything that has to be retained"* is for. Whether that covers what has been kept is a question for advice, not for the build. It is written up in `OPEN_DECISIONS.md` item 12 with the two specific calls to put to them.
 

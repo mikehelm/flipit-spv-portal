@@ -8991,3 +8991,138 @@ have opened; wrong for a destructive action that refuses.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+## The two gaps the erasure left in its own entry
+
+Both were named in the Uncertain list above, both were mine to fix, and both
+were fixed in the same pass because one of them was a defect I had just
+introduced.
+
+### The preview was seven hundred queries
+
+`/investors` renders every account on one page, and the owner now sees an
+erasure preview on each. The first version looped `previewErasure` over them, at
+about **eighteen counting queries per card** — on a real round of forty
+investors, seven hundred queries on a page that had been running three.
+
+Correct, and invisible: nothing in the output would ever have said so. That is
+the shape of defect the rest of this repository is careful about and I shipped
+one anyway, so it is fixed and it is now pinned.
+
+`previewErasureMany(accountIds)` is the entry point. Every count is keyed by
+list and **grouped in the database** — `select key, count(*) … group by key` —
+and rolled up in memory afterwards, so the cost is a **fixed number of round
+trips whether there is one account or a hundred**. `previewErasure(one)`
+delegates to it, so there is one implementation rather than two that have to
+agree. `mediaStore()` is read once for the page rather than once per account.
+
+`src/lib/erasure/erase.test.ts` pins it at the source: the page must call the
+batched version, must call it exactly once, must not call the single-account
+one, and the shape that regressed — a `for` over accounts with an `await` in it
+— fails the test by name. Counting in JavaScript is refused too: a `.length`
+over a fetched row set would be a full read of somebody's conversation to
+discover how many messages it has.
+
+### The files were destroyed by one line of code and no check
+
+The other half. The first fixture had no document packages, so the branch that
+actually calls `store.remove()` was reached by **nothing**, and *"the stored
+bytes are gone"* rested on a line of code and the fact that `verify:documents`
+exercises the same method for a different reason. It is the one part of an
+erasure that is irreversible in principle, which makes it the worst thing on the
+list to have unproved.
+
+`verify:erasure` now stands up a **real filesystem store in a temporary
+directory**, gives a third investor a real object under a real key, erases them,
+and **`stat`s the key afterwards** — `stat` rather than a read, because a read
+returning nothing is also what an empty file looks like. It then checks the row
+that survives: the title redacted, the description gone, the key replaced by the
+marker, and `sizeBytes`, `version` and `issuedAt` all untouched, because an
+erasure changes no document's lifecycle.
+
+And the refusal, which was previously proved only through the preview. A fourth
+investor holds a file, `MEDIA_STORE` is taken away, and the erasure refuses with
+`MEDIA_STORE_UNREACHABLE` — then the account is read back column by column to
+prove **nothing at all changed**, and the store is restored to prove the file it
+would not erase is still there. A refusal that had done half the work would have
+been indistinguishable from one that had done none.
+
+**Decisions.**
+
+- ***`previewErasure` kept, as a delegate rather than a second implementation.***
+  The action needs one account and the page needs all of them. Two code paths
+  that must produce the same counts are one code path that eventually will not.
+- ***The environment is restored in a `finally`.*** The store section mutates
+  `process.env` and resets two caches. A throw in the middle of it would have
+  left every later verification in the suite running against a filesystem store
+  in a deleted temporary directory, which is a failure that would look like a
+  defect in whatever ran next.
+- ***`stat`, not `get`.*** Stated above and repeated here because it is the kind
+  of thing that gets simplified later by somebody who has not thought about it.
+
+**Deviations.** None.
+
+**Checklist.** 1: the new test refuses eight money and percentage column names in
+the executor and both `parseFloat` and `parseInt`, so this is now checked in two
+files rather than one. 2–4, 6, 9, 11, 12: untouched, no send path, no gate, no
+token, no route, no AI, no base URL. 5: the batched preview reads only the
+accounts it is given and is still owner-only; nothing crosses to an operator's
+browser. 7: unchanged. 8: the store failure path still deliberately omits the
+storage key from its message, because the key *is* the capability. 10: unchanged.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2596**, up from 2587) are green.
+`pnpm verify:erasure` is now **119 checks**, up from 99, and passes.
+
+**Uncertain.**
+
+- ***The batching is proved correct and is not proved fast.*** The counts come
+  back right — `verify:erasure` reads them against a real fixture — and the shape
+  is pinned at the source. **Nothing measures the page.** There is no fixture
+  with forty investors anywhere in this repository, and the claim "a fixed number
+  of round trips" is read off the code rather than off a query log. It is very
+  probably true and it is not measured.
+- ***`inArray` with a large list is one more unmeasured thing.*** Forty accounts
+  and their offers is a parameter list of a few hundred, which Postgres handles
+  without comment. There is no upper bound in the code and nobody has asked what
+  happens at ten thousand, because nobody will have ten thousand.
+- ***The store section runs the whole thing against a filesystem store; the
+  object store is proved only for `remove` by `verify:object-store`.*** An
+  erasure against S3 has never happened. The seam is the same one every other
+  caller uses, which is the argument, not a measurement.
+- ***Still nothing drives the erasure through a browser.*** Unchanged from the
+  previous entry: the form, the confirmation, the counts and the absence of the
+  section for an operator are proved at the source and in unit tests, and
+  `verify:account-access` does not know about this screen.
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12***, and it is still a
+  conversation with the formation agents rather than a package.
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`ACCEPTANCE.md` has not been read against the tests it claims to be generated
+  from, and it does not yet mention the erasure.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src \'none\'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator\'s side.*
+- *`frame-ancestors \'self\'` is proved by the frame loading, not by a refusal.*
+- *Nothing has asked the idempotence question of twenty-three of the twenty-four
+  verify scripts; `verify:erasure` is the twenty-fourth and it does ask it of
+  itself.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens. The refusal screen is measured with one kind
+  of refusal.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src \'self\'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

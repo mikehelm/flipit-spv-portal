@@ -31,7 +31,8 @@
  * was erased, by whom and when, is squarely that.
  */
 
-import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, count, eq, inArray, isNotNull, sql } from 'drizzle-orm'
+import type { PgColumn, PgTable } from 'drizzle-orm/pg-core'
 import { db } from '@/db'
 import {
   accountStatusEvents,
@@ -114,192 +115,220 @@ interface AccountGraph {
   storageKeys: string[]
 }
 
-async function readGraph(accountId: string): Promise<AccountGraph> {
-  const offerRows = await db
-    .select({ id: offers.id, recipientId: offers.recipientId })
-    .from(offers)
-    .where(eq(offers.accountId, accountId))
+const EMPTY_GRAPH: AccountGraph = { offerIds: [], recipientIds: [], qaEntryIds: [], storageKeys: [] }
 
-  const offerIds = offerRows.map((row) => row.id)
-  const recipientIds = [
-    ...new Set(offerRows.map((row) => row.recipientId).filter((value): value is string => !!value)),
-  ]
+/**
+ * The graph for many accounts at once, in four queries rather than four each.
+ *
+ * `/investors` renders every account on one page and the owner sees an erasure
+ * preview on each. The single-account version of this ran about eighteen
+ * counting queries per card, so forty investors meant seven hundred queries on
+ * a page that had been running three. Correct, and far too slow to leave.
+ *
+ * Everything below is therefore keyed by list and grouped in the database. The
+ * cost is a fixed number of round trips whether there is one account or a
+ * hundred.
+ */
+async function readGraphs(accountIds: string[]): Promise<Map<string, AccountGraph>> {
+  const graphs = new Map<string, AccountGraph>()
+  for (const id of accountIds) {
+    graphs.set(id, { offerIds: [], recipientIds: [], qaEntryIds: [], storageKeys: [] })
+  }
+  if (accountIds.length === 0) return graphs
+
+  const offerRows = await db
+    .select({ id: offers.id, accountId: offers.accountId, recipientId: offers.recipientId })
+    .from(offers)
+    .where(inArray(offers.accountId, accountIds))
+
+  /** Which account each offer belongs to, so offer-keyed counts can roll up. */
+  const offerOwner = new Map<string, string>()
+  for (const row of offerRows) {
+    offerOwner.set(row.id, row.accountId)
+    const graph = graphs.get(row.accountId)
+    if (!graph) continue
+    graph.offerIds.push(row.id)
+    if (row.recipientId && !graph.recipientIds.includes(row.recipientId)) {
+      graph.recipientIds.push(row.recipientId)
+    }
+  }
 
   const qaRows = await db
-    .select({ id: qaEntries.id })
+    .select({ id: qaEntries.id, accountId: qaEntries.askedByAccountId })
     .from(qaEntries)
-    .where(eq(qaEntries.askedByAccountId, accountId))
-  const qaEntryIds = qaRows.map((row) => row.id)
+    .where(inArray(qaEntries.askedByAccountId, accountIds))
+  for (const row of qaRows) {
+    if (row.accountId) graphs.get(row.accountId)?.qaEntryIds.push(row.id)
+  }
 
-  const storageKeys: string[] = []
-  if (offerIds.length > 0) {
+  const allOfferIds = [...offerOwner.keys()]
+  if (allOfferIds.length > 0) {
     const docs = await db
-      .select({ storageKey: documentPackages.storageKey })
+      .select({ offerId: documentPackages.offerId, storageKey: documentPackages.storageKey })
       .from(documentPackages)
-      .where(inArray(documentPackages.offerId, offerIds))
+      .where(inArray(documentPackages.offerId, allOfferIds))
     for (const row of docs) {
-      if (row.storageKey && row.storageKey !== ERASED_STORAGE_KEY) storageKeys.push(row.storageKey)
+      if (!row.storageKey || row.storageKey === ERASED_STORAGE_KEY) continue
+      const owner = offerOwner.get(row.offerId)
+      if (owner) graphs.get(owner)?.storageKeys.push(row.storageKey)
     }
 
     const certificates = await db
-      .select({ storageKey: participationCertificates.storageKey })
+      .select({
+        offerId: participationCertificates.offerId,
+        storageKey: participationCertificates.storageKey,
+      })
       .from(participationCertificates)
       .where(
         and(
-          inArray(participationCertificates.offerId, offerIds),
+          inArray(participationCertificates.offerId, allOfferIds),
           isNotNull(participationCertificates.storageKey),
         ),
       )
     for (const row of certificates) {
-      if (row.storageKey) storageKeys.push(row.storageKey)
+      if (!row.storageKey) continue
+      const owner = offerOwner.get(row.offerId)
+      if (owner) graphs.get(owner)?.storageKeys.push(row.storageKey)
     }
   }
 
-  return { offerIds, recipientIds, qaEntryIds, storageKeys }
+  return graphs
 }
 
-/** `SELECT count(*)` without importing a helper for one line. */
-async function tally(query: Promise<{ id: string }[]>): Promise<number> {
-  return (await query).length
+async function readGraph(accountId: string): Promise<AccountGraph> {
+  return (await readGraphs([accountId])).get(accountId) ?? EMPTY_GRAPH
+}
+
+/** `select key, count(*) ... group by key`, as a map. Empty list, no query. */
+async function tallyBy<T extends PgColumn>(
+  table: PgTable,
+  key: T,
+  ids: string[],
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>()
+  if (ids.length === 0) return result
+  const rows = await db
+    .select({ key, n: count() })
+    .from(table)
+    .where(inArray(key, ids))
+    .groupBy(key)
+  for (const row of rows) {
+    if (typeof row.key === 'string') result.set(row.key, Number(row.n))
+  }
+  return result
+}
+
+/** Sum a per-offer tally back up to the account that owns those offers. */
+function rollUp(tally: Map<string, number>, offerIds: string[]): number {
+  let total = 0
+  for (const id of offerIds) total += tally.get(id) ?? 0
+  return total
+}
+
+export async function previewErasureMany(
+  accountIds: string[],
+): Promise<Map<string, ErasurePreview>> {
+  const previews = new Map<string, ErasurePreview>()
+  if (accountIds.length === 0) return previews
+
+  const accounts = await db
+    .select({
+      id: investorAccounts.id,
+      name: investorAccounts.name,
+      email: investorAccounts.email,
+      status: investorAccounts.status,
+    })
+    .from(investorAccounts)
+    .where(inArray(investorAccounts.id, accountIds))
+  if (accounts.length === 0) return previews
+
+  const found = accounts.map((row) => row.id)
+  const graphs = await readGraphs(found)
+  const allOfferIds = found.flatMap((id) => graphs.get(id)?.offerIds ?? [])
+  const allQaIds = found.flatMap((id) => graphs.get(id)?.qaEntryIds ?? [])
+
+  const [
+    statusEvents,
+    conversations,
+    changeRequests,
+    registerEntries,
+    auditRows,
+    offerStatus,
+    snapshots,
+    sends,
+    responses,
+    commitmentRows,
+    instructions,
+    receipts,
+    documents,
+    certificates,
+    threads,
+  ] = await Promise.all([
+    tallyBy(accountStatusEvents, accountStatusEvents.accountId, found),
+    tallyBy(conversationMessages, conversationMessages.accountId, found),
+    tallyBy(emailChangeRequests, emailChangeRequests.accountId, found),
+    tallyBy(interestRegisterEntries, interestRegisterEntries.accountId, found),
+    tallyBy(auditEvents, auditEvents.actorAccountId, found),
+    tallyBy(offerStatusEvents, offerStatusEvents.offerId, allOfferIds),
+    tallyBy(emailSnapshots, emailSnapshots.offerId, allOfferIds),
+    tallyBy(sendEvents, sendEvents.offerId, allOfferIds),
+    tallyBy(investorResponses, investorResponses.offerId, allOfferIds),
+    tallyBy(commitments, commitments.offerId, allOfferIds),
+    tallyBy(paymentInstructions, paymentInstructions.offerId, allOfferIds),
+    tallyBy(fundsReceipts, fundsReceipts.offerId, allOfferIds),
+    tallyBy(documentPackages, documentPackages.offerId, allOfferIds),
+    tallyBy(participationCertificates, participationCertificates.offerId, allOfferIds),
+    tallyBy(qaThreadMessages, qaThreadMessages.entryId, allQaIds),
+  ])
+
+  // Read once for the whole page rather than once per account.
+  const store = mediaStore()
+
+  for (const account of accounts) {
+    const graph = graphs.get(account.id) ?? EMPTY_GRAPH
+    const { offerIds, recipientIds, qaEntryIds, storageKeys } = graph
+
+    previews.set(account.id, {
+      accountId: account.id,
+      name: account.name,
+      email: account.email,
+      status: account.status,
+      alreadyErased: account.email === pseudonymEmail(account.id),
+      counts: {
+        offers: offerIds.length,
+        recipients: recipientIds.length,
+        statusEvents: statusEvents.get(account.id) ?? 0,
+        conversationMessages: conversations.get(account.id) ?? 0,
+        emailChangeRequests: changeRequests.get(account.id) ?? 0,
+        registerEntries: registerEntries.get(account.id) ?? 0,
+        auditRowsRelabelled: auditRows.get(account.id) ?? 0,
+        offerStatusEvents: rollUp(offerStatus, offerIds),
+        emailSnapshots: rollUp(snapshots, offerIds),
+        sendEvents: rollUp(sends, offerIds),
+        investorResponses: rollUp(responses, offerIds),
+        commitments: rollUp(commitmentRows, offerIds),
+        paymentInstructions: rollUp(instructions, offerIds),
+        fundsReceipts: rollUp(receipts, offerIds),
+        documentPackages: rollUp(documents, offerIds),
+        participationCertificates: rollUp(certificates, offerIds),
+        qaEntries: qaEntryIds.length,
+        qaThreadMessages: rollUp(threads, qaEntryIds),
+        storedObjects: storageKeys.length,
+      },
+      blockedBy:
+        storageKeys.length > 0 && !store
+          ? 'This investor holds stored files and no media store is configured, so the bytes ' +
+            'cannot be destroyed. Set MEDIA_STORE and try again — an erasure that leaves the ' +
+            'documents behind is not an erasure.'
+          : null,
+    })
+  }
+
+  return previews
 }
 
 export async function previewErasure(accountId: string): Promise<ErasurePreview | null> {
-  const account = await db.query.investorAccounts.findFirst({
-    where: eq(investorAccounts.id, accountId),
-  })
-  if (!account) return null
-
-  const graph = await readGraph(accountId)
-  const { offerIds, recipientIds, qaEntryIds, storageKeys } = graph
-
-  const noOffers = offerIds.length === 0
-  const noQa = qaEntryIds.length === 0
-
-  const counts: ErasurePreview['counts'] = {
-    offers: offerIds.length,
-    recipients: recipientIds.length,
-    statusEvents: await tally(
-      db
-        .select({ id: accountStatusEvents.id })
-        .from(accountStatusEvents)
-        .where(eq(accountStatusEvents.accountId, accountId)),
-    ),
-    offerStatusEvents: noOffers
-      ? 0
-      : await tally(
-          db
-            .select({ id: offerStatusEvents.id })
-            .from(offerStatusEvents)
-            .where(inArray(offerStatusEvents.offerId, offerIds)),
-        ),
-    emailSnapshots: noOffers
-      ? 0
-      : await tally(
-          db
-            .select({ id: emailSnapshots.id })
-            .from(emailSnapshots)
-            .where(inArray(emailSnapshots.offerId, offerIds)),
-        ),
-    sendEvents: noOffers
-      ? 0
-      : await tally(
-          db.select({ id: sendEvents.id }).from(sendEvents).where(inArray(sendEvents.offerId, offerIds)),
-        ),
-    conversationMessages: await tally(
-      db
-        .select({ id: conversationMessages.id })
-        .from(conversationMessages)
-        .where(eq(conversationMessages.accountId, accountId)),
-    ),
-    investorResponses: noOffers
-      ? 0
-      : await tally(
-          db
-            .select({ id: investorResponses.id })
-            .from(investorResponses)
-            .where(inArray(investorResponses.offerId, offerIds)),
-        ),
-    emailChangeRequests: await tally(
-      db
-        .select({ id: emailChangeRequests.id })
-        .from(emailChangeRequests)
-        .where(eq(emailChangeRequests.accountId, accountId)),
-    ),
-    commitments: noOffers
-      ? 0
-      : await tally(
-          db.select({ id: commitments.id }).from(commitments).where(inArray(commitments.offerId, offerIds)),
-        ),
-    paymentInstructions: noOffers
-      ? 0
-      : await tally(
-          db
-            .select({ id: paymentInstructions.id })
-            .from(paymentInstructions)
-            .where(inArray(paymentInstructions.offerId, offerIds)),
-        ),
-    fundsReceipts: noOffers
-      ? 0
-      : await tally(
-          db
-            .select({ id: fundsReceipts.id })
-            .from(fundsReceipts)
-            .where(inArray(fundsReceipts.offerId, offerIds)),
-        ),
-    documentPackages: noOffers
-      ? 0
-      : await tally(
-          db
-            .select({ id: documentPackages.id })
-            .from(documentPackages)
-            .where(inArray(documentPackages.offerId, offerIds)),
-        ),
-    participationCertificates: noOffers
-      ? 0
-      : await tally(
-          db
-            .select({ id: participationCertificates.id })
-            .from(participationCertificates)
-            .where(inArray(participationCertificates.offerId, offerIds)),
-        ),
-    qaEntries: qaEntryIds.length,
-    qaThreadMessages: noQa
-      ? 0
-      : await tally(
-          db
-            .select({ id: qaThreadMessages.id })
-            .from(qaThreadMessages)
-            .where(inArray(qaThreadMessages.entryId, qaEntryIds)),
-        ),
-    registerEntries: await tally(
-      db
-        .select({ id: interestRegisterEntries.id })
-        .from(interestRegisterEntries)
-        .where(eq(interestRegisterEntries.accountId, accountId)),
-    ),
-    auditRowsRelabelled: await tally(
-      db.select({ id: auditEvents.id }).from(auditEvents).where(eq(auditEvents.actorAccountId, accountId)),
-    ),
-    storedObjects: storageKeys.length,
-  }
-
-  const store = mediaStore()
-  const blockedBy =
-    storageKeys.length > 0 && !store
-      ? 'This investor holds stored files and no media store is configured, so the bytes ' +
-        'cannot be destroyed. Set MEDIA_STORE and try again — an erasure that leaves the ' +
-        'documents behind is not an erasure.'
-      : null
-
-  return {
-    accountId,
-    name: account.name,
-    email: account.email,
-    status: account.status,
-    alreadyErased: account.email === pseudonymEmail(accountId),
-    counts,
-    blockedBy,
-  }
+  return (await previewErasureMany([accountId])).get(accountId) ?? null
 }
 
 // ---------------------------------------------------------------------------

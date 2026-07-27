@@ -179,7 +179,7 @@ When this item was written there was no way to delete an investor record in this
 - **The operator cannot do it, and cannot preview it either.** Suspending and closing are David's and both are reversible; this one is not, so it sits with you alongside the compliance approval. A refused attempt is audited and says why.
 - **There is no reason box**, deliberately — this is the one action that must not add new writing about a person to the record. What it asks for instead is the account's own email address, typed out, and a tick.
 
-**The plan cannot go stale.** `src/lib/erasure/plan.ts` names every table in the schema exactly once, with a sentence saying what happens to it and why, and `plan.test.ts` fails on the commit that adds a table nobody has an opinion about. `pnpm verify:erasure` runs the whole thing against real Postgres with a second investor present and checks that one is untouched, column for column — 99 checks.
+**The plan cannot go stale.** `src/lib/erasure/plan.ts` names every table in the schema exactly once, with a sentence saying what happens to it and why, and `plan.test.ts` fails on the commit that adds a table nobody has an opinion about. `pnpm verify:erasure` runs the whole thing against real Postgres with a second investor present and checks that one is untouched, column for column — 119 checks, including a real file destroyed from a real store and a refusal that changes nothing when the store cannot be reached.
 
 **What is still open, and it is a question for advice rather than a build:**
 

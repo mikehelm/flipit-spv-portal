@@ -709,11 +709,15 @@ cannot be written to by accident.
 pnpm verify:erasure
 ```
 
-Ninety-nine checks against a real database, with a **second investor present
-throughout** — every check on the erased one is paired with the same check on the
-other, because an erasure that quietly took a neighbour's conversation with it
-would pass every unit test in the repository. It cleans up after itself. It is
-part of `pnpm verify:all`.
+A hundred and nineteen checks against a real database, with a **second investor
+present throughout** — every check on the erased one is paired with the same
+check on the other, because an erasure that quietly took a neighbour's
+conversation with it would pass every unit test in the repository.
+
+It also stands up a real filesystem store, gives a third investor a real file,
+erases them and confirms the bytes are gone; and takes the store away from a
+fourth to confirm the refusal changes nothing at all. It cleans up after itself,
+including the temporary store directory. It is part of `pnpm verify:all`.
 
 For a specific past erasure, the audit log holds an `investor_account.erased`
 row: who ran it, when, how many offers and stored files were affected, and the

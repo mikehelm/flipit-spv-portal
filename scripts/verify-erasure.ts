@@ -29,6 +29,9 @@
  */
 
 import 'dotenv/config'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { and, eq, inArray, like, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import {
@@ -61,6 +64,8 @@ import type { AdminIdentity } from '@/lib/auth/guards'
 import { eraseAccount, previewErasure } from '@/lib/erasure/erase'
 import { ERASED_MARKER, ERASED_STORAGE_KEY, looksErased, pseudonymEmail } from '@/lib/erasure/plan'
 import { issueToken } from '@/lib/crypto'
+import { resetEnvCache } from '@/lib/env'
+import { mediaStore, newStorageKey, resetMediaStoreCache } from '@/lib/media/store'
 
 const PREFIX = 'ErasureVerify'
 
@@ -718,15 +723,131 @@ async function main(): Promise<void> {
     .select()
     .from(documentPackages)
     .where(eq(documentPackages.offerId, alice.offer.id))
-  check(
-    'no document rows in this fixture, and the erasure did not invent one',
-    docs.length === 0,
-    'the media-store half is covered by verify:documents and by the preview’s blockedBy path',
-  )
+  check('no document rows in the first fixture', docs.length === 0)
   check(
     'and the storage-key marker is not something a real key could collide with',
     ERASED_STORAGE_KEY.length < 32,
   )
+
+  // -------------------------------------------------------------------------
+  console.log('\nThe files, actually destroyed')
+
+  /*
+   * The one part of an erasure that is not reversible in principle, and until
+   * now it was the one part nothing drove. The first fixture has no documents,
+   * so `store.remove()` was reached by no check at all and "the bytes are gone"
+   * rested on one line of code.
+   *
+   * So: a real filesystem store, a real object under a real key, a third
+   * investor who holds it, and a `stat` afterwards. `stat` rather than a read,
+   * because a read that returns nothing is also what an empty file looks like.
+   */
+  const storeDirectory = await mkdtemp(join(tmpdir(), 'erasure-verify-'))
+  const previousStore = process.env.MEDIA_STORE
+  const previousDirectory = process.env.MEDIA_DIR
+  process.env.MEDIA_STORE = 'filesystem'
+  process.env.MEDIA_DIR = storeDirectory
+  resetEnvCache()
+  resetMediaStoreCache()
+
+  try {
+    const store = mediaStore()
+    check('a filesystem store is configured for this section', store !== null)
+
+    const carol = await seedInvestor('carol', round!.id)
+    const key = newStorageKey('doc')
+    const bytes = new TextEncoder().encode('%PDF-1.4 a signed subscription agreement')
+    await store!.put(key, bytes, 'application/pdf')
+
+    check('the object is in the store before the erasure', (await store!.stat(key)) !== null)
+
+    await db.insert(documentPackages).values({
+      offerId: carol.offer.id,
+      title: 'Subscription agreement — carol Person',
+      description: 'Countersigned copy returned by carol.',
+      storageKey: key,
+      contentType: 'application/pdf',
+      sizeBytes: bytes.byteLength,
+      issuedAt: new Date(),
+    })
+
+    const carolPreview = await previewErasure(carol.account.id)
+    check('the preview counts the stored file', carolPreview?.counts.storedObjects === 1)
+    check('the preview counts the document row', carolPreview?.counts.documentPackages === 1)
+    check('and nothing blocks it, because the store is reachable', carolPreview?.blockedBy === null)
+
+    const carolResult = await eraseAccount({ accountId: carol.account.id, actor: owner })
+    check('the erasure succeeds', carolResult.ok, carolResult.ok ? undefined : carolResult.message)
+    check(
+      'and reports one object destroyed',
+      carolResult.ok && carolResult.objectsDestroyed === 1,
+    )
+
+    check('the object is gone from the store', (await store!.stat(key)) === null)
+
+    const [carolDoc] = await db
+      .select()
+      .from(documentPackages)
+      .where(eq(documentPackages.offerId, carol.offer.id))
+    check('the document title is redacted', carolDoc?.title === ERASED_MARKER)
+    check('the description is gone', carolDoc?.description === null)
+    check('the storage key is the marker, not the old key', carolDoc?.storageKey === ERASED_STORAGE_KEY)
+    check(
+      'and the row still records that a document existed, at its size and version',
+      carolDoc?.sizeBytes === bytes.byteLength && carolDoc?.version === 1,
+    )
+    check(
+      'and it is still issued — an erasure changes no document’s lifecycle',
+      carolDoc?.issuedAt !== null,
+    )
+
+    // ---- and the refusal, with the store taken away -----------------------
+    const dave = await seedInvestor('dave', round!.id)
+    const daveKey = newStorageKey('doc')
+    await store!.put(daveKey, bytes, 'application/pdf')
+    await db.insert(documentPackages).values({
+      offerId: dave.offer.id,
+      title: 'Subscription agreement — dave Person',
+      storageKey: daveKey,
+      contentType: 'application/pdf',
+      sizeBytes: bytes.byteLength,
+    })
+
+    process.env.MEDIA_STORE = ''
+    resetEnvCache()
+    resetMediaStoreCache()
+
+    const refused = await eraseAccount({ accountId: dave.account.id, actor: owner })
+    check('with no store configured, an erasure of somebody holding files refuses', !refused.ok)
+    check(
+      'with MEDIA_STORE_UNREACHABLE',
+      !refused.ok && refused.reason === 'MEDIA_STORE_UNREACHABLE',
+    )
+
+    const daveAccount = await db.query.investorAccounts.findFirst({
+      where: eq(investorAccounts.id, dave.account.id),
+    })
+    check('and it changed nothing at all — the name is untouched', daveAccount?.name === 'dave Person')
+    check('the address is untouched', daveAccount?.email === dave.email)
+    check('and the status is untouched', daveAccount?.status === 'ACTIVE')
+
+    process.env.MEDIA_STORE = 'filesystem'
+    resetEnvCache()
+    resetMediaStoreCache()
+    const daveStore = mediaStore()
+    check('and the file it would not erase is still there', (await daveStore!.stat(daveKey)) !== null)
+
+    const daveBlocked = await previewErasure(dave.account.id)
+    check('the preview says nothing blocks it once the store is back', daveBlocked?.blockedBy === null)
+  } finally {
+    if (previousStore === undefined) delete process.env.MEDIA_STORE
+    else process.env.MEDIA_STORE = previousStore
+    if (previousDirectory === undefined) delete process.env.MEDIA_DIR
+    else process.env.MEDIA_DIR = previousDirectory
+    resetEnvCache()
+    resetMediaStoreCache()
+    await rm(storeDirectory, { recursive: true, force: true })
+  }
 
   await cleanup()
 

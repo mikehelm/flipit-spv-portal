@@ -70,7 +70,7 @@ open. It is an **owner-only pseudonymisation**, not a deletion: `src/lib/erasure
 holds a pure plan naming every one of the forty-five tables exactly once and an
 executor that carries it out in one transaction; `src/actions/erasure.ts` is the
 gate; the form is on the investor's own card on `/investors`. `pnpm verify:erasure`
-is 99 checks against real Postgres with a second investor present, and
+is 119 checks against real Postgres with a second investor present, and
 `DEPLOYMENT.md §12` is the written runbook the item also asked for.
 
 **Do not start any of these:** a second erasure path, a "delete investor" action,
