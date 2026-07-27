@@ -85,14 +85,23 @@ These two have been recorded in PROGRESS.md across several sessions as questions
 
 ### 10. A forgotten password
 
-Sign-in for you and David is an email address and a password. **There is no way to reset one.** An account gets in through a setup link, which the other of you can mint — so if you forget yours, David can issue you a new setup link, and vice versa. If *both* of you are locked out at once, nobody can get in without a command line and a database.
+Sign-in for you and David is an email address and a password, and **there is no "forgotten password?" link** — deliberately, and the comment in the sign-in page says why: it would answer the one question that page is built not to answer, which is whether a given address has access at all.
 
-That is probably acceptable for two people, and it is deliberately not built, because a reset journey is a second way into the application and every one of them is a way in for somebody else too. The question is whether you want one, and if so:
+What actually happens in each case, checked against the code rather than assumed:
 
-- a reset link emailed to the address on the account — which means the application sends mail to a real address on an unauthenticated request, and the anti-phishing page (§15.1) exists precisely because that is the shape a phishing email takes;
-- or the current arrangement, written down: **if you are locked out, ask David to mint you a setup link, and if you are both locked out, that is a database job.**
+- **David forgets his.** You fix it yourself, in the app. *Operator access* under Admin issues him a fresh single-use setup link, and it works on an operator who already has a password — it does not refuse a re-issue. No console, no database.
+- **You forget one of yours.** You have **two owner accounts** — `mike@flipthepage.com` and `mike@flipit.com` — with separate passwords. If you have not set the same password on both, one still gets you in, and from there you can reach everything.
+- **You lose both of yours.** This is the only real hole. David cannot help: the invite screen is owner-only, *and* it refuses any address that is not on the operator allowlist, so even a signed-in owner cannot mint a link for an owner address. The only way back is `pnpm setup-link <your address>` on the server console.
 
-Nothing needs deciding before launch. It needs deciding before there is a third administrator.
+So the honest summary is: **one scenario, and only if you use the same password twice.** Smaller than it first looked.
+
+The question is still worth answering before there is a third administrator, because it is the answer that changes then. The options:
+
+- **Leave it**, and write the recovery step into the runbook: *if both owner passwords are lost, run `pnpm setup-link` on the server.* Costs nothing and adds no way in.
+- **Use different passwords on your two owner accounts**, which turns the second one into a deliberate spare rather than an accident. Free, and it is what makes the summary above true.
+- **Build a reset journey** — a link emailed to the address on the account. This is the one to be careful about: it means the application sends mail to a real address on an unauthenticated request, which is exactly the shape a phishing email takes, and the anti-phishing page (§15.1) exists because you are already worried about that.
+
+Nothing is blocked on this.
 
 ### 11. An SPV percentage that will not divide
 
@@ -102,11 +111,13 @@ The arithmetic: the indirect Flipit percentage is `spv_percentage × 0.30` (§10
 
 **The awkward part is that this happens even when the file supplies the indirect percentage explicitly.** The `indirect_flipit_percentage_override` column exists for exactly this: the operator writes `12.5` and that is the figure stored and sent. The derived figure is discarded — but it is computed and rejected *first*, so the file is still refused, and the message asks the operator to change the SPV percentage, which is a real figure that will appear in an investment document.
 
-Three ways out, and this is your call because it is a figures question, not a code one:
+**This was reproduced, not inferred.** A two-row file with `41.666667` in it was put through the real import and the application returned one file error, `PRECISION_LOSS`, on that row, with both rows dropped and the Import button disabled. That is also how the defect in the test fixture came to light.
+
+Three ways out. The second is the one that is hardest to argue against — a number that is thrown away should not be able to stop a file — but it is a change in the money path, which is the last place in this application to change anything without you saying so:
 
 - **Leave it.** A file that will not divide cleanly is worth a second look, and a refusal is the safe direction.
-- **Skip the derived check when an override is present.** The discarded number stops blocking the file. This is a change to the money path, which nothing has changed lightly.
-- **Keep the refusal and change the message**, so it says the override does not rescue the row and why.
+- **Skip the derived check when an override is present.** The discarded number stops blocking the file. Narrow, and it only affects rows that supply the override.
+- **Keep the refusal and change the message**, so it at least says the override does not rescue the row and why, instead of pointing at a contractual figure.
 
 Nothing is blocked on this. It will only be met by a file with an awkward split in it, and no such file exists yet.
 

@@ -7679,3 +7679,53 @@ is touched.
   hides a racing fault. If the sandbox attribute were ever dropped, this message
   would stop — and nothing asserts that it appears, because it cannot be relied
   on to. `contentDocument` is what carries that claim, and it is not a race.
+
+### Correction — OPEN_DECISIONS §10 was written from an assumption
+
+Michael asked whether the two questions added to OPEN_DECISIONS.md were real.
+They are, but **§10 was wrong on its facts** and the entry that added it did not
+check them. Corrected against the code:
+
+- ***"David can issue you a new setup link, and vice versa" is false in the
+  direction that matters.*** `/admin/invites` is `requireOwner()`, and
+  `issueOperatorInvite` throws unless `resolveRole(email) === 'OPERATOR'`. So an
+  operator can mint nothing, and even a signed-in **owner** cannot mint a link
+  for an owner address. The owner direction is console-only.
+- ***The operator direction does work, and works better than stated.*** Nothing
+  in `issueOperatorInvite` or `redeemAdminSetupLink` refuses an operator who
+  already has a password, and re-issuing revokes any outstanding invite. So if
+  David forgets his, Michael fixes it from a screen — no console, no database.
+- ***There are two owner accounts, not one.*** `mike@flipthepage.com` and
+  `mike@flipit.com` are both `OWNER`, each with its own `password_hash`. That was
+  settled in OPEN_DECISIONS v2 and is in the seed, and it is a real mitigation the
+  original note missed: losing one owner password leaves the other, unless the
+  same password was set on both.
+
+The exposure is therefore **one scenario** — both owner passwords lost — rather
+than the "if both of you are locked out" the note described. §10 now says that,
+and offers using different passwords on the two owner accounts as an option,
+since that is what makes the summary true.
+
+§11 needed no correction. It was reproduced against the real import before it was
+written down, which is how the fixture defect was found in the first place; the
+note now says so, and stops presenting the three remedies as equally weighted
+when one of them is plainly the least bad.
+
+**The general lesson, and it is the same one as the rest of the day.** A note
+written for a person to act on is a claim like any other, and this one was
+green-for-the-wrong-reason in exactly the family the four preceding entries were
+about: plausible, unverified, and stated with more confidence than it had earned.
+The checks in this repository are held to *"would this still pass if the thing it
+names were absent"*. **OPEN_DECISIONS.md was not being held to anything.**
+
+**Uncertain.**
+
+- ***Nothing else in OPEN_DECISIONS.md has been checked against the code.*** It is
+  version 6.0 and dates from before the build. Items 1, 3, 4, 6, 7, 8 and 9, and
+  everything under "Settled on 2026-07-25", are assertions about a system that
+  has changed underneath them for two days. §7 is the one to read first — it is
+  already marked *"half-answered by the build"*, which suggests others have moved
+  too and nobody has looked.
+- *Whether a document being issued should notify the investor at all is still
+  open and is not in OPEN_DECISIONS.md*, though CLAIMS.md names it as one of the
+  two largest things left.
