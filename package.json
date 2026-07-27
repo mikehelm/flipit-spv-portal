@@ -39,6 +39,12 @@
     "verify:roadmap": "tsx scripts/verify-roadmap.ts",
     "verify:email-change": "tsx scripts/verify-email-change.ts",
     "verify:acknowledgements": "tsx scripts/verify-acknowledgements.ts",
+    "verify:qa": "tsx scripts/verify-qa.ts",
+    "verify:register": "tsx scripts/verify-register.ts",
+    "verify:updates": "tsx scripts/verify-updates.ts",
+    "verify:certificate": "tsx scripts/verify-certificate.ts",
+    "verify:rounds": "tsx scripts/verify-rounds.ts",
+    "verify:export": "tsx scripts/verify-export.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
   },
   "dependencies": {

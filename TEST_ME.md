@@ -768,6 +768,49 @@ Both dropdowns are now the right size. That fault could not have been found by r
 
 ---
 
+## The import, all the way to the end — and a button that was grey
+
+The section above added a check on the import wizard's **review table** — the wide screen listing every recipient with their amount, both percentages, their deadline and their jurisdiction. It stopped there, deliberately, because the next button creates real records and nobody wanted a layout check writing investor rows.
+
+That button has now been pressed, and pressing it found that **the review table had never actually worked.**
+
+**What was wrong.** The test file used an SPV percentage of `41.666667`. The application works out the indirect Flipit percentage by multiplying that by 0.30, which gives **12.5000001** — one decimal place more than it can store. So it refused the whole file, exactly as it is supposed to. What was on the screen at that moment was not the review table at all. It was the *error* version of it: a box saying one row stops this file, a table with one recipient in it instead of two, and a **greyed-out button** reading "Import 1 recipient(s)".
+
+The check passed anyway, for three small reasons at once: it waited for the button to *appear* and never asked whether it could be *pressed*; the pattern it matched would accept a "1" as readily as a "2"; and the name it looked for was in the file, so it was on the screen either way.
+
+That is the fourth check in four rounds to be green for the wrong reason, and this one was written by the round that was fixing the third. There is no comfortable way to say that, so it is said plainly.
+
+**What now happens instead.** The file uses a percentage that divides — and the run asks, in order: was the file accepted; are **both** people on the table; does the button offer **two**; **is the button switched on**; is one row marked *Blocked* and the other *Ready*; does the override warning name both figures; and is a total larger than the stated raise a *warning* rather than a refusal, which is what the specification asks for.
+
+**And then it presses it.** The final screen — the one that tells you what the import did — had never been drawn at phone size by anything. It is now drawn with every part of its sentence present at once: one account created, one existing account reused, one offer ready, one held. Underneath the sentence, thirteen further checks read the actual records: two recipients, **two** accounts and not three (an address that already has an account keeps it), the US recipient held with the reason recorded, **the other one imported and ready beside them**, the amounts stored to the cent, the supplied percentage stored exactly as written and marked as supplied, **nothing emailed to either of them**, and **no sign-in link issued to either of them**.
+
+That middle one is the rule that matters most and had never been seen on a screen: **a held country stops one person and not the batch.** It was proved in the code and in a database test. It had never been proved by putting a file with a held recipient in it through the actual wizard and looking at what came out.
+
+The run went from 357 checks to **391**, and it now clears up after itself properly — the previous version left a stray record behind on every single run.
+
+> **The one open question this raised.** The refusal above is arguably too strict. The spreadsheet can supply the Flipit percentage directly — that column exists precisely for a split that will not divide — and when it does, the calculated figure is thrown away. But it is calculated and rejected *first*, so the file is still refused, and the message asks you to change the SPV percentage, which is a real number that ends up in an investment document. Nothing has been changed: it is written up in `OPEN_DECISIONS.md` as a question for you, with the arithmetic. It will only ever be met by a file with an awkward three-way split in it.
+
+---
+
+## Six checks that existed and could not be run
+
+A tidy-up, and a surprising one. There are twenty-three checking commands in this project — `pnpm verify:viewport`, `pnpm verify:health`, and so on. **Six of them had no command.**
+
+The files were there. The checks were there. But nothing in the project listed them, so `pnpm run` did not show them, and the only place they were mentioned was a line of notes inside each file. Between them they hold **259 checks against a real database**, covering:
+
+- the shared questions page, with a second investor present the whole time, proving one investor's thread never contains another's;
+- the register of interest, proving nobody on it can see their own position or anyone else's;
+- an update sent to some people, proving it reaches only them;
+- the participation certificate, from issue to reissue;
+- the rule that a deadline passing closes nothing and inaction closes nothing;
+- the export's decimal places.
+
+They were not broken. Every one was run and every one passed. They were simply invisible — and earlier notes in this project cite one of them by a command that did not exist.
+
+All six now have a command: `pnpm verify:qa`, `pnpm verify:register`, `pnpm verify:updates`, `pnpm verify:certificate`, `pnpm verify:rounds` and `pnpm verify:export`. And the test suite now fails if a seventh one is ever added without one, so this cannot quietly happen again.
+
+---
+
 ## The forty-eight things this was meant to do
 
 The specification ends with a list of forty-eight things that have to be true before this is finished. **`ACCEPTANCE.md` in this repository is that list, with the test that proves each one beside it.**

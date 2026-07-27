@@ -6889,3 +6889,229 @@ brings a screen up to the standard every other screen already met.
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
+
+## The button that was grey, and six checks nobody could run
+
+The last entry's first Uncertain item was a decision it had declined to make:
+
+> *"Step 4 of the import wizard has still never been measured, and it is the
+> screen that reports what was created. Doing it means letting a layout script
+> create investor records and then remove them; the cleanup already deletes by
+> prefix, so this is a decision rather than an obstacle, and the decision made
+> here was not to."*
+
+Made. It is now pressed. And pressing it found that **the step before it had
+never actually worked** — the review table the last entry added, and reported
+as the widest screen in the application finally measured, was being measured on
+a file the application had refused.
+
+**The finding.** The fixture's first row carried an SPV percentage of
+`41.666667`. §10 derives the indirect Flipit percentage as `spv × 0.30`, and
+41.666667 × 0.3 is **12.5000001** — seven decimal places into a column that
+stores six. The application refuses the whole file for it, correctly and by
+design. So what was on the screen at the moment the last entry measured it was
+not the review table. It was the **error variant** of the review table: a box
+reading *"1 error(s) stop this whole file"*, a table with **one** row in it
+rather than two, and underneath it a disabled button reading *"Import 1
+recipient(s)"*.
+
+Three separate things let that pass:
+
+- `waitFor` resolves on a **disabled** button. Nothing asked whether the control
+  it had waited for could be pressed.
+- the locator was `/Import \d+ recipient/`, and `\d+` matches a **1** as happily
+  as a **2**.
+- `mustShow` was `/127,500|Alexandra Fenwick-Harrington/` — a name that is in the
+  file, and therefore on the screen, in both variants.
+
+That is the **fourth** defect of this family in four entries, and it was
+introduced by the entry that was fixing the third. The shape is unchanged: a
+check that would still pass if the thing it names were absent. It is worth being
+blunt about the pattern — every one of the four was written *by* somebody hunting
+this exact family, in the same file, in the same week.
+
+**Built.**
+
+- The fixture's SPV percentage is `41.666660`, whose derived figure is
+  `12.499998` and fits. Still six decimals, still deliberately awkward. The
+  override stays `12.500000`, so it now genuinely *differs* from the calculation
+  and the §10 warning naming both figures renders and is measured.
+- Seven new checks on the review step, replacing one: the file was accepted,
+  **both** rows are on the table, the button offers **two**, **the button is
+  enabled**, one row reads *Blocked* and the other *Ready* beside it, the
+  override warning names both figures, and a total over the stated raise is a
+  warning rather than a refusal.
+- **Step 4 is pressed, measured and then read as rows.** The screen is drawn at
+  375px with every clause of its sentence present at once — a created account, a
+  reused one, a blocked offer and a cleared one — which needed a fixture that
+  produces all four: an approval covering GB only, and an account already
+  existing for the US row's address.
+- Thirteen checks behind the sentence. Two recipients; **two** accounts and not
+  three, because §4.3 says an address that already has one keeps it; two offers;
+  the US one `blocked` with `JURISDICTION_NOT_APPROVED` and `emailStatus`
+  `BLOCKED`; **the GB one beside it neither blocked nor held** — §8.2 and AC7's
+  rule that a block stops one recipient and never the batch, driven through the
+  operator's own screen for the first time rather than through the service
+  functions; the amounts stored to the cent; the override stored against the row
+  it was written on and marked as an override; the row without one derived and
+  marked as derived; **nothing emailed to either of them**; and **no claim token
+  issued**, because that is WP5 behind the §8 gates and not this.
+- The restart button, which had never been pressed, and a check that starting
+  again clears the figures rather than leaving them on the screen.
+- Cleanup that removes what it wrote: the import job (and its column mappings by
+  cascade), the approval, and the audit rows naming the offers that are about to
+  stop existing. The fixture file is renamed under the prefix so the job row is
+  identifiable — **the previous version left an `import_jobs` row called
+  `register.csv` behind on every run**, and there was one in this container's
+  database from the baseline run at the top of this session.
+
+`pnpm verify:viewport` is **391**, up from 357.
+
+**And six verification scripts nobody could run.** A survey of `scripts/` against
+`package.json` found six with no entry: `verify-qa`, `verify-register`,
+`verify-updates`, `verify-certificate`, `verify-rounds` and `verify-export`.
+Between them **259 checks against a real Postgres** — the shared Q&A's
+anonymisation with a second investor present throughout, the register's
+isolation, a targeted update reaching only its audience, the certificate
+lifecycle, §6.6's rule that a passed deadline closes nothing, and the export's
+decimals.
+
+They are not broken. Every one was run and every one passes: 51, 49, 41, 54, 35
+and 29. They were **invisible** — `pnpm run` did not list them, `DEPLOYMENT.md`
+does not name them, and the only record that they exist is a line in each file's
+own docstring. Four entries of this PROGRESS.md cite `pnpm verify:qa` as evidence
+for a claim, and until this entry that command did not exist.
+
+All six now have an entry, and `scripts-are-runnable.test.ts` fails the suite if
+a seventh arrives without one. That is the same family again, one level out: not
+a check that could pass wrongly, but a check that could not run at all.
+
+**Decisions.**
+
+- ***The layout script now writes investor records, and the check that objected
+  to it is unchanged.*** The last entry's reason for stopping was that pressing
+  *Import* would turn a layout script into one that writes investor records. It
+  does. What that reasoning was protecting is the check immediately above it —
+  *"nothing was created by looking at it"* — and the promise that check holds is
+  that **the review step** creates nothing, not that the confirm step does. It
+  still runs, still first, and it is now the more meaningful of the two because
+  the step after it demonstrably does create rows.
+- ***The precision defect was recorded, not fixed.*** The derived figure is
+  computed and rejected **before** the override is read, so a file that supplies
+  an explicit indirect percentage is still refused for a derived one that will
+  never be stored — and the message tells the operator to *"round the SPV
+  percentage in the file"*, which is a real figure in a securities document.
+  Changing that is a change to the money path, which is the last place in this
+  application to change anything on a build session's own initiative. It is in
+  OPEN_DECISIONS.md as a question for Michael, with the arithmetic written out.
+- ***The approval is inserted directly, by an owner's id.*** §8.2's rule that only
+  an owner may record one is proved by `verify-register.ts` and by the unit
+  suite; this is a fixture and weakens nothing. Every read of it in this function
+  goes through the application's own `getCurrentApproval`.
+- ***The reused account is the blocked one.*** Either row could have been given an
+  account in advance. Giving it to the US row means the durable-account rule and
+  the jurisdiction block are exercised on the same record at once, which is the
+  combination an operator re-inviting somebody in a held country will actually
+  meet.
+- ***Audit rows written by this fixture are deleted by id; nothing else in the log
+  is touched.*** The log is append-only and stays that way. The alternative was
+  leaving rows pointing at offers that no longer exist, which is worse than no
+  row. This is the rule the overview-banner fixture already follows.
+- ***The six scripts were wired up rather than deleted.*** Six scripts nobody has
+  run in weeks is also an argument for removing them. They were run first, and
+  259 checks passed — deleting working coverage of the Q&A anonymisation rule and
+  the register's isolation because nobody had noticed it would have been the
+  expensive mistake.
+
+**Deviations.** None. **No production code changed in this entry** — one
+verification script, one new test, six `package.json` lines, and the documents.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. The amounts asserted here are compared as strings
+   — `'127500.00'`, `'8250.50'`, `'12.500000'` — and the arithmetic that
+   produced the defect above is `decimal.js` in `computeIndirectPercentage`.
+2. *A send path bypassing a gate?* No, and this entry adds two checks that say
+   so from the other side: after a completed import, neither created account has
+   a conversation message and neither has a claim token.
+3. *One recipient or the whole batch?* **This is the entry that renders it.** Two
+   rows in, the US one held with its reason, the GB one imported and ready, both
+   on the same screen. It had been proved against the service functions and never
+   through the wizard.
+4. *Can an operator record an approval?* Untouched. The fixture inserts one
+   against the **owner's** id, and no application path was changed.
+5. *Does anything reveal another investor?* No. Everything here is the operator's
+   own screen. The two fixture recipients are `@example.test` addresses created
+   and deleted inside one function.
+6. *Tokens?* Untouched — and now asserted absent after an import.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The failure details
+   print screen text and stored figures.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* Untouched — though `verify:qa`, which proves the
+    anonymisation rule with a second investor present, is now a command that
+    exists.
+11. *Can the AI path change a figure?* Untouched, and reinforced from the
+    deterministic side: the override is asserted stored exactly as written and
+    marked as an override, and the row without one is asserted derived and marked
+    as derived.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2472, up from 2446) and `pnpm build`
+are green. `pnpm verify:viewport` is 391 of 391. The six newly-wired commands are
+51, 49, 41, 54, 35 and 29, all passing.
+
+**Uncertain.**
+
+- ***The precision rule is the open question this entry did not answer.*** A file
+  whose SPV percentage derives to seven decimals is refused even when the
+  operator has supplied the indirect percentage explicitly, and the remedy the
+  application suggests is to change the SPV percentage. `41.666667` is not a
+  contrived number — it is one third of 125%, the shape a three-way split
+  produces. Nobody has decided whether the derived figure should simply be
+  skipped when an override is present, or whether the refusal is right and the
+  message is what should change. It is in OPEN_DECISIONS.md.
+- ***Step 4 is measured in its richest state and in no other.*** Four counts, a
+  held row, one of each. What it looks like with **nothing** held — the ordinary
+  case, once the approval covers everybody — is a different sentence with a
+  paragraph missing, and it is unmeasured. So is the case where every row is
+  held, which is what an operator who has recorded no approval will actually see.
+- ***The import wizard's own error variant is now unmeasured.*** It was being
+  measured by accident, and the accident is fixed; nothing measures it on
+  purpose. It is a screen an operator will meet — it is what a bad spreadsheet
+  produces — and it draws a box, a list of messages and a disabled button that
+  nothing has looked at at 375px.
+- ***Two rows are not a spreadsheet.*** §22 says 15 to 40 recipients. The review
+  table has been measured with two rows in it; a forty-row table on a phone is a
+  different scrolling problem, and the totals block under it is the same either
+  way.
+- ***The six newly-wired scripts are wired, not scheduled.*** Nothing runs them.
+  There is no command that runs every verification in turn, and with twenty-three
+  of them there probably should be — but several need a built application and one
+  needs an object store, so an honest `verify:all` is a piece of work rather than
+  a line.
+- ***`DEPLOYMENT.md` still does not name any of the six.*** Its release checklist
+  lists `verify:deployment`, `verify:restore`, `verify:viewport` and
+  `verify:memory`, and a reader would reasonably conclude those are the ones that
+  matter. This entry did not touch that file.
+- ***Two rows in CLAIMS.md are past the six-hour staleness rule and were left
+  alone*** — the physical page-curl work claimed at 07:18 UTC and the three-view
+  switcher at 08:59, both by sessions on Michael's own machine. Neither is on any
+  Uncertain list and neither has code in the repository yet. The rule permits
+  taking them; this session judged that building somebody else's decorative
+  package from a claim row, unattended, was the wrong call. They are still
+  claimed and still stale.
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *The image upload preview and the email template preview are still
+  unexercised.*
+- *The error page has never been rendered by a real error.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *Nothing measures how long a 20 MB upload takes.*
+- *`waitFor` on a locator whose appearance depends on server state has still not
+  been read with that question in mind — and this entry is the fourth piece of
+  evidence that it should be. The disabled button was exactly that: a `waitFor`
+  that resolved on a control the server's own validation had turned off.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`mustShow` is set on six screens and absent on twenty-six.*
+- *The password-reset journey is still not built* — and it is **now** in
+  OPEN_DECISIONS.md, where four entries have said it belongs.

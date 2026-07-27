@@ -37,7 +37,6 @@ something else — there is always something else in the Uncertain notes.
 | --- | --- | --- | --- |
 | Physical curl P1+P2+P3+P6 | Opus 5 via OTTO/Codex root | 2026-07-27 07:18 UTC | `src/components/effects/curl-logic.ts`; `src/components/effects/curl-logic.test.ts`; `src/components/effects/curl-renderer.ts`; `src/components/effects/CurlCorner.tsx`; `src/components/effects/CurlCorner.module.css`; `src/components/effects/CurlGrip.tsx`; `src/components/effects/curl-lab-settings.ts`; `src/components/effects/curl-lab-settings.test.ts`; `src/components/effects/CurlLab.tsx`; `src/components/effects/CurlLab.module.css`; `src/components/effects/curl-integration.test.ts`; `src/components/effects/curl-lab-integration.test.ts`; `src/components/account-curl-menu.tsx`; `src/app/page.tsx`; `src/app/signin/page.tsx`; `src/app/access-request/page.tsx`; `src/app/(admin)/layout.tsx`; `src/app/portal/page.tsx`; `src/lib/portal/demo-preview.test.ts` |
 | Mike, David, and John Doe view switcher | Codex root | 2026-07-27 08:59 UTC | `src/components/portal-preview-switch.tsx`; `src/components/text-size-control.tsx`; `src/app/globals.css`; `src/app/(admin)/layout.tsx`; `src/app/portal/page.tsx`; `src/lib/portal/demo-preview.test.ts`; `PROGRESS.md` |
-| Import wizard step 4 at 375px, and the six unrunnable verification scripts | Opus 5 unattended (cloud) | 2026-07-27 17:20 UTC | `package.json`; `scripts/verify-viewport.ts`; `src/test/repo-scripts.test.ts`; `PROGRESS.md`; `TEST_ME.md` |
 
 ## Done, so nobody starts it again
 
@@ -114,6 +113,15 @@ health" in the admin navigation, same rules, read-only, for both roles — and
 The admin **overview** carries a banner when something needs a person, from a
 deliberately cheap two-query subset of the same rules, plus a permanent card so
 silence is never ambiguous.
+
+**Step 4 of the import wizard is measured, and the six unrunnable verification
+scripts are wired up** — as of 27 July. `pnpm verify:viewport` is 391 and drives
+the wizard to completion, asserting the jurisdiction block stops one recipient
+and not the batch through the operator's own screen. `verify:qa`,
+`verify:register`, `verify:updates`, `verify:certificate`, `verify:rounds` and
+`verify:export` had no `package.json` entry from the day they were written; all
+six pass, all six now have one, and a test fails the suite if a seventh arrives
+without one.
 
 **`media:check` is folded into the health report**, as of 26 July. The comparing
 moved out of the script into `src/lib/media/reconcile.ts`, the command writes one

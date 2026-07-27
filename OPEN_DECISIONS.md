@@ -79,6 +79,39 @@ The colours in §13.2 come from your demo file, not from flipit.com directly —
 
 ---
 
+## Raised by the build, and still unanswered
+
+These two have been recorded in PROGRESS.md across several sessions as questions for you. They are here because that is where questions for you belong.
+
+### 10. A forgotten password
+
+Sign-in for you and David is an email address and a password. **There is no way to reset one.** An account gets in through a setup link, which the other of you can mint — so if you forget yours, David can issue you a new setup link, and vice versa. If *both* of you are locked out at once, nobody can get in without a command line and a database.
+
+That is probably acceptable for two people, and it is deliberately not built, because a reset journey is a second way into the application and every one of them is a way in for somebody else too. The question is whether you want one, and if so:
+
+- a reset link emailed to the address on the account — which means the application sends mail to a real address on an unauthenticated request, and the anti-phishing page (§15.1) exists precisely because that is the shape a phishing email takes;
+- or the current arrangement, written down: **if you are locked out, ask David to mint you a setup link, and if you are both locked out, that is a database job.**
+
+Nothing needs deciding before launch. It needs deciding before there is a third administrator.
+
+### 11. An SPV percentage that will not divide
+
+The application refuses an import file when the **derived** Flipit percentage needs more than six decimal places, and tells the operator to round the SPV percentage in the spreadsheet.
+
+The arithmetic: the indirect Flipit percentage is `spv_percentage × 0.30` (§10). An SPV percentage of `41.666667` — one third of 125%, the shape a three-way split produces — derives `12.5000001`. Seven decimals into a column that stores six, so the file is refused.
+
+**The awkward part is that this happens even when the file supplies the indirect percentage explicitly.** The `indirect_flipit_percentage_override` column exists for exactly this: the operator writes `12.5` and that is the figure stored and sent. The derived figure is discarded — but it is computed and rejected *first*, so the file is still refused, and the message asks the operator to change the SPV percentage, which is a real figure that will appear in an investment document.
+
+Three ways out, and this is your call because it is a figures question, not a code one:
+
+- **Leave it.** A file that will not divide cleanly is worth a second look, and a refusal is the safe direction.
+- **Skip the derived check when an override is present.** The discarded number stops blocking the file. This is a change to the money path, which nothing has changed lightly.
+- **Keep the refusal and change the message**, so it says the override does not rescue the row and why.
+
+Nothing is blocked on this. It will only be met by a file with an awkward split in it, and no such file exists yet.
+
+---
+
 ## Worth deciding, not blocking
 
 - **Does the raise have a hard close date** the portal should display?

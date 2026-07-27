@@ -52,6 +52,9 @@ import { chromium, type Browser, type Page } from 'playwright'
 import { db } from '@/db'
 import {
   auditEvents,
+  complianceApprovals,
+  conversationMessages,
+  importJobs,
   interestRegisterEntries,
   investorAccounts,
   investorSessions,
@@ -566,6 +569,11 @@ async function cleanUp(): Promise<void> {
 
   await db.delete(recipients).where(like(recipients.email, `${PREFIX}%`))
   await db.delete(rounds).where(like(rounds.name, `${PREFIX}%`))
+
+  // The wizard's own leavings, which are keyed by a filename and an evidence
+  // reference rather than by an address. Called here as well as in the wizard's
+  // `finally` so a run that dies between the two leaves nothing behind either.
+  await clearImportFixtures()
 }
 
 /**
@@ -1074,62 +1082,404 @@ async function verifyTheQrCodeLoads(page: Page): Promise<void> {
  * six-figure amount and a six-decimal percentage — because a tidy row proves
  * nothing about a narrow column.
  *
- * **It stops before importing.** Step 4 creates recipients, accounts and offers,
- * and the wizard's own promise is that nothing is created until the operator
- * confirms. Pressing that button here would make this layout script a script
- * that writes investor records, so it does not: what step 4 looks like is still
- * unmeasured, and that is recorded in PROGRESS.md rather than worked around.
+ * **Step 4 is now pressed, and this is the entry that changed that.** The last
+ * version stopped at the review table on the reasoning that pressing *Import*
+ * would make a layout script into one that writes investor records. It would,
+ * and the objection was to the writing rather than to the measuring — so this
+ * writes under the same prefix everything else here writes under, asserts what
+ * was created, and removes it before the function returns. What the objection
+ * was actually protecting was the check above it, *"nothing was created by
+ * looking at it"*, and that check is unchanged and still runs first: the promise
+ * is that **the review step** creates nothing, not that the confirm step does.
+ *
+ * Step 4 is the screen that reports what the import did, and its sentence is
+ * assembled from four counts and an optional second paragraph. It is drawn at
+ * 375px here for the first time with **every clause of it present at once**,
+ * which needs a fixture that produces all four:
+ *
+ *   - a **new** account, from the GB row;
+ *   - a **reused** account, from the US row, whose address is given an account
+ *     before the wizard runs — §4.3 says accounts are durable, so an address
+ *     that already has one keeps it and gains a second offer;
+ *   - a **blocked** offer, from the US row, because the approval this fixture
+ *     records covers GB only;
+ *   - and a cleared one beside it.
+ *
+ * That last pair is the reason this is worth more than a layout measurement.
+ * §8.2 and AC7 say a jurisdiction block stops **one recipient and never the
+ * batch**, and until now that rule was proved by unit tests and by
+ * `verify-register.ts` against the service functions. It had never been driven
+ * through the operator's own screen. It is now: two rows in, one held, one
+ * cleared, both recorded, nothing sent.
  */
 async function verifyTheImportWizardSteps(page: Page): Promise<void> {
   console.log('\nThe import wizard past step 1, which nothing had ever seen')
 
-  complaints.length = 0
-  await page.goto(`${ORIGIN}/import`, { waitUntil: 'networkidle' })
+  const owner = await db.query.users.findFirst({ where: eq(users.email, ADMIN_EMAIL) })
+  if (!owner) throw new Error(`no ${ADMIN_EMAIL} user — run pnpm db:seed`)
 
-  await page.evaluate(() => {
-    const rows = [
-      'recipient_name,recipient_email,investment_amount_usd,spv_percentage,response_deadline,recipient_jurisdiction,indirect_flipit_percentage_override,internal_notes',
-      'Alexandra Fenwick-Harrington,wp18-viewport-import-one@example.test,127500.00,41.666667,2026-12-31,GB,12.500000,Introduced by David at the Lisbon dinner',
-      'Bartholomew Ravensworth-Cole,wp18-viewport-import-two@example.test,8250.50,2.750000,2026-11-15,US,,Asked for the long form of the agreement',
-    ].join('\n')
+  try {
+    // GB only, so the US row in the file below is held and the GB one is not.
+    // Recorded directly rather than through the owner's screen: this is a
+    // fixture, and §8.2's rule that only an owner may record one is proved by
+    // `verify-register.ts` and by the unit suite, not weakened here. Nothing in
+    // this function reads an approval by any path other than the application's
+    // own `getCurrentApproval`.
+    await db.insert(complianceApprovals).values({
+      approverName: 'A. Lawyer',
+      approverRole: 'Partner',
+      approvedAt: new Date('2026-07-20T00:00:00Z'),
+      evidenceReference: `${PREFIX} import approval`,
+      approvedJurisdictions: ['GB'],
+      approvedTemplateHash: 'f'.repeat(64),
+      templateKind: 'INVITATION',
+      recordedById: owner.id,
+    })
 
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement | null
-    if (!input) throw new Error('no file input on the import screen')
-    const transfer = new DataTransfer()
-    transfer.items.add(new File([rows], 'register.csv', { type: 'text/csv' }))
-    input.files = transfer.files
-    input.dispatchEvent(new Event('change', { bubbles: true }))
+    // The address the wizard must **reuse** rather than duplicate. §4.3.
+    await db.insert(investorAccounts).values({
+      name: 'Bartholomew Ravensworth-Cole',
+      email: `${PREFIX}-import-two@example.test`,
+      status: 'ACTIVE',
+    })
+
+    complaints.length = 0
+    await page.goto(`${ORIGIN}/import`, { waitUntil: 'networkidle' })
+
+    await page.evaluate(() => {
+      const rows = [
+        'recipient_name,recipient_email,investment_amount_usd,spv_percentage,response_deadline,recipient_jurisdiction,indirect_flipit_percentage_override,internal_notes',
+        'Alexandra Fenwick-Harrington,wp18-viewport-import-one@example.test,127500.00,41.666660,2026-12-31,GB,12.500000,Introduced by David at the Lisbon dinner',
+        'Bartholomew Ravensworth-Cole,wp18-viewport-import-two@example.test,8250.50,2.750000,2026-11-15,US,,Asked for the long form of the agreement',
+      ].join('\n')
+
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement | null
+      if (!input) throw new Error('no file input on the import screen')
+      const transfer = new DataTransfer()
+      // Named under the prefix so the job row it creates can be removed by the
+      // same rule as everything else. The previous name was `register.csv`,
+      // which left an `import_jobs` row behind on every run of this script with
+      // nothing to identify it by.
+      transfer.items.add(new File([rows], 'wp18-viewport-register.csv', { type: 'text/csv' }))
+      input.files = transfer.files
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+    await page.getByRole('button', { name: /Read the file/ }).click()
+
+    // A locator wait, and legitimately: the wizard's step is client state, so
+    // there is no row to poll. What settles is a control appearing, which is what
+    // Playwright's own waiting is for. See the page-text entry in PROGRESS.md for
+    // the distinction.
+    await page.getByRole('button', { name: /Check the file/ }).waitFor({ timeout: 40_000 })
+    await measureScreen(page, 'import — the columns', {
+      mustShow: /recipient_name|Alexandra Fenwick-Harrington/,
+    })
+
+    await page.getByRole('button', { name: /Check the file/ }).click()
+    await page.getByRole('button', { name: /Import \d+ recipient/ }).waitFor({ timeout: 40_000 })
+
+    // The review table, at 375px, for the first time.
+    await measureScreen(page, 'import — the review table', {
+      mustShow: /127,500|Alexandra Fenwick-Harrington/,
+    })
+
+    check(
+      'and nothing was created by looking at it',
+      (
+        await db
+          .select({ email: recipients.email })
+          .from(recipients)
+          .where(like(recipients.email, `${PREFIX}-import%`))
+      ).length === 0,
+      'the review step created recipient rows, which is the one thing it promises not to do',
+    )
+
+    /*
+     * The checks that would have caught the fixture this replaces.
+     *
+     * The version of this script that first measured the review table waited
+     * for the Import button and never asked whether it was **enabled**. It was
+     * not. The file carried an SPV percentage of `41.666667`, and 41.666667% of
+     * the SPV works out as 12.5000001% of Flipit — seven decimals into a column
+     * that stores six — so the application refused the whole file, exactly as
+     * §10 requires. What that script measured and reported as *"the review
+     * table"* was therefore the **error variant**: a box saying one row stops
+     * the file, a table with one row in it rather than two, and a disabled
+     * button reading "Import 1 recipient(s)".
+     *
+     * It passed. `waitFor` resolves on a disabled button, `\d+` matches a 1 as
+     * happily as a 2, and `mustShow` matched a name that is in the file and so
+     * is on the screen either way. That is the fourth defect of this family in
+     * four entries — a check that would still pass if the thing it names were
+     * absent — and this one was introduced by the entry that was fixing the
+     * third.
+     *
+     * So: the file is now one the application accepts, and the screen is asked
+     * to say so rather than merely to contain a name.
+     */
+    const review = await onScreen(page)
+
+    check(
+      'the file was accepted — nothing on this screen stops it',
+      !/error\(s\) stop this whole file/.test(review),
+      review.slice(0, 400),
+    )
+
+    check(
+      'both rows are on the review table, not one',
+      /Alexandra Fenwick-Harrington/.test(review) && /Bartholomew Ravensworth-Cole/.test(review),
+      review.slice(0, 400),
+    )
+
+    const importButton = page.getByRole('button', { name: /Import \d+ recipient/ })
+    check(
+      'and the button under it offers both of them',
+      /Import 2 recipient\(s\)/.test(await importButton.innerText()),
+      await importButton.innerText(),
+    )
+    check(
+      'and the button is enabled, which is the check that was missing',
+      await importButton.isEnabled(),
+      'the review step drew a table for a file the application had refused',
+    )
+
+    check(
+      'the US row is held and the GB one is ready, side by side',
+      /Blocked/.test(review) && /Ready/.test(review),
+      'the review step said nothing about the row its own approval does not cover',
+    )
+
+    check(
+      'the override is reported as replacing the calculation, with both figures',
+      /12\.500000% replaces the calculated 12\.499998%/.test(review),
+      'the operator is not told what the override displaced',
+    )
+
+    check(
+      'and a total over the stated raise is a warning here, never a refusal — §10',
+      /more than the stated raise/.test(review) && !/error\(s\) stop this whole file/.test(review),
+      'a modelling total was treated as an error',
+    )
+
+    await verifyStepFour(page)
+  } finally {
+    await clearImportFixtures()
+  }
+}
+
+/**
+ * Step 4, pressed — and then read as a set of database facts rather than as a
+ * sentence on a screen.
+ *
+ * The screen is measured first, because that is what this script is for. What
+ * follows it is the part that could not have been asserted anywhere else: the
+ * counts on the screen are the *only* place the application reports what an
+ * import did, and a wrong count there is indistinguishable from a right one
+ * without going and looking. So each of the four is checked against the rows.
+ */
+async function verifyStepFour(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /Import \d+ recipient/ }).click()
+
+  // Client state again, and again a control rather than a row: the wizard is on
+  // step 4 exactly when its restart button exists.
+  await page.getByRole('button', { name: /Import another file/ }).waitFor({ timeout: 60_000 })
+
+  // The screen nothing had ever drawn, with all four counts and the held-row
+  // paragraph on it at once.
+  await measureScreen(page, 'import — what it created', {
+    mustShow: /2 recipient\(s\) and 2 offer\(s\) created/,
   })
 
-  await page.getByRole('button', { name: /Read the file/ }).click()
-
-  // A locator wait, and legitimately: the wizard's step is client state, so
-  // there is no row to poll. What settles is a control appearing, which is what
-  // Playwright's own waiting is for. See the page-text entry in PROGRESS.md for
-  // the distinction.
-  await page.getByRole('button', { name: /Check the file/ }).waitFor({ timeout: 40_000 })
-  await measureScreen(page, 'import — the columns', {
-    mustShow: /recipient_name|Alexandra Fenwick-Harrington/,
-  })
-
-  await page.getByRole('button', { name: /Check the file/ }).click()
-  await page.getByRole('button', { name: /Import \d+ recipient/ }).waitFor({ timeout: 40_000 })
-
-  // The review table, at 375px, for the first time.
-  await measureScreen(page, 'import — the review table', {
-    mustShow: /127,500|Alexandra Fenwick-Harrington/,
-  })
+  const reported = await onScreen(page)
 
   check(
-    'and nothing was created by looking at it',
-    (
-      await db
-        .select({ email: recipients.email })
-        .from(recipients)
-        .where(like(recipients.email, `${PREFIX}-import%`))
-    ).length === 0,
-    'the review step created recipient rows, which is the one thing it promises not to do',
+    'it says one account was created and one reused',
+    /1 new investor account\(s\)/.test(reported) && /1 existing account\(s\) reused/.test(reported),
+    reported.slice(0, 400),
   )
+
+  check(
+    'and it says one recipient is held, not that the import failed',
+    /1 recipient\(s\) are held/.test(reported) && !/failed|error/i.test(reported),
+    reported.slice(0, 400),
+  )
+
+  check(
+    'and it says on the screen that nothing was emailed',
+    /Nothing has been emailed/.test(reported),
+    'the one screen that could leave an operator thinking the invitations went out does not say they did not',
+  )
+
+  // ---- and now the rows, which are the thing the sentence is a summary of ----
+
+  const created = await db
+    .select()
+    .from(recipients)
+    .where(like(recipients.email, `${PREFIX}-import%`))
+
+  check('two recipient rows exist', created.length === 2, `found ${created.length}`)
+
+  const accounts = await db
+    .select()
+    .from(investorAccounts)
+    .where(like(investorAccounts.email, `${PREFIX}-import%`))
+
+  check(
+    'and two accounts, not three — the existing address was reused',
+    accounts.length === 2,
+    `found ${accounts.length}; a duplicate account for an address that already had one breaks §4.3`,
+  )
+
+  const madeOffers = accounts.length
+    ? await db
+        .select()
+        .from(offers)
+        .where(
+          inArray(
+            offers.accountId,
+            accounts.map((a) => a.id),
+          ),
+        )
+    : []
+
+  check('and two offers', madeOffers.length === 2, `found ${madeOffers.length}`)
+
+  const gb = madeOffers.find((o) => o.proposedAmountUsd.startsWith('127500'))
+  const us = madeOffers.find((o) => o.proposedAmountUsd.startsWith('8250'))
+
+  check(
+    'the US row is blocked, and says why',
+    us?.blocked === true &&
+      us?.blockReason === 'JURISDICTION_NOT_APPROVED' &&
+      us?.emailStatus === 'BLOCKED',
+    `blocked=${us?.blocked} reason=${us?.blockReason} status=${us?.emailStatus}`,
+  )
+
+  check(
+    'the GB row beside it is not — a block stops one recipient, never the batch',
+    gb?.blocked === false && gb?.blockReason === null && gb?.emailStatus === 'DRAFT',
+    `blocked=${gb?.blocked} reason=${gb?.blockReason} status=${gb?.emailStatus}`,
+  )
+
+  check(
+    'the amounts are stored as written, to the cent',
+    gb?.proposedAmountUsd === '127500.00' && us?.proposedAmountUsd === '8250.50',
+    `${gb?.proposedAmountUsd} / ${us?.proposedAmountUsd}`,
+  )
+
+  check(
+    "the file's indirect override is stored on the row it was written against",
+    gb?.indirectPercentage === '12.500000' && gb?.indirectOverridden === true,
+    `${gb?.indirectPercentage} overridden=${gb?.indirectOverridden}`,
+  )
+
+  check(
+    'and the row without one carries a derived figure, marked as derived',
+    us?.indirectOverridden === false && us?.indirectPercentage !== null,
+    `${us?.indirectPercentage} overridden=${us?.indirectOverridden}`,
+  )
+
+  check(
+    'nothing was emailed to either of them',
+    accounts.length > 0 &&
+      (
+        await db
+          .select({ id: conversationMessages.id })
+          .from(conversationMessages)
+          .where(
+            inArray(
+              conversationMessages.accountId,
+              accounts.map((a) => a.id),
+            ),
+          )
+      ).length === 0,
+    'an import wrote a message to an investor, which no import may do',
+  )
+
+  check(
+    'and neither of them has a claim token',
+    accounts.length > 0 &&
+      (
+        await db
+          .select({ id: portalTokens.id })
+          .from(portalTokens)
+          .where(
+            inArray(
+              portalTokens.accountId,
+              accounts.map((a) => a.id),
+            ),
+          )
+      ).length === 0,
+    'an import issued a token, which is WP5 behind the §8 gates and not this',
+  )
+
+  // The restart button, which is the only way back and had never been pressed.
+  await page.getByRole('button', { name: /Import another file/ }).click()
+  await page.getByRole('button', { name: /Read the file/ }).waitFor({ timeout: 20_000 })
+  const afterRestart = await onScreen(page)
+  check(
+    'starting again clears the figures rather than leaving them on the screen',
+    !/127,500/.test(afterRestart) && !/2 recipient\(s\) and 2 offer\(s\)/.test(afterRestart),
+    afterRestart.slice(0, 300),
+  )
+  await measureScreen(page, 'import — back at the start')
+}
+
+/**
+ * Everything the wizard run above wrote, removed.
+ *
+ * The recipients, accounts and offers go by the same email prefix `cleanUp`
+ * uses, so a run that dies mid-wizard is tidied by the `finally` in `main` even
+ * if this never runs. What this adds is the three kinds of row that are keyed by
+ * something other than an address: the import job (and, by cascade, its column
+ * mappings), the approval, and the audit rows naming the offers — because those
+ * offers are about to stop existing, and an audit row pointing at a row that was
+ * never really there is worse than no audit row at all.
+ *
+ * The audit log is otherwise append-only and is left alone. Deleting by id what
+ * this script itself wrote is the same rule the overview-banner fixture already
+ * follows; nothing else in the log is touched.
+ */
+async function clearImportFixtures(): Promise<void> {
+  const accounts = await db
+    .select({ id: investorAccounts.id })
+    .from(investorAccounts)
+    .where(like(investorAccounts.email, `${PREFIX}-import%`))
+
+  if (accounts.length > 0) {
+    const ids = accounts.map((a) => a.id)
+    const mine = await db.select({ id: offers.id }).from(offers).where(inArray(offers.accountId, ids))
+    if (mine.length > 0) {
+      await db.delete(auditEvents).where(
+        inArray(
+          auditEvents.entityId,
+          mine.map((o) => o.id),
+        ),
+      )
+    }
+    await db.delete(conversationMessages).where(inArray(conversationMessages.accountId, ids))
+    await db.delete(portalTokens).where(inArray(portalTokens.accountId, ids))
+    await db.delete(offers).where(inArray(offers.accountId, ids))
+    await db.delete(investorAccounts).where(inArray(investorAccounts.id, ids))
+  }
+
+  await db.delete(recipients).where(like(recipients.email, `${PREFIX}-import%`))
+
+  const jobs = await db
+    .select({ id: importJobs.id })
+    .from(importJobs)
+    .where(like(importJobs.filename, `${PREFIX}%`))
+  if (jobs.length > 0) {
+    const ids = jobs.map((j) => j.id)
+    await db.delete(auditEvents).where(inArray(auditEvents.entityId, ids))
+    // `column_mappings` cascades from the job.
+    await db.delete(importJobs).where(inArray(importJobs.id, ids))
+  }
+
+  await db
+    .delete(complianceApprovals)
+    .where(like(complianceApprovals.evidenceReference, `${PREFIX}%`))
 }
 
 async function verifyThePolicyInPractice(page: Page): Promise<void> {
