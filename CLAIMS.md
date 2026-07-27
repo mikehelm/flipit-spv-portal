@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| _(nothing claimed)_ | | | |
+| Email provenance record | Codex `/root` | 2026-07-27 06:49 UTC | `David_Serene_Original_Email_2026-07-25.txt`, `SOURCE_RECEIPT.md`, `EMAIL_PROVENANCE.md`, `PROGRESS.md`, `CLAIMS.md` |
 
 ## Done, so nobody starts it again
 
