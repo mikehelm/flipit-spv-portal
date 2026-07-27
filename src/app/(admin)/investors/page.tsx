@@ -3,11 +3,12 @@ import { Card, Notice, Pill, SectionHeading } from '@/components/admin/ui'
 import { requireReader } from '@/lib/auth/guards'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { documentsByAccount, type AccountOfferDocuments } from '@/lib/documents/data'
+import { previewErasure, type ErasurePreview } from '@/lib/erasure/erase'
 import { mediaStore } from '@/lib/media/store'
 import { loadAdminAccounts, type AdminAccountRow } from '@/lib/portal/accounts-data'
 import { portalAccess } from '@/lib/portal/access'
 import { DocumentsPanel } from './documents-panel'
-import { ChangeStatusForm } from './parts'
+import { ChangeStatusForm, EraseInvestorForm } from './parts'
 
 export const metadata: Metadata = {
   title: 'Investors — Flipit SPV',
@@ -43,18 +44,49 @@ function StatusPill({ status }: { status: string }) {
   return <Pill tone="neutral">Archived</Pill>
 }
 
+/**
+ * The preview turned into lines a person reads, in the order they would care.
+ *
+ * Zero-count lines are dropped by the form itself, so a record with nothing but
+ * an account row says so in one sentence rather than listing fourteen noughts.
+ */
+function erasureLines(preview: ErasurePreview): { label: string; n: number }[] {
+  const c = preview.counts
+  return [
+    { label: 'offers, whose figures stay', n: c.offers },
+    { label: 'stored files destroyed outright', n: c.storedObjects },
+    { label: 'document records redacted', n: c.documentPackages },
+    { label: 'conversation messages redacted', n: c.conversationMessages },
+    { label: 'emails as sent, redacted', n: c.emailSnapshots },
+    { label: 'questions redacted and unpublished', n: c.qaEntries },
+    { label: 'follow-up messages on those questions', n: c.qaThreadMessages },
+    { label: 'response messages cleared', n: c.investorResponses },
+    { label: 'bank references redacted', n: c.fundsReceipts },
+    { label: 'certificates blanked', n: c.participationCertificates },
+    { label: 'imported recipient rows pseudonymised', n: c.recipients },
+    { label: 'status-change reasons redacted', n: c.statusEvents },
+    { label: 'stage-change notes cleared', n: c.offerStatusEvents },
+    { label: 'address-change requests pseudonymised', n: c.emailChangeRequests },
+    { label: 'register entries with their reason cleared', n: c.registerEntries },
+    { label: 'audit rows relabelled — none removed', n: c.auditRowsRelabelled },
+  ]
+}
+
 function AccountCard({
   account,
   closedAccountAccess,
   serviceMode,
   offerDocuments,
   storeConfigured,
+  erasure,
 }: {
   account: AdminAccountRow
   closedAccountAccess: 'READ_ONLY' | 'NONE'
   serviceMode: 'ACTIVE' | 'READ_ONLY' | 'SUNSET' | 'DISABLED'
   offerDocuments: AccountOfferDocuments[]
   storeConfigured: boolean
+  /** Null for anyone who is not the owner. Not a hidden button — absent. */
+  erasure: ErasurePreview | null
 }) {
   const access = portalAccess({
     accountStatus: account.status,
@@ -133,12 +165,29 @@ function AccountCard({
           />
         </div>
       </details>
+
+      {erasure ? (
+        <details className="mt-3 rounded-sm border hairline bg-bg2 p-3">
+          <summary className="cursor-pointer text-xs font-semibold text-orange">
+            Erase their personal data
+          </summary>
+          <div className="mt-3">
+            <EraseInvestorForm
+              accountId={account.id}
+              email={erasure.email}
+              counts={erasureLines(erasure)}
+              alreadyErased={erasure.alreadyErased}
+              blockedBy={erasure.blockedBy}
+            />
+          </div>
+        </details>
+      ) : null}
     </article>
   )
 }
 
 export default async function InvestorsPage() {
-  await requireReader()
+  const identity = await requireReader()
 
   const [accounts, config, documents] = await Promise.all([
     loadAdminAccounts(),
@@ -146,6 +195,21 @@ export default async function InvestorsPage() {
     documentsByAccount(),
   ])
   const storeConfigured = mediaStore() !== null
+
+  /*
+   * Owner only, and *absent* rather than disabled for anybody else — an
+   * operator does not get a greyed-out control telling them what they cannot
+   * do. The server action re-checks; this is manners, exactly as the status
+   * form's confirmation word is. Counted here rather than in the client so no
+   * count crosses to a browser that was not entitled to ask for it.
+   */
+  const erasures = new Map<string, ErasurePreview>()
+  if (identity.role === 'OWNER') {
+    for (const account of accounts) {
+      const preview = await previewErasure(account.id)
+      if (preview) erasures.set(account.id, preview)
+    }
+  }
 
   const suspended = accounts.filter((row) => row.status === 'SUSPENDED').length
 
@@ -185,6 +249,7 @@ export default async function InvestorsPage() {
                 serviceMode={config.serviceMode}
                 offerDocuments={documents.get(account.id) ?? []}
                 storeConfigured={storeConfigured}
+                erasure={erasures.get(account.id) ?? null}
               />
             ))}
           </div>

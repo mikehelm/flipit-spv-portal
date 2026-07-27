@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { changeAccountStatusAction } from '@/actions/accounts'
+import { eraseInvestorAction } from '@/actions/erasure'
 import { ActionForm } from '@/components/admin/action-form'
-import { Checkbox, Field, Select, TextArea, TextInput } from '@/components/admin/ui'
+import { Checkbox, Field, Notice, Select, TextArea, TextInput } from '@/components/admin/ui'
 
 /**
  * Changing one account's state. BUILD_SPEC §4.2.
@@ -115,5 +116,110 @@ export function ChangeStatusForm({
         <TextInput name="confirmation" autoComplete="off" spellCheck={false} />
       </Field>
     </ActionForm>
+  )
+}
+
+/**
+ * Erasing one investor's personal data. OPEN_DECISIONS.md item 12.
+ *
+ * Owner-only, and the whole design of this form is about the gap between
+ * deciding and doing. Three things stand in that gap:
+ *
+ *   - **The list of what is actually here**, before anything is pressed. Not
+ *     "this will erase their record" but "this will redact 11 messages, 2
+ *     documents and 1 bank reference, and destroy 2 stored files". Item 12's
+ *     complaint was that the procedure was improvised at the moment somebody
+ *     had asked for it; a count read from the database is the opposite of that.
+ *   - **The address, typed out.** The precedent is the send screen, where
+ *     confirming means typing the recipient rather than a word. On a page
+ *     listing forty people, the mistake worth preventing is the wrong row.
+ *   - **A tick that says it cannot be undone**, because it cannot.
+ *
+ * There is no reason field, deliberately, and the note below says why on the
+ * screen rather than only in the code: an erasure must not be the moment new
+ * prose about a person enters the record.
+ */
+export function EraseInvestorForm({
+  accountId,
+  email,
+  counts,
+  alreadyErased,
+  blockedBy,
+}: {
+  accountId: string
+  email: string
+  counts: { label: string; n: number }[]
+  alreadyErased: boolean
+  blockedBy: string | null
+}) {
+  if (alreadyErased) {
+    return (
+      <Notice tone="warn">
+        This record has already been erased. The name and address you can see are a pseudonym,
+        the figures are what is left, and running it again would produce exactly what is here.
+      </Notice>
+    )
+  }
+
+  const present = counts.filter((row) => row.n > 0)
+
+  return (
+    <>
+      <Notice tone="warn">
+        This cannot be undone, and it is not the same as closing an account. Closing keeps
+        everything and turns it read-only. This overwrites every name, address and line of free
+        text with a pseudonym, destroys any stored document, and leaves the figures behind with
+        nobody attached to them. The audit log keeps every event and loses only the address.
+      </Notice>
+
+      <div className="mb-4 rounded-sm border hairline bg-bg2 p-3">
+        <p className="text-xs font-semibold text-silver2">What is actually here</p>
+        {present.length === 0 ? (
+          <p className="mt-2 text-xs leading-relaxed text-dim">
+            Nothing but the account row itself — no offers, no messages, no documents.
+          </p>
+        ) : (
+          <ul className="mt-2 grid grid-cols-1 gap-1">
+            {present.map((row) => (
+              <li key={row.label} className="text-xs text-dim">
+                <span className="text-ftext">{row.n}</span> {row.label}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {blockedBy ? (
+        <Notice tone="warn">{blockedBy}</Notice>
+      ) : (
+        <ActionForm
+          action={eraseInvestorAction}
+          submitLabel="Erase this record"
+          tone="danger"
+          hidden={{ accountId }}
+        >
+          <Field
+            label="Type their email address to confirm"
+            name="confirmation"
+            hint={`Exactly as it appears above: ${email}`}
+          >
+            <TextInput name="confirmation" autoComplete="off" spellCheck={false} />
+          </Field>
+
+          <div className="mb-4">
+            <Checkbox
+              name="acknowledged"
+              id={`erase-ack-${accountId}`}
+              label="I understand this cannot be undone"
+            />
+            <p className="mt-2 pl-7 text-xs leading-relaxed text-dim">
+              There is no reason box here, and that is deliberate: this is the one action that
+              must not add new writing about a person to the record. Who ran it and when is on
+              the audit log. Nothing is emailed to anybody.
+            </p>
+          </div>
+        </ActionForm>
+      )}
+    </>
   )
 }

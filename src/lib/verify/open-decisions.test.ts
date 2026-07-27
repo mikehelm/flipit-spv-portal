@@ -46,16 +46,29 @@ const sources = applicationSources(join(root, 'src')).map((path) => ({
   text: readFileSync(path, 'utf8'),
 }))
 
-describe('OPEN_DECISIONS item 12 — investor data cannot be deleted', () => {
-  it('no application path deletes an investor account, an offer or a recipient', () => {
+describe('OPEN_DECISIONS item 12 — investor data is erased, not deleted', () => {
+  /*
+   * **This block previously asserted the opposite, and that is the point of it.**
+   *
+   * Item 12 used to say there was no deletion path at all, and this test's job
+   * was to fail the day somebody built one, so the note could not go stale
+   * silently a second time. Somebody built one on 2026-07-27, this failed, and
+   * the note was rewritten. A test that fails because the right thing was built
+   * is working; the fix is to update the claim, which is exactly the step that
+   * was being skipped.
+   *
+   * So the claims are inverted, and they are now stronger than they were. The
+   * old ones said "nothing does this". The new ones say what the one thing that
+   * does it may and may not do.
+   */
+
+  it('still nothing hard-deletes an investor account, an offer or a recipient', () => {
     /*
-     * The document says, in item 12, that there is no deletion path at all — and
-     * that the privacy policy's promise of erasure is therefore fulfilled by a
-     * person against the database, with no written procedure.
-     *
-     * The day somebody builds one, this fails. That is the intent: the note is
-     * the thing that then has to change, and it carries an external commitment
-     * to investors, so it must not go stale silently a second time.
+     * Unchanged, and it survived the build. The erasure pseudonymises in place —
+     * it never deletes one of these rows, because a `DELETE FROM
+     * investor_accounts` cascades into `offers`, which `portal_tokens` and
+     * `conversation_messages` then reference with no `onDelete`. The schema
+     * fights it, and an offer is a securities record.
      */
     const offenders = sources
       .filter(({ text }) =>
@@ -65,13 +78,13 @@ describe('OPEN_DECISIONS item 12 — investor data cannot be deleted', () => {
 
     expect(
       offenders,
-      'an investor-deletion path now exists — update OPEN_DECISIONS.md item 12, which says there is none',
+      'something now hard-deletes an investor row — item 12 says the erasure pseudonymises in place',
     ).toEqual([])
   })
 
   it('and the privacy policy still makes the promise that item 12 is about', () => {
-    // If the wording is ever narrowed — one of the three options item 12 offers —
-    // this fails and sends whoever narrowed it to record the decision.
+    // Narrowing the wording was the third option and was deliberately not taken.
+    // If somebody ever narrows it, this fails and sends them to record why.
     const privacy = readFileSync(join(root, 'src/app/privacy/page.tsx'), 'utf8')
     expect(
       /ask for it to be deleted/.test(privacy),
@@ -79,9 +92,60 @@ describe('OPEN_DECISIONS item 12 — investor data cannot be deleted', () => {
     ).toBe(true)
   })
 
-  it('the document says so in as many words, so the two cannot drift apart quietly', () => {
+  it('the erasure exists, and is exactly where the document says it is', () => {
+    const paths = sources.map(({ path }) => path)
+    expect(paths).toContain('src/lib/erasure/plan.ts')
+    expect(paths).toContain('src/lib/erasure/erase.ts')
+    expect(paths).toContain('src/actions/erasure.ts')
+  })
+
+  it('it is owner-only, and the operator cannot reach it by any path', () => {
+    /*
+     * The claim item 12 makes to Michael in as many words. Two halves: the pure
+     * rule allows nobody but the owner, and the action calls the rule before it
+     * reads the form.
+     */
+    const authority = sources.find(({ path }) => path === 'src/lib/erasure/authority.ts')
+    expect(authority).toBeDefined()
+    expect(authority?.text).toContain("if (role === 'OWNER') return { allowed: true, role: 'OWNER' }")
+
+    const action = sources.find(({ path }) => path === 'src/actions/erasure.ts')
+    expect(action?.text).toContain('authorizeErasureAction')
+    const body = action?.text ?? ''
+    const guard = body.indexOf("await authorize('ERASE'")
+    const parse = body.indexOf('eraseSchema.safeParse')
+    expect(guard, 'the erasure action does not call authorize at all').toBeGreaterThan(-1)
+    expect(guard, 'the erasure action reads the form before checking authority').toBeLessThan(parse)
+  })
+
+  it('the erasure never touches a figure, which is the claim about the record surviving', () => {
+    const erase = sources.find(({ path }) => path === 'src/lib/erasure/erase.ts')?.text ?? ''
+    for (const column of [
+      'proposedAmountUsd',
+      'committedAmountUsd',
+      'acceptedAmountUsd',
+      'receivedAmountUsd',
+      'spvPercentage',
+      'indirectPercentage',
+      'indicativeAmountUsd',
+    ]) {
+      expect(erase, `the erasure writes ${column}`).not.toContain(`${column}:`)
+    }
+  })
+
+  it('the document says all of that in as many words, so the two cannot drift apart', () => {
     expect(openDecisions).toMatch(/### 12\./)
-    expect(openDecisions).toContain('There is no way to delete an investor record')
+    expect(openDecisions).toContain('It is pseudonymisation, not deletion')
+    expect(openDecisions).toContain('The operator cannot do it')
+    // The one thing left open on this item is a question for advice. If somebody
+    // deletes that paragraph without answering it, this fails.
+    expect(openDecisions).toContain('Is pseudonymisation enough?')
+    // And the runbook it points at has to exist.
+    const deployment = readFileSync(join(root, 'DEPLOYMENT.md'), 'utf8')
+    expect(
+      /##\s*12\./.test(deployment),
+      'item 12 points at DEPLOYMENT.md §12 and there is no such section',
+    ).toBe(true)
   })
 })
 

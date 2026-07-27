@@ -217,6 +217,39 @@ If you would rather see this exercised against a real database than click throug
 
 ---
 
+## Erasing somebody, when they ask to be
+
+**This is new, and it is the one thing on the investors screen that cannot be undone.**
+
+The privacy policy tells every investor they can ask for their record to be removed, and that a person will deal with it rather than a form. That was true, and it was also the problem: there was no way to do it in the application at all, so *a person dealing with it* meant somebody typing `DELETE` at a database prompt, working it out as they went, at the moment somebody had asked for something they were entitled to. That is now a procedure instead.
+
+**It is not deletion, and the screen says so.** The rows stay. What is overwritten is every name, every email address, and every line of free text anybody typed — messages, notes, the question they asked, the reference on their bank transfer, the personalised copy of every email that went to them. What is left is the money: the four amounts, the percentages, the stages and the dates, sitting there with nobody attached to them. An offer is a record of a securities transaction and destroying it is not something anybody should be able to do from a web page.
+
+The one thing that really is destroyed is **the files**: a signed subscription agreement cannot be pseudonymised, so the stored bytes are deleted and do not come back.
+
+**Sign in as the owner** — David cannot do this, and cannot even see it — open **Investors**, find somebody, and expand **Erase their personal data**.
+
+**Things worth trying:**
+
+- **Just open it and read.** Before anything is pressed, it lists what is actually there: *3 conversation messages redacted, 1 email as sent, 1 bank reference, 2 audit rows relabelled — none removed.* Those numbers are counted from the database when the page loads, not guessed. If they surprise you, that is the moment to stop.
+- **Type the wrong address.** Refused, nothing changes, and the attempt is written to the audit log — because typing the wrong address means you were about to erase the wrong person.
+- **Leave the box unticked.** Refused.
+- **Do it.** The banner tells you the pseudonym the record now carries — something like *Erased investor 4f2a9c1b7e03*. Write it down with the request: it is how you find that record again if you are ever asked to prove this happened.
+- **Then look at the same account.** The name is the pseudonym, the address ends in `@erased.invalid` — an address no mail server anywhere will deliver to, which is the point — and the account is archived with every session ended and every link revoked.
+- **Then look at their offer.** The amounts are exactly as they were. Nothing about the money moved.
+- **Then look at another investor.** Untouched. Their messages, their questions, their published Q&A entry, their sessions. This is the thing most worth checking, and there is a whole verification about it.
+- **Then look at the audit log.** Every event that investor ever generated is still there, in order, with its timestamps — carrying the pseudonym instead of their address. Nothing was removed. There is one new row, `investor_account.erased`, with your name on it.
+- **Try it again on the same person.** Refused: *"That account has already been erased."* It does not write a second row suggesting it happened twice.
+- **Sign in as David and look at the same card.** The section is not there. Not greyed out — absent.
+
+**If it refuses to start**, the likely reason is that the investor holds uploaded documents and `MEDIA_STORE` is not configured, so the files cannot be destroyed. It stops before touching the database rather than doing most of the job, and says so.
+
+`pnpm verify:erasure` does the whole thing against a real database with **two** investors present and checks ninety-nine things, half of them being that the second investor is exactly as they were. `DEPLOYMENT.md §12` is the written procedure, including three things this does *not* reach — worth reading once, calmly, before it is ever needed.
+
+**One thing to raise with the formation agents.** Under UK and EU data-protection law, pseudonymised data is still personal data. What is built here is the most that can be done while keeping a coherent record of a securities transaction, and keeping that record is exactly what the privacy policy's *"subject only to anything that has to be retained"* is for. Whether that covers what has been kept is a question for advice, not for the build. It is written up in `OPEN_DECISIONS.md` item 12 with the two specific calls to put to them.
+
+---
+
 ## Questions and answers
 
 This is the new part. Sign in as an investor (follow a claim link), scroll to **Questions and answers**, and ask something. You get one plain sentence back: *"Thank you — your question has been sent to David. He'll reply by email, and the answer will appear here too."* No promised timeframe, because the app cannot keep one.
@@ -1303,5 +1336,6 @@ The same is true of **Admin → Media** and of the **import** screen. And the se
 - No email is ever sent to anyone but the operator's own address during development.
 - The application refuses to send real invitations unless its configured base URL is the production one. Every portal link embeds the domain it was issued from, and a link issued from a testing deployment dies the moment the application moves.
 - Uploaded images and video are stored on disk only if you set `MEDIA_STORE` in `.env`. With it unset, the two upload screens say so and everything else works.
+- An erasure cannot be undone, and it is the only thing in the application of which that is true. Everything else — suspension, closure, withdrawing a document, voiding an approval — keeps the record and changes its state.
 - The colours are taken from the FLIPIT demo file, which is a faithful copy of the live site but not the source of truth. Somebody should check them against flipit.com before launch.
 - The invitation email and the participation certificate are light-coloured documents rather than dark ones, and that is deliberate: an email has to be readable in every mail programme, and a certificate has to print.

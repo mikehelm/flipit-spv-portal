@@ -167,7 +167,33 @@ describe('the shape the rules depend on', () => {
       .filter((file) => !file.endsWith('.test.ts'))
       .filter((file) => /\.(insert|update|delete)\(documentPackages\)/.test(code(file)))
 
-    expect(writers.sort()).toEqual(['src/actions/documents.ts'])
+    /*
+     * Two files, and the second one is an exception rather than a widening.
+     *
+     * `erasure/erase.ts` writes to this table because OPEN_DECISIONS item 12
+     * made it the one place allowed to: an erasure has to reach the title, the
+     * description and the storage key of a signed subscription agreement, and
+     * there is no pseudonymising the bytes themselves. What it must *not* be
+     * able to do is anything a document writer does — issue one, withdraw one,
+     * supersede one or add one. That is asserted below rather than assumed, so
+     * this list cannot quietly become a third writer's doorway.
+     */
+    expect(writers.sort()).toEqual(['src/actions/documents.ts', 'src/lib/erasure/erase.ts'])
+
+    const erasure = code('src/lib/erasure/erase.ts')
+    expect(erasure).not.toMatch(/\.insert\(documentPackages\)/)
+    expect(erasure).not.toMatch(/\.delete\(documentPackages\)/)
+    // It changes no document's lifecycle: not issued, not withdrawn, not
+    // superseded. A document that existed still existed, at its own version.
+    expect(erasure).not.toMatch(/issuedAt:/)
+    expect(erasure).not.toMatch(/supersededAt:/)
+    // And it only ever redacts, using the shared markers.
+    const documentWrite = erasure.slice(
+      erasure.indexOf('.update(documentPackages)'),
+      erasure.indexOf('.update(participationCertificates)'),
+    )
+    expect(documentWrite).toContain('ERASED_MARKER')
+    expect(documentWrite).toContain('ERASED_STORAGE_KEY')
 
     const source = code('src/actions/documents.ts')
     expect(source).toContain("formData.get('confirm') !== 'ISSUE'")

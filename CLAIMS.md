@@ -64,6 +64,24 @@ question of whether the code exists is not answered by this repository.
 
 ## Done, so nobody starts it again
 
+**The investor erasure is done** — `OPEN_DECISIONS.md` item 12, built on
+27 July 2026 and the item three consecutive entries had named as the largest one
+open. It is an **owner-only pseudonymisation**, not a deletion: `src/lib/erasure/`
+holds a pure plan naming every one of the forty-five tables exactly once and an
+executor that carries it out in one transaction; `src/actions/erasure.ts` is the
+gate; the form is on the investor's own card on `/investors`. `pnpm verify:erasure`
+is 99 checks against real Postgres with a second investor present, and
+`DEPLOYMENT.md §12` is the written runbook the item also asked for.
+
+**Do not start any of these:** a second erasure path, a "delete investor" action,
+a retention or expiry job, or a narrowing of the `/privacy` wording. The first
+two exist; the third is nobody's deadline yet and is still an open question; the
+fourth was deliberately not taken and needs advice rather than a commit. What is
+genuinely open on item 12 is **one legal question** — whether pseudonymisation
+satisfies an erasure request under UK and EU law — with two specific calls to put
+to the formation agents. That is a conversation, not a package.
+
+
 **Every work package, 0–20, is complete.** WP15 — the image library and the
 personal video — was the last one outstanding and landed on 25 July 2026; the
 storage decision it was waiting on is a `MediaStore` seam with a working

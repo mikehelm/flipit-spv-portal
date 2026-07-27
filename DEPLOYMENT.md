@@ -584,3 +584,155 @@ bad state in turn — no run ever completed, a scheduler that stopped, a reminde
 abandoned mid-send, a media check that found missing files and one that has never
 run — and read its actual output and exit code. It puts the
 database back afterwards, including the audit entries it hides while it works.
+
+---
+
+## 12. An investor asks to be removed
+
+> This is the runbook `OPEN_DECISIONS.md` item 12 asked for. It exists because
+> the alternative was somebody typing `DELETE` against a live Postgres holding
+> every investor's figures, improvised, at the moment somebody had asked for
+> something they were entitled to. Nothing here is urgent — read it once,
+> calmly, before it is ever needed.
+
+`/privacy` tells an investor they can ask what is held about them, ask for it to
+be corrected, ask for a copy, or ask for it to be deleted, and that a person will
+deal with it rather than a form. All four are things a person does. Three of them
+are ordinary work. This section is about the fourth.
+
+### 12.1 What "erased" means here, and what it does not
+
+**It is pseudonymisation, not deletion.** The rows stay and every direct
+identifier and every free-text field a human typed is overwritten. What is left
+is a transaction record with no person in it.
+
+That is a deliberate choice and not a shortcut:
+
+- A `DELETE FROM investor_accounts` cascades into `offers`, which `portal_tokens`,
+  `conversation_messages`, `rounds` and `recipients` then reference with **no**
+  `onDelete`. The schema refuses it, and it should — an offer is a securities
+  record and somebody's money went through it.
+- The four amounts, the two percentages, the stages and the dates are what
+  `/privacy`'s own *"subject only to anything that has to be retained to meet a
+  legal or regulatory obligation"* is about.
+
+**One line decides every column:** *free text a human typed goes; structured
+fields — enums, figures, timestamps, hashes, foreign keys — stay.* The whole map
+is in `src/lib/erasure/plan.ts`, one entry per table, each with a sentence saying
+why. A test fails on the commit that adds a table nobody has an opinion about, so
+that file cannot go stale the way this document once did.
+
+**One thing is genuinely destroyed and cannot be recovered:** the stored bytes of
+any document package and of any certificate PDF. There is no pseudonymising a
+signed subscription agreement.
+
+### 12.2 Doing it
+
+1. **Get the request in writing** and satisfy yourself it is from the person
+   whose record it is. The application cannot help with this and does not try.
+   An erasure carried out on somebody else's say-so is the failure mode that
+   matters here, and it is entirely outside the software.
+2. **Sign in as the owner.** David cannot do this and cannot preview it either.
+   Suspending and closing are his and both are reversible; this one is not.
+3. Open **`/investors`**, find their card, and expand **"Erase their personal
+   data"**.
+4. **Read the list before you type anything.** It is counted from the database at
+   the moment the page loaded: how many messages, how many documents, how many
+   stored files will be destroyed. If the numbers surprise you, stop and find out
+   why before proceeding.
+5. Type **their email address** exactly as shown, tick the box, and press
+   **Erase this record**.
+6. The banner tells you the pseudonym the record now carries. **Write it down**
+   alongside the request — it is how you will find the record again if you are
+   ever asked to prove the erasure happened.
+
+The account is archived, every session ends and every unspent link is revoked in
+the same transaction. Nothing is emailed to anybody: telling them it is done is
+a message you write.
+
+### 12.3 What survives, and how to answer for it
+
+If you are asked what is still held:
+
+| Still there | Gone |
+| --- | --- |
+| The four amounts, the percentages, the stages, the dates | The name and the email address, replaced by a pseudonym |
+| The fact that an email was sent, and which template | The subject and both bodies of every email as sent |
+| That a document existed, its version and its size | Its title, its description and the file itself |
+| The Q&A answer, and that a question was asked | The question, in both its original and published forms; the entry is unpublished |
+| The commitment, the payment instruction, the receipt and its amount | Their notes, and the bank reference |
+| Every audit event: who, what, when | The address on the rows the investor themselves wrote |
+| The country on the recipient row | The imported name, address, internal notes and sender overrides |
+
+The pseudonymised address is under **`.invalid`**, which RFC 2606 reserves and no
+mail server anywhere will deliver to. That is deliberate: an erased account
+cannot be written to by accident.
+
+### 12.4 The three things this does not do
+
+**These are the reasons to read this section before you need it.**
+
+1. **The name is not swept out of audit metadata.** The *address* is — it is an
+   exact, unambiguous token, so it is substituted everywhere it appears. A name
+   is not: "David" or "Lee" inside a JSON string is a word, and a blind
+   replacement across every metadata object would corrupt rows belonging to
+   other people. In practice the application does not write investor names into
+   metadata. **If you want certainty, ask for the audit export and search it.**
+2. **A file whose *name* is a person is not covered.** `import_jobs.filename` is
+   kept — it is a filename and a row count, not investor data. If an operator
+   ever saves a spreadsheet as `Fred Bloggs allocation.xlsx`, that survives, and
+   this is the one place to check by eye.
+3. **`ai_proposals.raw_proposal` is kept**, and whether it can hold a cell value
+   depends on `aiHeadersOnly` in settings. With it on — the default and the
+   conservative setting — only column headers ever reach the model and there is
+   nothing to find. **With it off, check that table by hand.**
+
+### 12.5 If it refuses
+
+- *"no media store is configured"* — the investor holds stored files and the
+  bytes cannot be destroyed. Nothing was changed. Set `MEDIA_STORE` (§1), confirm
+  with `pnpm media:check`, and try again. An erasure that leaves the documents
+  behind is not an erasure, which is why this refuses rather than doing most of
+  the job.
+- *"a stored file could not be destroyed"* — the store was reached and said no.
+  Nothing was changed. This is a store problem: check credentials and the bucket
+  policy, then try again.
+- *"already been erased"* — it is done. Running it again would produce exactly
+  what is already there, so it refuses rather than writing a second audit row
+  suggesting it happened twice.
+- *"the address you typed does not match"* — you are on the wrong card, or the
+  address has been changed since the page loaded. Reload and read it again.
+
+### 12.6 Proving it happened
+
+```
+pnpm verify:erasure
+```
+
+Ninety-nine checks against a real database, with a **second investor present
+throughout** — every check on the erased one is paired with the same check on the
+other, because an erasure that quietly took a neighbour's conversation with it
+would pass every unit test in the repository. It cleans up after itself. It is
+part of `pnpm verify:all`.
+
+For a specific past erasure, the audit log holds an `investor_account.erased`
+row: who ran it, when, how many offers and stored files were affected, and the
+pseudonym. That row is what you show somebody who asks.
+
+### 12.7 The question that is still open
+
+**Whether pseudonymisation satisfies an erasure request is a matter for advice,
+not for this document.** Under UK and EU data-protection law pseudonymised data
+is still personal data. What is built here is the most that can be done while
+keeping a coherent securities record, and keeping that record is what `/privacy`'s
+retention clause is for — but whether that clause covers what has been kept is
+the formation agents' question.
+
+Two specific calls to put to them, both taken conservatively and both reversible:
+
+- The **country** on a recipient row is kept. It is structured, and it is the
+  compliance record for why that person could lawfully be sent to.
+- The **answer** half of a published Q&A entry is kept while the question is
+  redacted and the entry unpublished. It is David's writing and other investors
+  have already read it; erasing one person's data should not silently edit what
+  everybody else was told.

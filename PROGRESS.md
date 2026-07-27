@@ -8724,3 +8724,270 @@ involved.
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
 - *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+
+## The deletion the privacy policy promised, built
+
+The item every entry since the `OPEN_DECISIONS.md` audit has carried at the top
+of its Uncertain list, in the same words each time:
+
+> *The deletion procedure is unwritten and is §12 — the largest open item.*
+
+It is built. Item 12 offered three ways out and this took the second — *"an
+owner-only erasure that anonymises the account and its offers, keeps the audit
+trail, and records that it happened"* — rather than the first, which was to
+write the procedure into `DEPLOYMENT.md` and leave the doing of it to a person
+at a database prompt. Both were done in the end, because the runbook is needed
+either way: there are three things the erasure cannot reach and somebody has to
+know what they are.
+
+### Why the second option and not the first
+
+The first option is described in item 12 as *"nearly free"*, and it is. It is
+also the option that leaves the actual erasure being improvised. The whole
+complaint in item 12 was not that deletion was impossible — it was that *"nobody
+has written down how"*, and that a written-down `DELETE` executed by hand at the
+moment somebody has asked for something they are entitled to is a procedure in
+name only. A runbook that says *"connect to production and run these eleven
+statements in this order"* has moved the improvisation earlier without removing
+it.
+
+Against that, the standing instruction is to take the conservative option where
+the specification is silent, and building a destructive path is not obviously the
+conservative one. **The resolution is that the thing built is not destructive.**
+It pseudonymises in place. Nothing is deleted except the stored bytes of
+documents, which cannot be pseudonymised and which are the one part where the
+investor's request and the record's survival genuinely conflict. Everything else
+— every row, every figure, every audit event — survives. That is more
+conservative than the runbook option, not less, because a runbook cannot stop a
+tired person writing `DELETE` where they meant `UPDATE`.
+
+### What it is
+
+**One line decides every column**, and it is stated in `plan.ts` and repeated in
+the runbook:
+
+> *Free text a human typed goes. Structured fields — enums, figures, timestamps,
+> hashes, foreign keys — stay.*
+
+Free text is where a name, an address, a circumstance or a mood ends up, and no
+amount of reading it can prove it holds none of those. A stage enum, an amount
+and a date are the record itself, and they are what `/privacy`'s own *"subject
+only to anything that has to be retained to meet a legal or regulatory
+obligation"* exists to cover.
+
+`src/lib/erasure/plan.ts` is the whole map: **every one of the forty-five tables
+in the schema, named exactly once**, either with the columns that are overwritten
+or with a sentence saying why nothing in it is touched. It is pure — no database
+handle, no imports from `@/db` — so it can be read, tested and reviewed without
+Postgres.
+
+`src/lib/erasure/erase.ts` carries it out. Order matters and each step is where
+it is for a reason: refuse early, **destroy the stored bytes before the database
+write** (the keys naming them are about to be overwritten, and a retry after a
+failure finds them already gone and carries on), one transaction for every
+column, revoke every session and link, and write the audit row last.
+
+`src/actions/erasure.ts` is the gate. It copies the shape of `compliance.ts`
+rather than `requireOwner()`: a refusal comes back as a sentence on the screen the
+operator was already looking at, and is audited, instead of a redirect to
+`/admin/no-access` with no explanation. Right for a screen somebody should not
+have opened; wrong for a destructive action that refuses.
+
+### Decisions
+
+- ***Pseudonymisation, not deletion, and the difference is stated rather than
+  blurred.*** A `DELETE FROM investor_accounts` cascades into `offers`, which
+  `portal_tokens`, `conversation_messages`, `rounds` and `recipients` then
+  reference with no `onDelete`. The schema fights it and it is right to. The
+  documents say "erased" and then immediately say what that means, in both
+  directions, in a table.
+- ***No reason field.*** Every other consequential action in this application
+  demands one and this one refuses to have one. An erasure must not be the moment
+  new prose about a person enters the record — a free-text box at the top of a
+  form that empties every other free-text box is a hole in the middle of the
+  thing. What is asked for instead is the account's own address, typed out (the
+  precedent is `send.ts`, where confirming means typing the recipient rather than
+  a word — on a page listing forty people the mistake worth preventing is the
+  wrong row), and a tick. The status event the erasure writes carries fixed text
+  for the same reason.
+- ***The pseudonym address is under `.invalid`.*** RFC 2606 reserves it and no
+  mail server anywhere will deliver to it. This is the rule that will not bend
+  made structural rather than promised: an erased account cannot be written to by
+  accident, because the address it now holds does not resolve.
+- ***The pseudonym is derived from the row id, not from the name or the
+  address.*** Stable, so a retry converges instead of inventing a second
+  fictional person; unique, because `investor_accounts.email` is
+  `notNull().unique()`; and meaningless. Deriving it from the email would have
+  made it a hash of the thing being erased, which is a lookup table away from not
+  being erased at all.
+- ***The audit log is relabelled, never emptied.*** One column, on rows whose
+  `actorAccountId` is this account. Every action, entity, timestamp and metadata
+  object survives; no row is removed and none is added but the erasure's own.
+  **This is the only write to `audit_events` in the application that is not an
+  insert from `audit()`**, and it lives inside the erasure with the reason
+  written above it. The events are the record; the address is not.
+- ***The erased address is swept out of audit metadata; the name is not.*** An
+  address is an exact, unambiguous token and can be substituted safely. A name is
+  a word — "David" or "Lee" inside a JSON string — and a blind replacement across
+  every metadata object would corrupt rows belonging to other people. Recorded as
+  a limitation in `DEPLOYMENT.md §12.4` rather than papered over.
+- ***The country on a recipient row is kept.*** Structured, and it is the
+  compliance record for why that person could lawfully be sent to. Arguable, so
+  it is flagged as one of two calls to put to the formation agents.
+- ***The answer half of a Q&A entry is kept; the question is redacted and the
+  entry unpublished.*** The answer is David's writing and other investors have
+  read it. Erasing one person's data should not silently edit what everybody else
+  was told. Also flagged.
+- ***Two existing invariants were amended rather than exempted.*** The snapshot
+  table's *"never rewritten"* rule and the documents table's *"exactly one
+  writer"* rule both failed, correctly, the moment this landed. Neither was
+  loosened. Each now names `erasure/erase.ts` as the single permitted exception
+  **and asserts what it may do**: the snapshot write may only set the shared
+  redaction marker and the pseudonym, never a plausible substitute body, and must
+  leave `templateHash` alone so which template was sent stays provable; the
+  document write may not insert, delete, issue, withdraw or supersede. Both tests
+  are stronger than they were.
+- ***`sign_in_attempts` is the one outright deletion.*** A failure counter keyed
+  by the address itself, already excluded from the §20 export. A pseudonymised row
+  would preserve the shape of somebody's failed sign-ins against an address that
+  no longer exists.
+- ***The control is absent for an operator, not disabled.*** The preview is
+  counted on the server only for an owner, so no count crosses to a browser that
+  was not entitled to ask for it.
+- ***Previewing is owner-only too.*** A preview counts rows and names nobody, so
+  it leaks nothing the investors screen does not already show — but it is the
+  first half of a decision only the owner can take, and an operator reading "this
+  would erase 4 offers" is being invited to ask for something they cannot have.
+
+### Deviations
+
+- **`OPEN_DECISIONS.md` item 12 is rewritten and `open-decisions.test.ts` with
+  it.** That test previously asserted *"There is no way to delete an investor
+  record"* and was designed to fail the day somebody built one. It did. Rather
+  than deleting the block, the claims are **inverted and strengthened**: still no
+  hard delete anywhere; the erasure exists at the three paths the document names;
+  the action calls `authorize` *before* it reads the form (proved by index, not by
+  reading); the erasure writes none of the seven money or percentage columns; and
+  the document contains the sentences that describe all of it, including the
+  paragraph recording the question that is still open. A test that fails because
+  somebody built the right thing is working, and the fix is to update the claim —
+  which is the step that was being skipped when this whole exercise started.
+- **`DEPLOYMENT.md` gained §12**, which is the first option from item 12 done as
+  well as the second rather than instead of it. It covers what erased means and
+  does not mean, doing it, a table of what survives and what goes, **the three
+  things it does not reach**, every refusal and what to do about each, how to
+  prove a past erasure, and the open question.
+
+### Checklist
+
+1. *Money as a JavaScript number?* **No, and this is checked twice.**
+   `plan.test.ts` fails if any rule names a column matching the money or
+   percentage pattern, and `open-decisions.test.ts` fails if `erase.ts` writes any
+   of the seven by name. `verify:erasure` reads all four amounts and both
+   percentages back off a real row after an erasure and compares them as strings.
+2. *Can any send path bypass the compliance approval or the token check?* No path
+   here sends. The erasure's own address is undeliverable by construction.
+3. *Does a jurisdiction block stop one recipient or the whole batch?* Untouched.
+   `offers.blockReason` is an enum and survives; only the free-text `blockDetail`
+   goes, so a block is still a block of a stated kind.
+4. *Can an operator record, amend or void a compliance approval?* No, and
+   `complianceApprovals` is on the retention list with the reason: the approver is
+   a third party and the approval is what made every send lawful. It is not the
+   investor's to erase.
+5. *Does anything reveal that another investor exists?* No. The screen is
+   owner-only, the counts are the account's own, and the second-investor half of
+   `verify:erasure` is the largest single thing in that script.
+6. *Tokens?* Untouched. `portalTokens` keeps its hash and is revoked rather than
+   altered — a spent link is part of the record of what was issued.
+7. *Suspension?* The erasure calls `revokeAllPortalAccess` and moves the account
+   to `ARCHIVED`, which is checked live in the verification.
+8. *Does any log line contain a credential, a body or a key?* No. The erasure's
+   audit metadata is counts, a pseudonym and a previous status; a test asserts
+   the erased address appears in no metadata, and the whole thing runs through the
+   real `assertNoSecrets`. The failure message when a stored object cannot be
+   destroyed deliberately omits the key, because the key *is* the capability.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* **Improved.** An erased investor's entry is unpublished in
+    the same statement that empties it, so there is no window in which a blank
+    entry is still listed.
+11. *Can the AI path change a figure?* Untouched. `aiProposals` is retained, with
+    the `aiHeadersOnly` caveat written into the runbook rather than assumed away.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2587**, up from 2536) are green.
+`pnpm verify:erasure` is 99 checks and passes; `verify:lifecycle` (51),
+`verify:qa` (51) and `verify:export` (29) were re-run and are unaffected.
+
+**Uncertain.**
+
+- ***Whether pseudonymisation satisfies an erasure request is a legal question
+  and this session cannot answer it.*** Pseudonymised data is still personal data
+  under UK and EU law. What is built is the most that can be done while keeping a
+  coherent securities record — but whether `/privacy`'s retention clause covers
+  what has been kept is the formation agents' call. **Two specific decisions to
+  put to them**, both taken conservatively and both reversible in an afternoon:
+  the country on a recipient row, and the answer half of a published Q&A entry.
+  This is now the top item on item 12 and it is a question, not a build.
+- ***The media-store half of the erasure is proved by refusal, not by
+  destruction.*** `verify:erasure` has no document rows in its fixture, so the
+  path that actually calls `store.remove()` is exercised by nothing. The refusals
+  around it are proved — no store configured, and the preview's `blockedBy` — but
+  *"the bytes are gone"* currently rests on one line of code and the fact that
+  `verify:documents` exercises the same `remove`. **This is the first thing to
+  fix**, and it is small: seed a document package with a real object in a
+  filesystem store, erase, and stat the key.
+- ***Nothing has driven the erasure through a browser.*** The form, the
+  confirmation, the counts and the absence of the section for an operator are all
+  proved at the source and in unit tests. `verify:account-access` is the script
+  that drives screens for real, and it does not know about this one.
+- ***The `.invalid` address is proved to be undeliverable by the standard, not by
+  the application.*** Nothing checks that a send to an erased account refuses; it
+  refuses because the account is `ARCHIVED` and because no mail server resolves
+  the domain, both of which are true and neither of which is a test.
+- ***The audit-metadata sweep is exercised with one shape of row.*** One
+  administrator row with the address in a `to` key. A metadata object with the
+  address nested two levels down, or appearing twice, is handled by the same
+  `replace` over the serialised text and is not measured.
+- ***`import_jobs.filename` and `ai_proposals.raw_proposal` are the two places an
+  erasure can be defeated by an operator's habits*** — a spreadsheet saved under
+  somebody's name, or `aiHeadersOnly` switched off. Both are written into
+  `DEPLOYMENT.md §12.4` as things to check by eye. Neither is detectable in code,
+  and a check that guessed at either would be worse than the sentence.
+- ***Nothing measures what the preview costs on the investors screen.*** It is
+  one pass of about eighteen counting queries **per account**, run for the owner
+  on every load of `/investors`. With forty investors that is seven hundred
+  queries on a page that used to run three. It is correct and it is almost
+  certainly too slow, and the fix — count once, grouped, or count only on the
+  expanding of one card — is a small piece of work nobody has done.
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`ACCEPTANCE.md` has not been read against the tests it claims to be generated
+  from.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open and
+  is not in OPEN_DECISIONS.md.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is to leave it and write the recovery step into the runbook.*
+- *One image, one format, one size in the media library; the edit and remove forms
+  are present and unpressed.*
+- *The styles in the email preview are proved applied by absence, not by
+  measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *`verify:certificate` was the one that was broken; nothing has asked the
+  idempotence question of the other twenty-three.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens. The refusal screen is measured with one kind
+  of refusal.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

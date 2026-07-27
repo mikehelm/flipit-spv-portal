@@ -251,11 +251,48 @@ describe('the snapshot is what was sent, and it is never rewritten (BUILD_SPEC Â
     )
     expect(writers.map(relative)).toEqual([SEND])
 
+    /*
+     * One file may rewrite a snapshot, and it is the erasure. OPEN_DECISIONS
+     * item 12.
+     *
+     * The rule this test exists for is that *the record of what was sent* is
+     * never edited â€” a snapshot amended after the fact would make the whole
+     * table worthless as evidence. An erasure does not amend it: it removes the
+     * personalised copy of an email that named an investor who has asked not to
+     * be named, and it is the largest single concentration of their data in the
+     * database. The two are different acts and the difference is provable here
+     * rather than asserted in a comment:
+     *
+     *   - the file that may do it is named, so a second one fails this test
+     *   - it may only write the shared redaction marker and the pseudonym, so
+     *     it cannot substitute a *plausible* body for the real one, which is
+     *     the failure mode that would actually destroy the evidence
+     *   - `templateHash` is untouched, so which template was sent stays
+     *     provable against `email_templates` after the erasure
+     *   - nothing may delete a snapshot row, still, anywhere
+     */
+    const ERASURE = 'src/lib/erasure/erase.ts'
+
     for (const file of sourceFiles()) {
       const source = withoutComments(readFileSync(file, 'utf8'))
-      expect(source, relative(file)).not.toMatch(/\.update\(\s*emailSnapshots/)
+      if (relative(file) !== ERASURE) {
+        expect(source, relative(file)).not.toMatch(/\.update\(\s*emailSnapshots/)
+      }
       expect(source, relative(file)).not.toMatch(/\.delete\(\s*emailSnapshots/)
     }
+
+    const erasure = withoutComments(readFileSync(join(root, ERASURE), 'utf8'))
+    const write = erasure.slice(
+      erasure.indexOf('.update(emailSnapshots)'),
+      erasure.indexOf('.update(sendEvents)'),
+    )
+    expect(write).not.toBe('')
+    expect(write).toContain('subject: ERASED_MARKER')
+    expect(write).toContain('htmlBody: ERASED_MARKER')
+    expect(write).toContain('textBody: ERASED_MARKER')
+    expect(write).toContain('toAddress: newEmail')
+    expect(write).not.toContain('templateHash')
+    expect(write).not.toContain('fromAddress')
 
     // Immutable in the schema too: a row that is only ever inserted has no
     // reason to carry an `updatedAt`, and carrying one would invite a writer.

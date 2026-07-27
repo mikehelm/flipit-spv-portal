@@ -120,6 +120,7 @@ const VERIFICATIONS: readonly Verification[] = [
   { name: 'acknowledgements', proves: 'the acknowledgement wording and what it records' },
   { name: 'email-change', proves: 'an investor changing their address, both halves of it' },
   { name: 'lifecycle', proves: 'suspension, closure and read-only sign-in' },
+  { name: 'erasure', proves: 'an investor erased, with a second investor present and untouched' },
   { name: 'export', proves: 'the CSV and XLSX exports, and that no secret is in one' },
   { name: 'documents', proves: 'a document package issued, served and revoked' },
   { name: 'roadmap', proves: 'the portal roadmap tiles' },

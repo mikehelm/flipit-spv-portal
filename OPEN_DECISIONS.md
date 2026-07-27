@@ -158,9 +158,9 @@ Three ways out. The second is the one that is hardest to argue against — a num
 
 Nothing is blocked on this. It will only be met by a file with an awkward split in it, and no such file exists yet.
 
-### 12. The privacy policy promises a deletion that has no procedure
+### 12. ~~The privacy policy promises a deletion that has no procedure~~ — built
 
-**Found by checking this document against the code, and it is the item with somebody else's expectation attached to it.**
+**Built on 2026-07-27, taking the second of the three options below. This item is closed except for one question that needs advice rather than code, which is set out at the end.**
 
 `/privacy` says two things to an investor, in their own section:
 
@@ -168,19 +168,26 @@ Nothing is blocked on this. It will only be met by a file with an awkward split 
 
 > *"You can ask what is held about you, ask for it to be corrected, ask for a copy, or ask for it to be deleted … it will be dealt with by a person rather than a form."*
 
-**There is no way to delete an investor record in this application.** Not owner-only — none. The lifecycle actions change a status: an account can be suspended or closed, and a closed account keeps every row and turns read-only. That is deliberate and it is the right default for a securities record. But nothing removes one.
+When this item was written there was no way to delete an investor record in this application — not owner-only, none — and the complaint was never that the page over-promised. It says *a person* will deal with it, not that a button exists, and a person could. What was missing was that **nobody had written down how**, so it meant somebody typing `DELETE` against a live Postgres holding every investor's figures, improvised, at the moment somebody had asked for something they were entitled to.
 
-**The wording is not a lie**, and that is worth being precise about, because the tempting reading is that the page over-promises. It says *a person* will deal with it, not that a button exists — and a person can. What is missing is the part that makes it real: **nobody has written down how.** Today it means somebody typing `DELETE` against a live Postgres holding every investor's figures, improvised, at the moment somebody has asked for something they are entitled to.
+**What now exists.** An owner-only erasure, reachable from the investor's own card on `/investors`, and a written procedure in `DEPLOYMENT.md §12` for the cases the screen does not cover.
 
-Three ways out, and the first is nearly free:
+- **It is pseudonymisation, not deletion, and the difference is stated rather than blurred.** A `DELETE FROM investor_accounts` would cascade into `offers`, which `portal_tokens`, `conversation_messages`, `rounds` and `recipients` then reference with no `onDelete` — the schema fights it, and it should, because an offer is a securities record. So the rows stay, and every direct identifier and every free-text field a human typed is overwritten.
+- **One line, applied everywhere:** *free text a human typed goes; structured fields — enums, figures, timestamps, hashes, foreign keys — stay.* The four amounts, the percentages, the stages and the dates are untouched, on every offer. What goes is the name, the address, the notes, the message bodies, the questions, the bank reference and the personalised copy of every email as sent.
+- **One thing is genuinely destroyed and cannot be recovered:** the stored bytes of any document package or certificate PDF. There is no pseudonymising a signed subscription agreement. If the media store cannot be reached, the whole erasure refuses before the database is touched.
+- **The audit log keeps every event and loses only the address.** No audit row is removed, none is added but the erasure's own; the `actorLabel` on rows the investor themselves wrote becomes the pseudonym, and the erased address is swept out of every metadata object. This is the one write to `audit_events` anywhere in the application that is not an insert from `audit()`, and it is one column.
+- **The operator cannot do it, and cannot preview it either.** Suspending and closing are David's and both are reversible; this one is not, so it sits with you alongside the compliance approval. A refused attempt is audited and says why.
+- **There is no reason box**, deliberately — this is the one action that must not add new writing about a person to the record. What it asks for instead is the account's own email address, typed out, and a tick.
 
-- **Write the procedure into `DEPLOYMENT.md`** — which rows, in which order, what the foreign keys require, what the audit log keeps (it must keep something: an erasure is itself a consequential action), and what "subject to a legal obligation to retain" actually excludes. A runbook step, reviewed once, calmly, rather than under a request.
-- **Build it** — an owner-only erasure that anonymises the account and its offers, keeps the audit trail, and records that it happened. This is the durable answer and it is a real piece of work, and it is a *destructive* path in the one system where that word matters most.
-- **Narrow the wording** — say what will be done rather than that it will be deleted. This is the option to be slow about: the sentence as written is the ordinary expectation under UK and EU data-protection law, and narrowing it is a decision to take on advice rather than to save an afternoon.
+**The plan cannot go stale.** `src/lib/erasure/plan.ts` names every table in the schema exactly once, with a sentence saying what happens to it and why, and `plan.test.ts` fails on the commit that adds a table nobody has an opinion about. `pnpm verify:erasure` runs the whole thing against real Postgres with a second investor present and checks that one is untouched, column for column — 99 checks.
 
-**Nothing is blocked on this and nothing should be sent while it is unanswered**, because the page saying it goes live before the first invitation does.
+**What is still open, and it is a question for advice rather than a build:**
 
-Related, and now corrected below: this document used to say deletion was *"currently owner-only"*, which described a control that does not exist.
+> **Is pseudonymisation enough?** Under UK and EU data-protection law, pseudonymised data is still personal data. What this does is the *maximum* that can be done while keeping a coherent securities record — and keeping that record is what the page's own "subject only to anything that has to be retained to meet a legal or regulatory obligation" is for. Whether that clause covers what has been kept here is the formation agents' question, not a developer's. **Two specific calls to put to them**, both taken conservatively and both reversible: the **country** on a recipient row is kept (structured, and it is the compliance record), and the **answer** half of a published Q&A entry is kept while the question is redacted and the entry unpublished (it is David's writing and other investors have read it).
+
+The third option in the original item — **narrowing the wording on `/privacy`** — was deliberately not taken. It remains the one to be slow about: the sentence as written is the ordinary expectation, and narrowing it is a decision to take on advice rather than to save an afternoon.
+
+Related, and corrected earlier: this document used to say deletion was *"currently owner-only"*, which described a control that did not exist. It does now, and it is.
 
 ---
 
@@ -188,7 +195,7 @@ Related, and now corrected below: this document used to say deletion was *"curre
 
 - **Does the raise have a hard close date** the portal should display?
 - ~~**Should the shared Q&A be visible during the raise, or held until the round closes?**~~ — **this is answered in the settled list above** ("visible from the start") and it is built that way: visible during an open round by default, with an owner-only switch, and hiding it queues entries rather than losing them. Publishing is anonymised structurally — the object an investor receives has no field capable of carrying an identity. Left here only to note that the two halves of this document disagreed and that the settled one wins.
-- **Who may delete investor data**, and after how long? **Corrected: nobody, by any path — see item 12.** Retention is indefinite, which is true, is deliberate, and is what the privacy page tells investors.
+- **Who may delete investor data**, and after how long? **The owner, and nobody else — see item 12, which was built on 2026-07-27.** Retention is still indefinite by default, which is deliberate and is what the privacy page tells investors; what has changed is that an investor who asks to be removed can now be, by a procedure rather than by hand. *After how long* is still unanswered and still nobody's deadline: nothing expires on its own.
 - **Confirm the name spelling** — "David Serene" appears throughout and will sit on investment correspondence.
 
 ---
