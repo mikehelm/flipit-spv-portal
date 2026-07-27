@@ -19,11 +19,17 @@ function filesUnder(relativePath: string): string[] {
 }
 
 describe('David’s private email-review boundary', () => {
-  it('guards both the page and the server action as acting administrators', () => {
+  it('admits a reader to the page and AI while keeping proposal writes acting-admin only', () => {
     expect(read('src/app/(admin)/admin/email-review/page.tsx')).toContain(
-      'requireAdmin()',
+      'requireReader()',
     )
-    expect(read('src/actions/email-review.ts')).toContain('requireAdmin()')
+    const action = read('src/actions/email-review.ts')
+    const questionStart = action.indexOf('export async function askEmailReviewQuestionAction')
+    const proposalStart = action.indexOf('export async function submitEmailReviewProposalAction')
+    const question = action.slice(questionStart, proposalStart)
+    const proposal = action.slice(proposalStart)
+    expect(question).toContain('const admin = await requireReader()')
+    expect(proposal).toContain('const admin = await requireAdmin()')
   })
 
   it('reserves proposal promotion for Mike and requires a fresh wording acknowledgement', () => {
@@ -37,14 +43,26 @@ describe('David’s private email-review boundary', () => {
     expect(review).toContain('approvalRequired: true')
   })
 
-  it('offers the page to Mike and David, never to a viewer', () => {
+  it('offers the page to Mike, David and a read-only experience tester', () => {
     const nav = read('src/components/admin/admin-nav.tsx')
     const item = nav.slice(
       nav.indexOf("href: '/admin/email-review'"),
       nav.indexOf("href: '/admin/email-review'") + 180,
     )
-    expect(item).toContain("roles: ['OWNER', 'OPERATOR']")
-    expect(item).not.toContain('VIEWER')
+    expect(item).toContain("roles: ['OWNER', 'OPERATOR', 'VIEWER']")
+  })
+
+  it('keeps a tester proposal in browser memory and off the persistence action', () => {
+    const page = read('src/app/(admin)/admin/email-review/page.tsx')
+    const workspace = read('src/components/email-review-workspace.tsx')
+    const data = read('src/lib/email-review/data.ts')
+    expect(page).toContain("testMode={admin.role === 'VIEWER'}")
+    expect(workspace).toContain('data-testid="experience-test-mode"')
+    expect(workspace).toContain('data-testid="practice-proposal"')
+    expect(workspace).toContain('action={testMode ? undefined : proposalAction}')
+    expect(workspace).toContain('onSubmit={testMode ? rehearseProposal : undefined}')
+    expect(workspace).toContain('This exists only in this browser tab.')
+    expect(data).toContain('eq(emailReviewProposals.createdById, admin.id)')
   })
 
   it('puts no source email text in the reusable client JavaScript', () => {

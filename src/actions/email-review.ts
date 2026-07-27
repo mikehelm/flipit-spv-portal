@@ -11,7 +11,7 @@ import {
   emailTemplates,
 } from '@/db/schema'
 import { audit } from '@/lib/audit'
-import { requireAdmin, requireOwner } from '@/lib/auth/guards'
+import { requireAdmin, requireOwner, requireReader } from '@/lib/auth/guards'
 import {
   answerEmailReviewQuestion,
   reviewEmailProposal,
@@ -80,7 +80,12 @@ export async function askEmailReviewQuestionAction(
   _previous: EmailReviewAiState,
   formData: FormData,
 ): Promise<EmailReviewAiState> {
-  const admin = await requireAdmin()
+  // A read-only experience tester may ask the same explanatory question as
+  // David. Provider storage is disabled and neither the question nor answer is
+  // written to our database; only counts-only usage and metadata-only audit
+  // entries remain. Every proposal, review and promotion action below keeps
+  // its acting-admin/owner guard.
+  const admin = await requireReader()
 
   const parsed = questionSchema.safeParse({
     question: formData.get('question'),

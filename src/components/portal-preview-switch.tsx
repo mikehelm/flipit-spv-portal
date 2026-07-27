@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { JOHN_DOE_PREVIEW_PATH } from '@/lib/portal/demo'
-import type { PrivilegedRole } from '@/lib/roles'
+import type { AdminRole } from '@/lib/roles'
 
 const VIEWS = [
   {
@@ -34,7 +34,7 @@ export function PortalPreviewSwitch({
   role,
 }: {
   mode: 'ADMIN' | 'INVESTOR'
-  role: PrivilegedRole
+  role: AdminRole
 }) {
   const pathname = usePathname()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -48,7 +48,16 @@ export function PortalPreviewSwitch({
       : pathname.startsWith('/admin/email-review') || role === 'OPERATOR'
         ? 'DAVID'
         : 'MIKE'
-  const current = VIEWS.find((view) => view.id === currentView) ?? VIEWS[0]
+  const visibleViews = VIEWS.map((view) =>
+    role === 'VIEWER' && view.id === 'JOHN'
+      ? {
+          ...view,
+          name: 'Investor view',
+          description: 'Safe John Doe rehearsal',
+        }
+      : view,
+  )
+  const current = visibleViews.find((view) => view.id === currentView) ?? visibleViews[0]
 
   useEffect(() => {
     const revealNearCorner = (event: PointerEvent) => {
@@ -101,7 +110,7 @@ export function PortalPreviewSwitch({
           role="menu"
           aria-label="Choose a portal view"
         >
-          {VIEWS.map((view) => (
+          {visibleViews.map((view) => (
             <Link
               key={view.id}
               href={view.href}

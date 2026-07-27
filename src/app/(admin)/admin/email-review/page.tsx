@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { EmailReviewWorkspace } from '@/components/email-review-workspace'
-import { requireAdmin } from '@/lib/auth/guards'
+import { requireReader } from '@/lib/auth/guards'
 import { loadEmailReviewWorkspace } from '@/lib/email-review/data'
 import { EMAIL_REVIEW_DOCUMENT } from '@/lib/email-review/document'
 import { loadAiKey } from '@/lib/import/persist'
@@ -23,7 +23,7 @@ export default async function EmailReviewPage() {
   // David can review and propose wording while the remaining onboarding steps
   // (SMTP, test send, optional media) are still in progress. Those gates block
   // sending, not private document preparation.
-  const admin = await requireAdmin()
+  const admin = await requireReader()
   const [aiConfigured, workspace] = await Promise.all([
     loadAiKey().then((key) => key !== null),
     loadEmailReviewWorkspace(admin),
@@ -34,7 +34,9 @@ export default async function EmailReviewPage() {
       <header className="grid items-end gap-3 lg:grid-cols-[minmax(18rem,0.7fr)_minmax(28rem,1.3fr)]">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-orange">
-            Private to Mike and David
+            {admin.role === 'VIEWER'
+              ? 'Private experience test'
+              : 'Private to Mike and David'}
           </p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
             Review David&rsquo;s email
@@ -52,6 +54,7 @@ export default async function EmailReviewPage() {
         workspace={workspace}
         aiConfigured={aiConfigured}
         canManageAi={admin.role === 'OWNER'}
+        testMode={admin.role === 'VIEWER'}
       />
     </div>
   )

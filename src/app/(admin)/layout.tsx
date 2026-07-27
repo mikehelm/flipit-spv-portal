@@ -82,9 +82,7 @@ export default async function AdminLayout({
         </div>
       </AccountCurlMenu>
 
-      {admin.role !== 'VIEWER' ? (
-        <PortalPreviewSwitch mode="ADMIN" role={admin.role} />
-      ) : null}
+      <PortalPreviewSwitch mode="ADMIN" role={admin.role} />
 
       <div className="w-full flex-1 py-6 sm:py-10">
         <header className="mx-auto w-full max-w-6xl px-4 sm:px-6">

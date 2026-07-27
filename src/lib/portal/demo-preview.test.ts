@@ -31,23 +31,23 @@ describe('John Doe investor preview', () => {
     )
   })
 
-  it('is protected by an acting-admin guard before its data is selected', () => {
+  it('is protected by a signed-in reader guard before its data is selected', () => {
     const portal = read('src/app/portal/page.tsx')
     const previewBranch = portal.slice(
       portal.indexOf('if (isDemoPreview)'),
       portal.indexOf('} else {', portal.indexOf('if (isDemoPreview)')),
     )
 
-    expect(previewBranch).toContain('await requireAdmin()')
-    expect(previewBranch.indexOf('await requireAdmin()')).toBeLessThan(
+    expect(previewBranch).toContain('await requireReader()')
+    expect(previewBranch.indexOf('await requireReader()')).toBeLessThan(
       previewBranch.indexOf('johnDoeDemoPortalView()'),
     )
   })
 
-  it('does not expose the switch to a read-only viewer', () => {
+  it('exposes the safe view switch to a read-only experience tester', () => {
     const layout = read('src/app/(admin)/layout.tsx')
-    expect(layout).toContain("admin.role !== 'VIEWER'")
     expect(layout).toContain('<PortalPreviewSwitch mode="ADMIN" role={admin.role} />')
+    expect(layout).not.toContain("admin.role !== 'VIEWER'")
   })
 
   it('keeps every investor mutation disabled in preview mode', () => {
@@ -91,6 +91,8 @@ describe('John Doe investor preview', () => {
     expect(switcher).toContain("name: 'Mike'")
     expect(switcher).toContain("name: 'David'")
     expect(switcher).toContain("name: 'John Doe'")
+    expect(switcher).toContain("name: 'Investor view'")
+    expect(switcher).toContain("description: 'Safe John Doe rehearsal'")
     expect(switcher).toContain('usePathname')
     expect(switcher).not.toContain('preview=')
   })

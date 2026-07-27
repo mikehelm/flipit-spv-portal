@@ -75,7 +75,7 @@ const MENUS: Menu[] = [
           {
             href: '/admin/email-review',
             label: 'David’s email review',
-            roles: ['OWNER', 'OPERATOR'],
+            roles: ['OWNER', 'OPERATOR', 'VIEWER'],
           },
           {
             href: '/updates',

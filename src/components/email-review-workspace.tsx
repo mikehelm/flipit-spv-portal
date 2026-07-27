@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useMemo, useState } from 'react'
+import { useActionState, useMemo, useState, type FormEvent } from 'react'
 import { useFormStatus } from 'react-dom'
 import {
   askEmailReviewQuestionAction,
@@ -32,6 +32,12 @@ import type { EmailDiffKind, EmailDiffUnit } from '@/lib/email-review/segments'
 
 type InspectorTab = 'EVIDENCE' | 'AI' | 'PROPOSE' | 'REVIEW'
 type ChangeFilter = 'ALL' | 'CHANGED' | 'UNVERIFIED' | 'EDITABLE'
+type PracticeProposal = {
+  sectionLabel: string
+  beforeText: string
+  proposedText: string
+  reason: string
+}
 const idleEmailReviewAiState: EmailReviewAiState = { status: 'idle' }
 
 function EvidenceBadge({ kind }: { kind: EmailReviewEvidenceKind }) {
@@ -332,16 +338,62 @@ function ProposalCard({
   )
 }
 
+function PracticeProposalCard({
+  proposal,
+}: {
+  proposal: PracticeProposal
+}) {
+  return (
+    <article
+      data-testid="practice-proposal"
+      className="rounded-sm border border-blue-300/25 bg-blue-300/5 p-4"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-bold text-ftext">{proposal.sectionLabel}</p>
+        <span className="rounded-full border border-blue-300/30 bg-blue-300/8 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-blue-200">
+          Practice only
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3">
+        <div className="border-l-2 border-warn/50 bg-warn/6 p-3">
+          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-warn">
+            Current
+          </p>
+          <p className="mt-2 text-xs leading-6 text-dim">{proposal.beforeText}</p>
+        </div>
+        <div className="border-l-2 border-ok/50 bg-ok/6 p-3">
+          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ok">
+            Your practice wording
+          </p>
+          <p className="mt-2 text-xs leading-6 text-ftext">{proposal.proposedText}</p>
+        </div>
+      </div>
+      <div className="mt-3 rounded-sm border hairline p-3">
+        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-orange">
+          Practice reason
+        </p>
+        <p className="mt-2 text-xs leading-6 text-dim">{proposal.reason}</p>
+      </div>
+      <p className="mt-3 text-[10px] leading-5 text-blue-200">
+        This exists only in this browser tab. It was not saved, sent to Mike,
+        checked as a real proposal or used to change the invitation.
+      </p>
+    </article>
+  )
+}
+
 export function EmailReviewWorkspace({
   document,
   workspace,
   aiConfigured,
   canManageAi,
+  testMode,
 }: {
   document: EmailReviewDocument
   workspace: EmailReviewWorkspaceData
   aiConfigured: boolean
   canManageAi: boolean
+  testMode: boolean
 }) {
   const firstChanged =
     workspace.diffUnits.find((unit) => unit.kind !== 'UNCHANGED') ??
@@ -356,6 +408,8 @@ export function EmailReviewWorkspace({
   const [view, setView] = useState<ReviewView>('PAPER')
   const [markup, setMarkup] = useState(true)
   const [aiScope, setAiScope] = useState<'SELECTION' | 'DOCUMENT'>('SELECTION')
+  const [practiceProposal, setPracticeProposal] =
+    useState<PracticeProposal | null>(null)
   const selected =
     workspace.diffUnits.find((unit) => unit.id === selectedId) ?? firstChanged
   const selectedClauses = document.clauses.filter((clause) =>
@@ -429,6 +483,24 @@ export function EmailReviewWorkspace({
     }
   }
 
+  function rehearseProposal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const sectionId = String(form.get('sectionId') ?? '')
+    const section = editableSections.find((entry) => entry.id === sectionId)
+    const proposedText = String(form.get('proposedText') ?? '').trim()
+    const reason = String(form.get('reason') ?? '').trim()
+    if (!section || proposedText.length < 3 || reason.length < 10) return
+
+    setPracticeProposal({
+      sectionLabel: section.title,
+      beforeText: section.currentText,
+      proposedText,
+      reason,
+    })
+    setTab('REVIEW')
+  }
+
   const driftTone = workspace.drift.sendingPermitted
     ? 'border-ok/35 bg-ok/8 text-ok'
     : 'border-warn/40 bg-warn/9 text-warn'
@@ -441,6 +513,19 @@ export function EmailReviewWorkspace({
         markup={markup}
         onMarkup={setMarkup}
       />
+
+      {testMode ? (
+        <section
+          role="status"
+          data-testid="experience-test-mode"
+          className="rounded-sm border border-blue-300/30 bg-blue-300/7 px-4 py-3 text-xs leading-6 text-blue-100"
+        >
+          <strong className="font-bold text-blue-200">Graham test mode.</strong>{' '}
+          Explore both emails, select changes, ask the AI and rehearse a proposal.
+          Anything typed as a proposal remains only in this browser tab: it cannot be
+          saved, sent to Mike, promoted or emailed to an investor.
+        </section>
+      ) : null}
 
       <section
         aria-label="Invitation safety status"
@@ -633,8 +718,15 @@ export function EmailReviewWorkspace({
               [
                 ['EVIDENCE', 'Evidence'],
                 ['AI', 'Ask AI'],
-                ['PROPOSE', 'Propose'],
-                ['REVIEW', canManageAi ? `Review ${workspace.proposals.filter((p) => p.status === 'SUBMITTED').length}` : 'Status'],
+                ['PROPOSE', testMode ? 'Practice' : 'Propose'],
+                [
+                  'REVIEW',
+                  testMode
+                    ? 'Practice'
+                    : canManageAi
+                      ? `Review ${workspace.proposals.filter((p) => p.status === 'SUBMITTED').length}`
+                      : 'Status',
+                ],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -684,7 +776,9 @@ export function EmailReviewWorkspace({
                     onClick={() => setTab('PROPOSE')}
                     className="min-h-11 w-full rounded-sm border border-orange/35 text-xs font-bold text-orange"
                   >
-                    Propose wording for this section
+                    {testMode
+                      ? 'Practice wording for this section'
+                      : 'Propose wording for this section'}
                   </button>
                 ) : (
                   <div className="border-l-2 border-warn pl-3 text-xs leading-6 text-dim">
@@ -799,11 +893,15 @@ export function EmailReviewWorkspace({
             {tab === 'PROPOSE' ? (
               <div className="mt-4">
                 <p className="text-xs leading-6 text-dim">
-                  Proposals change the real subject, HTML and plain-text invitation
-                  together. They do not change the live version until Mike promotes
-                  them.
+                  {testMode
+                    ? 'Try the same wording exercise David uses. This practice copy stays in this browser tab and never enters Mike’s review queue.'
+                    : 'Proposals change the real subject, HTML and plain-text invitation together. They do not change the live version until Mike promotes them.'}
                 </p>
-                <form action={proposalAction} className="mt-4">
+                <form
+                  action={testMode ? undefined : proposalAction}
+                  onSubmit={testMode ? rehearseProposal : undefined}
+                  className="mt-4"
+                >
                   <label className="block text-[10px] font-bold uppercase tracking-[0.13em] text-dim">
                     Section
                     <select
@@ -851,31 +949,38 @@ export function EmailReviewWorkspace({
                     />
                   </label>
                   <p className="mt-3 text-[10px] leading-5 text-muted">
-                    Protected rules run before submission. Passing them is not legal
-                    approval.
+                    {testMode
+                      ? 'Practice mode does not submit or run the real promotion workflow. Use Ask AI for an explanation; Mike and David retain the protected review path.'
+                      : 'Protected rules run before submission. Passing them is not legal approval.'}
                   </p>
                   <div className="mt-3 flex justify-end">
                     <SubmitButton
-                      idle="Send proposal to Mike"
-                      pending="Checking every rule…"
+                      idle={testMode ? 'Try proposal — nothing saved' : 'Send proposal to Mike'}
+                      pending={testMode ? 'Preparing practice view…' : 'Checking every rule…'}
                     />
                   </div>
                 </form>
-                <StateMessage state={proposalState} />
+                {!testMode ? <StateMessage state={proposalState} /> : null}
               </div>
             ) : null}
 
             {tab === 'REVIEW' ? (
               <div className="mt-4 space-y-3">
                 <p className="text-xs leading-6 text-dim">
-                  {canManageAi
+                  {testMode
+                    ? 'Your latest practice proposal appears here only until this tab closes or reloads. Mike and David cannot see it.'
+                    : canManageAi
                     ? 'Mike sees every submitted change, David’s reason, deterministic checks and the automated review.'
                     : 'Your proposals and Mike’s decisions appear here. The live invitation changes only after Mike promotes a version.'}
                 </p>
-                <StateMessage state={reviewState} />
-                {workspace.proposals.length === 0 ? (
+                {!testMode ? <StateMessage state={reviewState} /> : null}
+                {testMode && practiceProposal ? (
+                  <PracticeProposalCard proposal={practiceProposal} />
+                ) : workspace.proposals.length === 0 ? (
                   <p className="rounded-sm border hairline p-3 text-xs text-muted">
-                    No proposals yet.
+                    {testMode
+                      ? 'No practice proposal yet. Choose Practice, type a change and try it.'
+                      : 'No proposals yet.'}
                   </p>
                 ) : (
                   workspace.proposals.map((proposal) => (

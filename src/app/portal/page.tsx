@@ -7,7 +7,7 @@ import { ActionForm } from '@/components/admin/action-form'
 import { PageCurl } from '@/components/page-curl'
 import { PortalPreviewSwitch } from '@/components/portal-preview-switch'
 import { SiteFooter } from '@/components/site-footer'
-import { requireAdmin } from '@/lib/auth/guards'
+import { requireReader } from '@/lib/auth/guards'
 import { canRespond, canView } from '@/lib/portal/access'
 import { flagEnabled, PORTAL_FLAGS, readFeatureFlags } from '@/lib/flags'
 import { CONTACT_COPY, type PortalContact } from '@/lib/portal/contact'
@@ -26,7 +26,7 @@ import { ROADMAP_DISCLAIMER } from '@/lib/portal/roadmap'
 import { investorDocuments } from '@/lib/documents/data'
 import { shouldShowVideoSection, videoTextAlternative } from '@/lib/media/video'
 import { currentVideo } from '@/lib/media/video-store'
-import type { PrivilegedRole } from '@/lib/roles'
+import type { AdminRole } from '@/lib/roles'
 import { loadInvestorUpdates } from '@/lib/updates/data'
 import { pendingEmailChange } from '@/lib/portal/email-change'
 import {
@@ -349,12 +349,13 @@ function OfferSection({
 export async function renderPortalPage(isDemoPreview = false) {
   let accountId: string
   let view: PortalView
-  let previewRole: PrivilegedRole = 'OPERATOR'
+  let previewRole: AdminRole = 'OPERATOR'
 
   if (isDemoPreview) {
-    // This is the real access boundary. The switch being hidden from a viewer
-    // is only presentation; a guessed or shared URL still reaches this guard.
-    const admin = await requireAdmin()
+    // This is the real access boundary. Owners, operators and explicitly
+    // allowlisted read-only testers may enter; a guessed or shared URL still
+    // reaches this signed-in reader guard before any synthetic data is chosen.
+    const admin = await requireReader()
     previewRole = admin.role
     view = johnDoeDemoPortalView()
     accountId = view.accountId
@@ -452,8 +453,8 @@ export async function renderPortalPage(isDemoPreview = false) {
       <main id="main" className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
         {isDemoPreview ? (
           <p className="mb-6 rounded-sm border border-orange/25 bg-orange/6 p-3 text-xs leading-relaxed text-silver2">
-            Private demo for Mike and David. John Doe is synthetic, nothing is saved,
-            and no email can be sent.
+            Private investor rehearsal for Mike, David and authorized testers. John Doe
+            is synthetic, nothing is saved, and no email can be sent.
           </p>
         ) : null}
 

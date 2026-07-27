@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray } from 'drizzle-orm'
 import { db } from '@/db'
 import { emailReviewProposals, users } from '@/db/schema'
-import type { ActingAdmin } from '@/lib/auth/guards'
+import type { AdminIdentity } from '@/lib/auth/guards'
 import { checkTemplateDrift } from '@/lib/compliance/drift'
 import type { EmailPolicyOutcome } from '@/lib/email/policy'
 import { loadCurrentTemplate } from '@/lib/email/templates'
@@ -58,7 +58,7 @@ export interface EmailReviewWorkspaceData {
   proposals: EmailReviewProposalView[]
 }
 
-function proposalVisibility(admin: ActingAdmin) {
+function proposalVisibility(admin: AdminIdentity) {
   return admin.role === 'OWNER'
     ? inArray(emailReviewProposals.status, [
         'SUBMITTED',
@@ -78,7 +78,7 @@ function proposalVisibility(admin: ActingAdmin) {
 }
 
 export async function loadEmailReviewWorkspace(
-  admin: ActingAdmin,
+  admin: AdminIdentity,
 ): Promise<EmailReviewWorkspaceData> {
   const [live, drift, rows, promotedWordings] = await Promise.all([
     loadCurrentTemplate('INVITATION'),

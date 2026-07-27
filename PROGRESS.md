@@ -7436,3 +7436,77 @@ explicit fill.
 - The first browser build exposed CSP-blocked inline styles as oversized black
   SVGs. The final build was recompiled and rechecked after the CSS Module fix;
   the black shapes and blocked controls were gone without weakening CSP.
+
+## 2026-07-27 — Graham experience-test mode
+
+**Built.**
+
+- Graham keeps the existing `VIEWER` role. The email-review route now admits a
+  signed-in reader and shows a prominent **Graham test mode** notice.
+- The complete paper/technical comparison, change map, evidence balloons and AI
+  question flow are available in test mode. AI provider storage remains off and
+  neither the question nor answer is written to the database; the existing
+  counts-only usage and metadata-only audit receipts remain.
+- The Practice tab accepts wording and a reason, then displays the result as a
+  paired practice card held only in React state. The viewer form has no server
+  action. Reloading or closing the tab removes it.
+- The real proposal action still begins with `requireAdmin()`, and review or
+  promotion still begins with the existing acting-admin/owner guards. A crafted
+  request from Graham is therefore refused even if the browser-only boundary is
+  bypassed.
+- The low-left view switch now appears for a viewer. The existing `/portal/demo`
+  investor rehearsal admits a signed-in reader, remains synthetic John Doe
+  data, creates no investor session or record, and continues to suppress every
+  investor mutation.
+
+**Decisions.**
+
+- This is an added capability of the read-only `VIEWER` role, not an operator
+  promotion. Graham gains no send, import, export, approval, invitation,
+  template, investor-status or audit-log authority.
+- AI questions are read-only analysis rather than product changes. Their text
+  remains transient, while the existing non-content usage/audit receipts remain
+  because removing those records would reduce accountability.
+- Practice proposals deliberately do not run the real submit/promote pipeline.
+  Showing a simulated proposal is safer than creating a temporary database row
+  that another screen, export or reviewer could mistake for David's work.
+
+**Deviations.**
+
+- Graham does not yet have a real investor record: the current production
+  database contains zero investor accounts. Investor mode therefore uses the
+  existing clearly labelled John Doe synthetic rehearsal rather than inventing
+  an offer or percentage for Graham.
+- Targeted ESLint still reports the pre-existing
+  `react-hooks/set-state-in-effect` finding in
+  `portal-preview-switch.tsx` at the route-change close effect. This package
+  changed the role type and visibility of that component, not the existing
+  effect, so the working behavior was not refactored as unrelated cleanup.
+
+**Checklist.**
+
+1. *Can Graham open David's email-review workspace?* Yes, in the candidate.
+2. *Can he select changes, toggle markup and use both document views?* Yes.
+3. *Can he ask the configured AI about a selection or both emails?* Yes; the
+   read-only question action admits a reader.
+4. *Can his practice wording reach the proposal server action?* No. Test mode
+   supplies no form action, and the server action independently requires an
+   acting administrator.
+5. *Can he save, promote, approve or send?* No.
+6. *Can he switch to investor view?* Yes, through the existing synthetic,
+   mutation-free preview.
+7. *Focused verification?* TypeScript passed; 29 focused authorization,
+   email-review, role and preview checks passed; `git diff --check` passed; the
+   production build passed when loaded with the unchanged live release
+   environment.
+
+**Uncertain.**
+
+- This candidate is not deployed. The governing production rule requires
+  Mike's explicit approval for the live release step.
+- Graham has no password and the previously issued setup token cannot be
+  recovered from its hash. A fresh setup link is a credential action and still
+  needs Mike's explicit approval after deployment.
+- The OpenAI key is present, but this package did not spend an API call merely
+  to prove it again. Graham's first permitted AI question is the final
+  end-to-end provider check.

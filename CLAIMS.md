@@ -35,7 +35,6 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Graham experience-test mode | Codex `/root` | 2026-07-27 14:48 UTC | `GRAHAM_EXPERIENCE_TEST_KIT.md`; email-review page, workspace, data and action; admin layout/nav; preview switch and demo portal; focused boundary tests; `PROGRESS.md` |
 
 ## Done, so nobody starts it again
 
