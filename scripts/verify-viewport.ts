@@ -864,6 +864,7 @@ async function main(): Promise<void> {
       ['investors', '/investors', 200, /Alexandra Fenwick-Harrington/],
       ['import', '/import'],
       ['email templates', '/templates'],
+      ['David email review', '/admin/email-review', 200, /Unknown means unknown/],
       ['the round', '/round'],
       ['updates', '/updates'],
       // The queue of unanswered questions, and the published pair beneath it.
