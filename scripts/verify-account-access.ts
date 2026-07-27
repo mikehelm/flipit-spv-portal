@@ -50,6 +50,7 @@ import { db } from '@/db'
 import { auditEvents, operatorInvites, sessions, users } from '@/db/schema'
 import { issueAdminSetupLink } from '@/lib/auth/bootstrap'
 import { hashPassword } from '@/lib/auth/password'
+import { onScreen } from '@/lib/verify/page-text'
 
 const PORT = 3213
 const ORIGIN = `http://127.0.0.1:${PORT}`
@@ -253,11 +254,8 @@ async function viewer(browser: Browser): Promise<void> {
     `landed on ${new URL(page.url()).pathname}`,
   )
 
-  const banner = await page.textContent('body')
-  check(
-    'and is told plainly that the session is read-only',
-    (banner ?? '').includes('read-only access'),
-  )
+  const banner = await onScreen(page)
+  check('and is told plainly that the session is read-only', banner.includes('read-only access'))
 
   // The refusal page — the second loop.
   const refused = await land(page, '/compliance')
@@ -272,7 +270,7 @@ async function viewer(browser: Browser): Promise<void> {
     `landed on ${refused}`,
   )
 
-  const refusalText = (await page.textContent('body')) ?? ''
+  const refusalText = await onScreen(page)
   check(
     'which renders, and names the role correctly',
     refusalText.includes('read-only') && refusalText.includes(VIEWER_EMAIL),
@@ -345,7 +343,7 @@ async function viewer(browser: Browser): Promise<void> {
   // the refusal has to read as a refusal rather than as "you need to sign in",
   // which is what somebody already signed in used to be told.
   const importWhere = await land(page, '/import')
-  const importText = (await page.textContent('body')) ?? ''
+  const importText = await onScreen(page)
   check('the import renders in place', importWhere === '/import', `landed on ${importWhere}`)
   check('and shows a refusal instead of the wizard', importText.includes('Not available'))
   check(

@@ -891,6 +891,20 @@ The run also now covers what happens after the recording: saving a caption and t
 
 That is worth reading twice, because the lesson is not about videos. A check that waits for a page to look right is not the same as a check that waits for something to *be* right, and the first kind can pass for months.
 
+**And then the reason turned out to be worse and more interesting than that.** Chasing it properly meant measuring rather than reasoning, so a nine-line throwaway script loaded the sign-in page in a real browser and asked it how much text it had. The answer:
+
+- What a person can read on that page: **294 characters.**
+- What the check was reading: **8,646 characters.**
+
+The other 8,352 are invisible. Every page in this application ships a second copy of itself, in a script tag, for the browser to work from — that is how the framework does its job, and it is completely normal. But a check written to ask "is this word on the page?" the way these were was reading that hidden copy as well, and it *never changes* when part of the page updates. So the check was looking for a word that had been sitting in the invisible copy since the page loaded. It found it instantly, every time, and then went on to test something before it had happened.
+
+Thirteen checks across four scripts were reading pages that way. They have been split into two, because two different questions were being asked and the answers are opposites:
+
+- **"Is the operator told this?"** — now reads only what is actually drawn on the screen. A check of this kind that reads the hidden copy can pass on words nobody can see.
+- **"Did anything about another investor reach this browser?"** — now reads *everything* the browser was sent, hidden copy and link addresses included. A check of this kind that reads only the screen can pass on a name that was sent and merely not displayed. Three checks about what an investor's browser receives are stronger than they were yesterday.
+
+**All thirteen still pass**, which is the honest headline: the hidden copy had made exactly one check unreliable, and the rest were asking about words that really were on the screen. What was worth fixing was the method, and there is now a test that fails the build if anybody reads a page the old way again.
+
 **Seeking, and why it is worth a mention.** A published video now answers a browser that asks for part of it rather than always sending the whole thing. That sounds like a nicety and is not: Safari opens every video by asking for the first two bytes, and gives up entirely on a server that replies with the whole file instead. Before this, David's video did not play on an iPhone at all. Now it plays, and the scrub bar works. If you have an iPhone to hand, that is the ten-second test worth running on the first real deployment.
 
 **And the video is now sent as it is read, rather than read and then sent.** Until today the server loaded the whole video into its memory before sending a single byte of it. That worked, and it cost the size of the video — sixty megabytes, say — for every person watching at that moment. It now reads and sends in step, so ten people watching at once costs roughly what one person costs. There is nothing to click and nothing looks different: the video plays exactly as it did. The way to see it is to watch the server's memory while several browsers play the same video, and it is the sort of thing that only ever shows up on the day the round is going well.

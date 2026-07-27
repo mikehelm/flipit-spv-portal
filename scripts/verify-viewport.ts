@@ -62,6 +62,7 @@ import {
   users,
 } from '@/db/schema'
 import { hashPassword } from '@/lib/auth/password'
+import { onScreen } from '@/lib/verify/page-text'
 import { issueToken } from '@/lib/crypto'
 import { AA_LARGE, AA_TEXT, contrastRatio, reportRatio } from '@/lib/contrast'
 
@@ -1224,7 +1225,7 @@ async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
     // branch that only exists when something is wrong.
     await auditScreen(page, 'overview, with a fault', '/admin')
 
-    const text = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+    const text = await onScreen(page)
 
     check(
       'the banner is on the screen at all',
@@ -1267,7 +1268,7 @@ async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
 
     // And the page it points at, on the branch that has a "Needs you" section.
     await auditScreen(page, 'system health, with a fault', '/health')
-    const health = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+    const health = await onScreen(page)
     check('the health page leads with what needs a person', /Needs you/.test(health))
     check(
       'and says the same things the banner did',
@@ -1299,7 +1300,7 @@ async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
   // Put back, and gone again — which is the other half of the claim. A banner
   // that is always there would have passed every check above.
   await page.goto(`${ORIGIN}/admin`, { waitUntil: 'networkidle' })
-  const healthy = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
+  const healthy = await onScreen(page)
   check('and it is gone once the fault is', !/things need you/.test(healthy))
   check(
     'while the way through to the health page is not',

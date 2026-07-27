@@ -6185,3 +6185,163 @@ sections and the corrected wait are all in `scripts/verify-recorder.ts`.
   asked what an attacker could do with them.*
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
+
+## 8,646 characters against 294: what those checks were actually reading
+
+The previous entry's first Uncertain item asked for a sweep:
+
+> *"How many other checks in this repository wait on a rendering rather than on a
+> fact? This is the item worth taking next. One was found by accident, because it
+> happened to fail half the time; a check with the same shape and a faster action
+> would simply pass and mean nothing."*
+
+The sweep found something better than it was looking for, and it corrects the
+previous entry's diagnosis. **That entry was right that the check was wrong, and
+wrong about why.**
+
+**Measured, not reasoned about.** A throwaway probe loaded this application's
+sign-in page in Chromium and asked it two questions:
+
+    document.body.textContent   8,646 characters
+    document.body.innerText       294 characters
+    scripts inside <body>             7
+
+`textContent` includes the text of `<script>` elements, and a Next.js page
+carries **its entire server render again inside the body** as an inline React
+flight payload. Two hundred and ninety-four of those characters are the page. The
+other 8,352 are a transcript of what the server sent.
+
+**So that is the mechanism.** The failing check waited for
+`document.body.textContent` to contain *"Publish to the portal"* before asking
+the video route whether the video was still reachable. That string was **already
+in the payload from the first page load**, which happened while the video was
+unpublished — and the payload never changes when a server action re-renders,
+because that arrives over fetch. The wait therefore returned *immediately*,
+before the Unpublish action had done anything, and the request that followed
+raced the write. It won about half the time. The previous entry's "the request
+went out while the write was in flight" describes the symptom correctly and
+misses that the wait was never waiting at all.
+
+**And the same reading was in twelve other places, pointing both ways.**
+
+- A **visibility** check reading `textContent` can pass on text nobody can see,
+  because the payload holds every branch the server rendered. *"The caption is on
+  their portal"* was one of these — a claim about what an investor can read,
+  answered by a transcript.
+- A **leak** check reading `innerText` can pass on a name that was sent and
+  merely not drawn.
+
+Both mistakes were live. They are not the same mistake and cannot have the same
+fix, which is why this is two functions and not a search-and-replace.
+
+**Built.** `src/lib/verify/page-text.ts`:
+
+- ***`onScreen(page)`*** — `innerText`, flattened. What a person can actually
+  read: no scripts, and nothing that is not rendered. The right answer to *"is
+  the operator told this?"*
+- ***`everythingSent(page)`*** — `page.content()`, flattened. Markup, attributes
+  **and** the flight payload. The right answer to *"did anything about another
+  investor reach this browser?"*, and stricter than either of the two things it
+  replaces: an id in an `href` is in neither `textContent` nor `innerText`.
+
+Every site was then read individually and given the one that matches its claim.
+Three investor-facing negatives in `verify:recorder` — the ones that say no
+caption and no gap reached the portal — became `everythingSent`, which is a
+**strengthening**: they now assert the caption was not sent at all, rather than
+not drawn. Six visibility claims across `verify:recorder` and
+`verify:account-access` became `onScreen`. Three hand-rolled `innerText` reads in
+`verify:viewport` — which had the right idea and no name for it — now go through
+the same function.
+
+**`page-text.test.ts` fails the build if any script asks the body for its
+`textContent` again**, and separately if a browser-driven script reads the whole
+body without going through one of the two functions. Eight unit tests pin the
+distinction, including that `everythingSent` catches an id in an attribute and
+`onScreen` does not.
+
+**What the sweep did not find.** Every rewritten check still passes. That is
+worth stating plainly rather than dressing up: the payload had made exactly one
+check unreliable, and the other twelve happened to be asking about text that was
+genuinely on the screen. The finding is the mechanism and the two functions, not
+a pile of broken assertions.
+
+**Decisions.**
+
+- ***The mechanism was measured before anything was rewritten.*** The previous
+  entry shipped a plausible diagnosis and a fix that worked, and the diagnosis
+  was wrong. Nine lines of throwaway Playwright settled it in one run. Recorded
+  because the temptation was to sweep first and explain afterwards, and the sweep
+  would then have been a blanket `innerText` substitution — which would have
+  silently weakened three leak checks.
+- ***Two functions rather than one, with the wrong one a word away from the right
+  one.*** Hence the source scan. A helper called `pageText` would have been used
+  for both questions within a month.
+- ***`everythingSent` uses `page.content()` rather than `body.textContent`.***
+  Since the question is "what reached this browser", markup and attributes count.
+  It is the only one of the three readings that catches a video id in an `href`.
+- ***`onScreen` deliberately cannot see inside a closed `<details>`.*** Several
+  screens hide things there, and a check that has to open one first is honest: a
+  person would have to as well.
+- ***The interface is structural, not `Page`.*** `TextReadablePage` names the two
+  methods used, so the unit tests exercise the real functions against a stub
+  instead of asserting something adjacent to them.
+
+**Deviations.** None. No production code changed: this entry is a library used
+only by scripts, its tests, and four verification scripts.
+
+**Checklist.**
+
+1. *Money as a `number`?* No.
+2. *A send path bypassing a gate?* No. Nothing here sends.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* **This entry improves the answer.**
+   The three checks that assert an investor's browser received nothing about a
+   video they may not have now read the flight payload and the attributes as well
+   as the rendered text. Anything the server sent is in scope, drawn or not.
+6. *Tokens?* Untouched.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. `onScreen` and
+   `everythingSent` return strings to a script's own `check`, and the failure
+   details that print them are slices of page text, never a credential — the
+   sign-in pages these run against hold a password in an input value, which
+   `innerText` does not read and `page.content()` does not serialise.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2438, up from 2430) and `pnpm build`
+are green. `pnpm verify:recorder` 104 of 104; `pnpm verify:viewport` 332 of 332;
+`pnpm verify:account-access` 42 of 42; `pnpm verify:uploads` 55 of 55.
+
+**Uncertain.**
+
+- ***The original question has still not been answered.*** This entry answered a
+  better one. "How many checks wait on a rendering rather than on a fact" is
+  about `waitForFunction` and `waitForTimeout` standing in for a database read,
+  and while the one known instance is fixed, `verify:viewport` still has three
+  bare `waitForTimeout(200)` calls that nothing has justified. They may be fine —
+  they look like waits for a redirect rather than for a write — but nobody has
+  read them and decided.
+- ***`page.content()` serialises the DOM as it currently is, not the bytes that
+  arrived.*** For the leak checks that is what is wanted — a name injected by
+  client script is a leak too — but it means a value that arrived and was removed
+  from the DOM before the check ran would not be seen. Reading the raw response
+  body instead would catch that, and would miss anything client-rendered. Neither
+  is strictly stronger; the choice has not been examined.
+- ***No check anywhere asserts that a screen renders at all beyond having text.***
+  `onScreen` returning 294 characters was the measurement that started this, and
+  a page that lost its stylesheet would still return the same 294. `verify:viewport`
+  measures layout, so this is thinner than it sounds, but the two are unconnected.
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *The image upload preview and the email template preview are still
+  unexercised.*
+- *The error page has never been rendered by a real error.*
+- *Nothing measures bundle size, and nothing measures what the middleware
+  costs.*
+- *Nothing measures how long a 20 MB upload takes.*
+- *`img-src data:`, `media-src blob:` and `worker-src blob:` have never been
+  asked what an attacker could do with them.*
+- *The password-reset journey is still not built,* and belongs in
+  OPEN_DECISIONS.md as a question for Michael.

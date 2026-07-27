@@ -79,6 +79,7 @@ import { SERVICE_CONFIG_ID } from '@/lib/auth/service-config'
 import { isStepComplete, type OnboardingStepId } from '@/lib/auth/onboarding'
 import { hashPassword } from '@/lib/auth/password'
 import { MAX_VIDEO_BYTES, tooLargeMessage } from '@/lib/media/formats'
+import { everythingSent, onScreen } from '@/lib/verify/page-text'
 
 const PORT = 3240
 const ORIGIN = `http://127.0.0.1:${PORT}`
@@ -557,7 +558,7 @@ async function main(): Promise<void> {
     await signIn(page, OWNER_EMAIL)
     await page.goto(`${ORIGIN}/admin/video`, { waitUntil: 'networkidle' })
 
-    const ownerBody = (await page.textContent('body')) ?? ''
+    const ownerBody = await onScreen(page)
     check('the owner reaches the page', page.url().includes('/admin/video'), page.url())
     check(
       'and is told the video is the operator’s',
@@ -606,7 +607,7 @@ async function main(): Promise<void> {
     const onboarding = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
       width: window.innerWidth,
-      text: (document.body.textContent ?? '').slice(0, 200),
+      text: document.body.innerText.slice(0, 200),
     }))
     check(
       'the onboarding screen does not scroll sideways',
@@ -642,7 +643,7 @@ async function main(): Promise<void> {
     check(
       'the recorder is on the page now',
       (await armButton.count()) === 1,
-      `at ${page.url()} — ${((await page.textContent('body')) ?? '').replace(/\s+/g, ' ').slice(0, 200)}`,
+      `at ${page.url()} — ${(await onScreen(page)).slice(0, 200)}`,
     )
     check(
       'and the review element is hidden while nothing is recorded',
@@ -725,7 +726,7 @@ async function main(): Promise<void> {
     // The component reloads the page once the row exists, because the page and
     // not the component is the source of truth about what is stored.
     await page.waitForFunction(
-      () => !document.body.textContent?.includes('Nothing recorded yet'),
+      () => !document.body.innerText.includes('Nothing recorded yet'),
       undefined,
       { timeout: 30_000 },
     )
@@ -922,7 +923,7 @@ async function main(): Promise<void> {
     )
     check(
       'and the portal shows no video section at all',
-      !((await investorPage.textContent('body')) ?? '').includes('A short note from David'),
+      !(await everythingSent(investorPage)).includes('A short note from David'),
     )
 
     // -----------------------------------------------------------------------
@@ -931,7 +932,7 @@ async function main(): Promise<void> {
     await page.locator('input[name="confirm"]').check()
     await page.getByRole('button', { name: 'Publish to the portal' }).click()
     await page.waitForFunction(
-      () => document.body.textContent?.includes('Take it down') === true,
+      () => document.body.innerText.includes('Take it down'),
       undefined,
       { timeout: 20_000 },
     )
@@ -970,7 +971,7 @@ async function main(): Promise<void> {
     await investorPage.reload({ waitUntil: 'networkidle' })
     check(
       'and the caption is on their portal',
-      ((await investorPage.textContent('body')) ?? '').includes('A short note from David'),
+      (await onScreen(investorPage)).includes('A short note from David'),
     )
 
     /**
@@ -1034,7 +1035,7 @@ async function main(): Promise<void> {
     await page.locator('input[name="confirm"]').check()
     await page.getByRole('button', { name: 'Publish to the portal' }).click()
     await page.waitForFunction(
-      () => document.body.textContent?.includes('Take it down') === true,
+      () => document.body.innerText.includes('Take it down'),
       undefined,
       { timeout: 20_000 },
     )
@@ -1122,7 +1123,7 @@ async function main(): Promise<void> {
     await investorPage.reload({ waitUntil: 'networkidle' })
     check(
       'and their portal shows no video and no caption — no gap where it was',
-      !((await investorPage.textContent('body')) ?? '').includes('A short note from David'),
+      !(await everythingSent(investorPage)).includes('A short note from David'),
     )
 
     const replaceEvents = await db
@@ -1160,7 +1161,7 @@ async function main(): Promise<void> {
     await page.locator('input[name="confirm"]').check()
     await page.getByRole('button', { name: 'Publish to the portal' }).click()
     await page.waitForFunction(
-      () => document.body.textContent?.includes('Take it down') === true,
+      () => document.body.innerText.includes('Take it down'),
       undefined,
       { timeout: 20_000 },
     )
@@ -1200,7 +1201,7 @@ async function main(): Promise<void> {
     await investorPage.reload({ waitUntil: 'networkidle' })
     check(
       'and the portal still shows no gap where it was',
-      !((await investorPage.textContent('body')) ?? '').includes('A short note from David'),
+      !(await everythingSent(investorPage)).includes('A short note from David'),
     )
 
     const removalEvents = await db
