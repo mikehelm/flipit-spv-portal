@@ -35,8 +35,32 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Physical curl P1+P2+P3+P6 | Opus 5 via OTTO/Codex root | 2026-07-27 07:18 UTC | `src/components/effects/curl-logic.ts`; `src/components/effects/curl-logic.test.ts`; `src/components/effects/curl-renderer.ts`; `src/components/effects/CurlCorner.tsx`; `src/components/effects/CurlCorner.module.css`; `src/components/effects/CurlGrip.tsx`; `src/components/effects/curl-lab-settings.ts`; `src/components/effects/curl-lab-settings.test.ts`; `src/components/effects/CurlLab.tsx`; `src/components/effects/CurlLab.module.css`; `src/components/effects/curl-integration.test.ts`; `src/components/effects/curl-lab-integration.test.ts`; `src/components/account-curl-menu.tsx`; `src/app/page.tsx`; `src/app/signin/page.tsx`; `src/app/access-request/page.tsx`; `src/app/(admin)/layout.tsx`; `src/app/portal/page.tsx`; `src/lib/portal/demo-preview.test.ts` |
-| Mike, David, and John Doe view switcher | Codex root | 2026-07-27 08:59 UTC | `src/components/portal-preview-switch.tsx`; `src/components/text-size-control.tsx`; `src/app/globals.css`; `src/app/(admin)/layout.tsx`; `src/app/portal/page.tsx`; `src/lib/portal/demo-preview.test.ts`; `PROGRESS.md` |
+| *(nothing claimed)* | | | |
+
+### Lapsed, and deliberately not taken
+
+Two rows sat in the table above for thirteen hours and were noted as stale by
+three consecutive sessions, each of which left them alone. They are moved here
+rather than deleted, because deleting them would say something nobody has
+established.
+
+| Package | Session | Claimed at (UTC) | Checked | State |
+| --- | --- | --- | --- | --- |
+| Physical curl P1+P2+P3+P6 | Opus 5 via OTTO/Codex root | 2026-07-27 07:18 UTC | 2026-07-27 20:53 UTC | **Nothing landed.** `src/components/effects/` does not exist and no commit touches any file the row names. |
+| Mike, David, and John Doe view switcher | Codex root | 2026-07-27 08:59 UTC | 2026-07-27 20:53 UTC | **Nothing landed.** `portal-preview-switch.tsx` and `text-size-control.tsx` do not exist. |
+
+**Both are past the six-hour rule, and neither was taken. That is a decision, not
+an oversight.** The rule says the work is available after six hours — but the
+thing the rule exists to prevent is *two implementations of the same feature*,
+and the risk of that is at its highest exactly here: both were claimed by
+sessions on Michael's own machine, and the most likely explanation for thirteen
+hours of silence is work sitting uncommitted on a laptop rather than work
+abandoned. Building either would recreate the collision this file was written
+after.
+
+**So: if you are about to start one of these, ask Michael first.** If he says the
+local work is gone, take it and move the row back up. The claim is lapsed; the
+question of whether the code exists is not answered by this repository.
 
 ## Done, so nobody starts it again
 
@@ -130,11 +154,16 @@ in both its blocked and its rendered state. `pnpm verify:viewport` is 497, up
 from 357 that morning. **`global-error.tsx` is unreachable and now says so**,
 with `root-layout-purity.test.ts` keeping it that way.
 
-**One defect is recorded and deliberately not fixed:** the preview frame inherits
-`style-src 'self'`, so the designed invitation's 69 inline styles are refused and
-an operator sees an unstyled email. The fix is a route with its own narrow policy,
-not a wider one — **it is the next session's first item**, written up in
-PROGRESS.md.
+~~**One defect is recorded and deliberately not fixed:** the preview frame
+inherits `style-src 'self'` …~~ — **fixed on 27 July, and this is what it took.**
+The email body is now served by `…/templates/preview/[offerId]/body`, its own
+admin-guarded route under its own policy: `default-src 'none'` with a single
+grant, `style-src 'unsafe-inline'`, reaching that document and nothing else. The
+application policy was not widened. It needed `frame-src 'self'` on the preview
+page — the one screen in the application that frames anything — and
+`X-Frame-Options: SAMEORIGIN` on the body path in an entry that must stay last,
+since `DENY` refuses same-origin framing too. The frame keeps `sandbox=""`, and
+the response repeats the restriction so it holds for a direct visit.
 
 **`media:check` is folded into the health report**, as of 26 July. The comparing
 moved out of the script into `src/lib/media/reconcile.ts`, the command writes one
@@ -158,6 +187,39 @@ server's resident set out of `/proc`. Streaming grows it by 2 MB for one downloa
 and 1 MB for four at once; the same route made to buffer grows it by 95 MB and
 379 MB, measured by temporarily reverting it and watching the check fail. Three
 Uncertain notes saying "nothing has measured the memory" are closed.
+
+**Four things landed on 27 July that this file did not yet know about**, and they
+are recorded here because that is what stops a fifth session starting one of them.
+
+**The email preview frame is fixed** — see the struck-through paragraph above.
+`pnpm verify:viewport` is **532**, up from 497, and the check that used to record
+the defect is gone, replaced by twelve that prove it is gone, including the body
+route refusing an unauthenticated request with the same empty 404 it gives an
+offer id that does not exist.
+
+**The media library has had a file put in it** — the screen had been audited from
+the beginning and audited *empty* every time, so what was measured was the
+"nothing uploaded yet" message under the name of the real screen. It also found
+that **no fixture in this repository produced an image a browser could display**:
+every one writes a deliberately fake CRC, which is correct for `ingest` and for
+the stripper and useless to a decoder. `drawablePngWithMetadata` is the one real
+one, and `fixtures.test.ts` asserts the others are still fake.
+
+**`pnpm verify:all` exists** — all twenty-three verifications, one at a time,
+1,556 checks, with a summary table. Running it twice found two real defects:
+`verify:certificate` restored a setting at the end of its happy path rather than
+in a `finally`, so one failure poisoned the database and it then failed forever;
+and two scripts need a camera that Playwright's headless shell does not have,
+despite exposing the API for it. Both fixed. `DEPLOYMENT.md` §0 leads with it and
+lists all twenty-three; §8 says why it is deliberately **not** a cron entry.
+
+**`OPEN_DECISIONS.md` has been checked against the code** and is at version 7.
+Five of its statements were wrong. The one that matters: the privacy policy
+promises an investor their record can be deleted, and **there is no deletion path
+in the application by any role** — the promise is fulfilled by a person, and
+nobody has written down how. It is §12 and it is the largest open question.
+`open-decisions.test.ts` now pins seven of that document's falsifiable sentences,
+so the next drift fails a test rather than sitting there.
 
 The largest left is installing the three cron lines in `DEPLOYMENT.md` §8, and
 the open question — sharpened by corrections — of whether issuing a document

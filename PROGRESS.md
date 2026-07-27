@@ -8590,3 +8590,137 @@ document-pinning test nobody has seen fail is precisely that shape.
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
 - *The password-reset journey is still not built — OPEN_DECISIONS.md §10.*
+
+## The claims file, read against the repository it coordinates
+
+The previous entry's own last new item:
+
+> ***`CLAIMS.md` has not had this treatment.*** It is the other document making
+> statements about the build, it is named in the previous entries as having two
+> rows past their staleness rule, and nobody has read it against the code at all.
+
+Same treatment as `OPEN_DECISIONS.md`, and it found the same class of thing: a
+document that had stopped describing the repository, in the one place where being
+wrong causes the exact damage the document was written to prevent.
+
+### The two stale rows, and why they were not taken
+
+Two rows had sat in the Claimed table for **thirteen hours** — a physical page
+curl and a three-view portal switcher — and three consecutive entries had noted
+them as past the six-hour rule and left them alone without saying what they were.
+
+Checked: **neither landed.** `src/components/effects/` does not exist,
+`portal-preview-switch.tsx` and `text-size-control.tsx` do not exist, and no
+commit touches any file either row names.
+
+**They were still not taken, and that is a decision rather than a repetition of
+the last three entries' inaction.** The rule says work is available after six
+hours. But the thing the rule exists to prevent is *two implementations of the
+same feature* — this file was written after that happened twice in one hour — and
+the risk of it is at its highest precisely here: both rows were claimed by
+sessions on **Michael's own machine**, and the likeliest explanation for thirteen
+silent hours is work sitting uncommitted on a laptop rather than work abandoned.
+Building either would recreate the collision.
+
+So they are **moved, not deleted**, into a *Lapsed, and deliberately not taken*
+section that records the claim, the time it was checked, what is in the
+repository, and the instruction: ask Michael before starting one, and if the local
+work is gone, take it and move the row back. Deleting them would have asserted
+something nobody has established; leaving them in the Claimed table would have
+gone on making the mechanism look live when it was not. The Claimed table is now
+empty and says so.
+
+### What the file did not know
+
+***It still carried the preview-frame defect as open***, in a paragraph ending
+*"it is the next session's first item"* — three sessions after that session. It
+is struck through, with what the fix actually took: a route of its own, a policy
+of its own, `frame-src 'self'` on one screen, and `SAMEORIGIN` in an entry that
+has to stay last because `DENY` refuses same-origin framing too.
+
+Three other packages landed on 27 July that the file had no line for — the media
+library's first successful upload and the undrawable-fixture finding, `verify:all`
+and the two defects running it twice turned up, and the `OPEN_DECISIONS.md` audit
+with its §12. All four are now recorded there, because **that is the file whose
+job is to stop a fifth session starting one of them**, and PROGRESS.md is written
+at the end of a package, which this file's own opening paragraph says is exactly
+too late.
+
+**Decisions.**
+
+- ***Moved rather than deleted.*** The six-hour rule releases a claim; it does not
+  establish that the code does not exist somewhere. A row that says *"nothing
+  landed here, ask before starting"* carries more than either an empty table or a
+  stale claim.
+- ***The lapsed rows record when they were checked, not only when they were
+  claimed.*** A staleness rule needs two timestamps to be readable a day later,
+  and the file had only ever carried one.
+- ***The struck-through defect paragraph was kept rather than removed.*** It is
+  the only place in the repository that states the defect from the operator's side
+  in one sentence, and a reader arriving from an older PROGRESS entry should land
+  on *"fixed, and here is what it took"* rather than on silence.
+- ***No `CLAIMS.md` test.*** `OPEN_DECISIONS.md` got one because its statements
+  are about the application. This file's statements are about **sessions** —
+  who is working on what, right now — and there is nothing in the repository for a
+  test to compare them against. What keeps it honest is being read, which is what
+  this entry is.
+
+**Deviations.** None. No code changed in this entry.
+
+**Checklist.** Nothing in this entry touches the application. 1–12 are all
+unchanged and untouched: no money is computed, no send path exists here, no gate
+is read or written, no investor-facing surface is altered, no token is issued, no
+log line is added, no route's indexability changes, and the base-URL guard is not
+involved.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (2536) are green.
+
+**Uncertain.**
+
+- ***Nobody has asked Michael about the two lapsed rows***, and this session
+  cannot. Until somebody does, that work is in a state no document can resolve:
+  claimed, not in the repository, possibly finished on a laptop. It is the first
+  thing to raise, and it costs one question.
+- ***The rest of `CLAIMS.md`'s "Done" section was read and not independently
+  re-verified.*** Its claims about streaming, the reminder lock, `media:check`,
+  the health report and the memory measurement all have `verify:*` scripts behind
+  them, and `pnpm verify:all` now runs every one of those and passes — so they are
+  supported at one remove. What was **not** done is the `OPEN_DECISIONS` treatment
+  of reading each sentence against the code that implements it. The counts in
+  several of them are historical and are correct as history.
+- ***`ACCEPTANCE.md` has not been checked either.*** `CLAIMS.md` calls it *"the one
+  to trust"* because it is generated from the tests rather than typed. That claim
+  is itself unverified, and generated-from-tests is exactly the sort of thing that
+  stops being true when somebody edits the output once by hand.
+- *The deletion procedure is unwritten and is OPEN_DECISIONS §12 — the largest
+  open item.*
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's eyes
+  and nothing else will do.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open and
+  is not in OPEN_DECISIONS.md.*
+- *One image, one format, one size in the media library; the edit and remove forms
+  are present and unpressed.*
+- *The styles in the email preview are proved applied by absence, not by
+  measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *`verify:certificate` was the one that was broken; nothing has asked the
+  idempotence question of the other twenty-two.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *The refusal screen is measured with one kind of refusal.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`waitFor` on a locator whose appearance depends on server state has still not
+  been read with that question in mind.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
