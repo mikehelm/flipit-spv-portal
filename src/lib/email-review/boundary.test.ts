@@ -65,6 +65,23 @@ describe('David’s private email-review boundary', () => {
     expect(data).toContain('eq(emailReviewProposals.createdById, admin.id)')
   })
 
+  it('uses one review rail so the paired papers keep the available width', () => {
+    const workspace = read('src/components/email-review-workspace.tsx')
+    const paper = read('src/components/email-review/paper.module.css')
+    expect(workspace).toContain(
+      "type InspectorTab = 'CHANGES' | 'EVIDENCE' | 'AI' | 'PROPOSE' | 'REVIEW'",
+    )
+    expect(workspace).toContain('aria-label="Review tools"')
+    expect(workspace).toContain("lg:grid-cols-[17rem_minmax(0,1fr)]")
+    expect(workspace).not.toContain(
+      'lg:grid-cols-[11rem_minmax(0,1fr)_18rem]',
+    )
+    expect(paper).toContain('clamp(1rem, 2vw, 2.5rem)')
+    expect(paper).toContain(
+      'padding: 0.75rem clamp(0.4rem, 1vw, 0.85rem) 1rem',
+    )
+  })
+
   it('puts no source email text in the reusable client JavaScript', () => {
     const workspace = read('src/components/email-review-workspace.tsx')
     expect(workspace).toContain('import type')

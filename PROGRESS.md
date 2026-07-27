@@ -7510,3 +7510,54 @@ explicit fill.
 - The OpenAI key is present, but this package did not spend an API call merely
   to prove it again. Graham's first permitted AI question is the final
   end-to-end provider check.
+
+## 2026-07-27 — Unified email-review tool rail
+
+**Built.**
+
+- The separate Change Map and selected-change sidebars now occupy one persistent
+  review rail. Its five tabs are Changes, Evidence, Ask AI, Propose/Practice and
+  Review/Status.
+- Paper and technical views now use a two-column workspace: one compact tool
+  rail and the document surface. At desktop widths the paired documents receive
+  the space previously reserved for the second sidebar.
+- The paper desk padding and the visual gutter between the two sheets are
+  tighter, while the email type size, line height, selection synchronization,
+  pencil markup and explanation balloons are unchanged.
+- The rail remains first on narrow screens and all existing evidence, AI,
+  proposal, practice and protected promotion behavior is preserved.
+
+**Decisions.**
+
+- Changes is the default tool because it is the navigation layer. Evidence, AI
+  and editing are actions on the current selection, so they belong in the same
+  rail rather than competing for permanent screen width.
+- The rail stays 17–18rem wide. That is enough for the longer review forms while
+  giving the paired pages roughly a quarter more width at the inspected desktop
+  size.
+- Only unproductive outer padding and inter-page desk space were reduced. The
+  paper text measure and reading rhythm were not compressed.
+
+**Deviations.**
+
+- No product behavior or permission boundary changed.
+- The existing authenticated browser session was no longer valid after the
+  local preview restarted, so final visual acceptance remains a signed-in
+  reviewer check rather than an automated credential workaround.
+
+**Checklist.**
+
+1. *One visible tool rail rather than two?* Yes.
+2. *Changes, evidence, AI, proposal/practice and review still reachable?* Yes.
+3. *Paired paper surface materially wider?* Yes; the desktop grid removes the
+   former 18–22rem right column and gives that width to the document.
+4. *Focused verification?* TypeScript passed; focused ESLint passed; 30 focused
+   email-review tests passed; the production build passed; `git diff --check`
+   passed.
+
+**Uncertain.**
+
+- Mike should make one signed-in visual pass at his preferred text size. The
+  local preview is running at `http://127.0.0.1:3010/admin/email-review`.
+- This candidate is not deployed; deployment remains a separate owner-approved
+  release action.

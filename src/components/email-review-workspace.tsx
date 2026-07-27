@@ -30,7 +30,7 @@ import {
 } from '@/lib/email-review/model'
 import type { EmailDiffKind, EmailDiffUnit } from '@/lib/email-review/segments'
 
-type InspectorTab = 'EVIDENCE' | 'AI' | 'PROPOSE' | 'REVIEW'
+type InspectorTab = 'CHANGES' | 'EVIDENCE' | 'AI' | 'PROPOSE' | 'REVIEW'
 type ChangeFilter = 'ALL' | 'CHANGED' | 'UNVERIFIED' | 'EDITABLE'
 type PracticeProposal = {
   sectionLabel: string
@@ -230,7 +230,7 @@ function ProposalCard({
         </span>
       </div>
 
-      <div className="mt-4 grid gap-3">
+      <div className="mt-4 grid grid-cols-1 gap-3">
         <div className="border-l-2 border-warn/50 bg-warn/6 p-3">
           <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-warn">
             Current
@@ -354,7 +354,7 @@ function PracticeProposalCard({
           Practice only
         </span>
       </div>
-      <div className="mt-4 grid gap-3">
+      <div className="mt-4 grid grid-cols-1 gap-3">
         <div className="border-l-2 border-warn/50 bg-warn/6 p-3">
           <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-warn">
             Current
@@ -401,7 +401,7 @@ export function EmailReviewWorkspace({
     null
   const [selectedId, setSelectedId] = useState<string | null>(firstChanged?.id ?? null)
   const [filter, setFilter] = useState<ChangeFilter>('CHANGED')
-  const [tab, setTab] = useState<InspectorTab>('EVIDENCE')
+  const [tab, setTab] = useState<InspectorTab>('CHANGES')
   // Paper is the default. The technical comparison is unchanged and one click
   // away; nothing about the selection, the evidence record or the proposal
   // flow depends on which of the two is on screen.
@@ -505,6 +505,42 @@ export function EmailReviewWorkspace({
     ? 'border-ok/35 bg-ok/8 text-ok'
     : 'border-warn/40 bg-warn/9 text-warn'
 
+  const renderToolTabs = () => (
+    <nav
+      aria-label="Review tools"
+      className="sticky top-0 z-10 grid grid-cols-5 border-b hairline bg-paper/95 p-1.5 backdrop-blur-md"
+    >
+      {(
+        [
+          ['CHANGES', 'Changes'],
+          ['EVIDENCE', 'Evidence'],
+          ['AI', 'Ask AI'],
+          ['PROPOSE', testMode ? 'Practice' : 'Propose'],
+          [
+            'REVIEW',
+            testMode
+              ? 'Practice'
+              : canManageAi
+                ? `Review ${workspace.proposals.filter((p) => p.status === 'SUBMITTED').length}`
+                : 'Status',
+          ],
+        ] as const
+      ).map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => setTab(id)}
+          aria-pressed={tab === id}
+          className={`min-h-11 rounded-sm px-1 text-[8px] font-bold ${
+            tab === id ? 'bg-orange/12 text-orange' : 'text-muted'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </nav>
+  )
+
   return (
     <div className="space-y-4">
       <ReviewViewSwitch
@@ -552,13 +588,16 @@ export function EmailReviewWorkspace({
       </section>
 
       <div
-        className={`grid min-h-[72vh] grid-cols-1 lg:grid-cols-[11rem_minmax(0,1fr)_18rem] 2xl:grid-cols-[14rem_minmax(0,1fr)_22rem] ${
-          // Paper wants air around it: the sheets have to read as objects on a
-          // desk rather than as a third panel butted against two others.
-          view === 'PAPER' ? 'gap-4 xl:gap-6' : 'gap-3'
+        className={`grid min-h-[72vh] grid-cols-1 lg:grid-cols-[17rem_minmax(0,1fr)] 2xl:grid-cols-[18rem_minmax(0,1fr)] ${
+          view === 'PAPER' ? 'gap-3 xl:gap-4' : 'gap-3'
         }`}
       >
-        <aside className="rounded-sm border hairline bg-paper lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+        <aside
+          className={`order-1 rounded-sm border hairline bg-paper lg:sticky lg:top-24 lg:col-start-1 lg:row-start-1 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto ${
+            tab === 'CHANGES' ? '' : 'hidden'
+          }`}
+        >
+          {renderToolTabs()}
           <header className="border-b hairline p-4">
             <p className="text-[10px] font-bold uppercase tracking-[0.17em] text-orange">
               Change map
@@ -589,7 +628,7 @@ export function EmailReviewWorkspace({
                 type="button"
                 onClick={() => setFilter(item)}
                 aria-pressed={filter === item}
-                className={`min-h-9 rounded-full border px-2 text-[9px] font-bold ${
+                className={`min-h-11 rounded-full border px-2 text-[9px] font-bold ${
                   filter === item
                     ? 'border-orange/45 bg-orange/12 text-orange'
                     : 'hairline text-muted'
@@ -655,16 +694,17 @@ export function EmailReviewWorkspace({
           </nav>
         </aside>
 
-        {view === 'PAPER' ? (
-          <PaperReview
-            diffUnits={workspace.diffUnits}
-            clauses={document.clauses}
-            selectedId={selected?.id ?? null}
-            markup={markup}
-            onSelect={(unit) => chooseUnit(unit)}
-          />
-        ) : (
-        <section className="min-w-0 overflow-hidden rounded-sm border hairline bg-paper">
+        <div className="order-2 min-w-0 lg:col-start-2 lg:row-start-1">
+          {view === 'PAPER' ? (
+            <PaperReview
+              diffUnits={workspace.diffUnits}
+              clauses={document.clauses}
+              selectedId={selected?.id ?? null}
+              markup={markup}
+              onSelect={(unit) => chooseUnit(unit)}
+            />
+          ) : (
+          <section className="min-w-0 overflow-hidden rounded-sm border hairline bg-paper">
           <header className="sticky top-0 z-10 grid grid-cols-2 border-b hairline bg-paper/95 backdrop-blur-md">
             <div className="border-r hairline p-4">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-warn">
@@ -706,42 +746,16 @@ export function EmailReviewWorkspace({
               </div>
             ))}
           </div>
-        </section>
-        )}
+          </section>
+          )}
+        </div>
 
-        <aside className="rounded-sm border hairline bg-paper lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
-          <nav
-            aria-label="Selected-change tools"
-            className="sticky top-0 z-10 grid grid-cols-4 border-b hairline bg-paper/95 p-2 backdrop-blur-md"
-          >
-            {(
-              [
-                ['EVIDENCE', 'Evidence'],
-                ['AI', 'Ask AI'],
-                ['PROPOSE', testMode ? 'Practice' : 'Propose'],
-                [
-                  'REVIEW',
-                  testMode
-                    ? 'Practice'
-                    : canManageAi
-                      ? `Review ${workspace.proposals.filter((p) => p.status === 'SUBMITTED').length}`
-                      : 'Status',
-                ],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setTab(id)}
-                aria-pressed={tab === id}
-                className={`min-h-10 rounded-sm px-1 text-[9px] font-bold ${
-                  tab === id ? 'bg-orange/12 text-orange' : 'text-muted'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </nav>
+        <aside
+          className={`order-1 rounded-sm border hairline bg-paper lg:sticky lg:top-24 lg:col-start-1 lg:row-start-1 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto ${
+            tab === 'CHANGES' ? 'hidden' : ''
+          }`}
+        >
+          {renderToolTabs()}
 
           <div className="p-4">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
@@ -806,7 +820,7 @@ export function EmailReviewWorkspace({
                       type="button"
                       onClick={() => setAiScope(scope)}
                       aria-pressed={aiScope === scope}
-                      className={`min-h-10 rounded-sm border px-2 text-[10px] font-bold ${
+                      className={`min-h-11 rounded-sm border px-2 text-[10px] font-bold ${
                         aiScope === scope
                           ? 'border-blue-300/35 bg-blue-300/10 text-blue-200'
                           : 'hairline text-muted'
