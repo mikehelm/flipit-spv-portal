@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Email-review unified tool rail | Codex `/root` | 2026-07-27 15:00 UTC | `src/components/email-review-workspace.tsx`; `src/components/email-review/paper-review.tsx`; `src/components/email-review/paper.module.css`; focused email-review layout tests; `PROGRESS.md` |
 
 ## Done, so nobody starts it again
 
