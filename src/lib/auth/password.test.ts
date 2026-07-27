@@ -9,7 +9,8 @@ import {
 } from './password'
 
 /**
- * BUILD_SPEC §2.2 — minimum 12, a common-password list, no composition rules.
+ * The owner explicitly chose a three-character local minimum, while retaining
+ * the common-password, identity and memory-hard hashing protections.
  *
  * §2.2 names Argon2id. This uses scrypt from Node's own crypto module, for
  * deployment reasons recorded in PROGRESS.md and agreed with the owner. The
@@ -23,7 +24,7 @@ describe('checkPassword', () => {
   })
 
   it('rejects anything under the minimum', () => {
-    const result = checkPassword('short1234')
+    const result = checkPassword('ab')
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.problems).toContain('TOO_SHORT')
   })
@@ -31,7 +32,8 @@ describe('checkPassword', () => {
   it('has no composition rules — length beats symbols', () => {
     // All lowercase, no digits, no punctuation. Long enough, so it passes.
     expect(checkPassword('bicyclelanternquiet')).toEqual({ ok: true })
-    expect(MIN_PASSWORD_LENGTH).toBeGreaterThanOrEqual(12)
+    expect(MIN_PASSWORD_LENGTH).toBe(3)
+    expect(checkPassword('z7!q')).toEqual({ ok: true })
   })
 
   it('rejects well-known passwords even when they are long enough', () => {
@@ -49,7 +51,7 @@ describe('checkPassword', () => {
   })
 
   it('explains what to do rather than just refusing', () => {
-    const result = checkPassword('abc')
+    const result = checkPassword('ab')
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.message.length).toBeGreaterThan(30)
   })

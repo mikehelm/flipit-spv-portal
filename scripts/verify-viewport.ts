@@ -797,6 +797,7 @@ async function main(): Promise<void> {
       ['landing', '/'],
       ['verification', '/verify'],
       ['privacy', '/privacy'],
+      ['access request', '/access-request'],
       ['admin sign-in', '/signin'],
       ['portal sign-in', '/portal/signin'],
       ['link not valid', '/portal/link-not-valid'],
@@ -858,6 +859,7 @@ async function main(): Promise<void> {
      */
     for (const [label, path, status, mustShow] of [
       ['overview', '/admin'],
+      ['access-request queue', '/access-requests'],
       ['review and send', '/recipients', 200, /Alexandra Fenwick-Harrington/],
       ['investors', '/investors', 200, /Alexandra Fenwick-Harrington/],
       ['import', '/import'],
@@ -1292,7 +1294,10 @@ async function verifyTheNonce(page: Page): Promise<void> {
   /** Either spelling of "the policy refused an inline script". */
   const refusedInlineScript = (complaint: string): boolean =>
     /CSP refused script-src/.test(complaint) ||
-    /Refused to execute inline script/.test(complaint)
+    /Refused to execute inline script/.test(complaint) ||
+    /Executing inline script violates the following Content Security Policy directive/.test(
+      complaint,
+    )
 
   const ranWithout = await inject(null, '__nonceless_ran')
   check(

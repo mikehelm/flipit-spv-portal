@@ -69,6 +69,38 @@ export const brand = {
   line: 'rgba(255,255,255,.09)',
 } as const
 
+/**
+ * Rendering-only colours for the page curl. They live beside the application
+ * palette so SVG, Canvas and the local Curl Lab share one named source, but
+ * they are not text, surfaces or Tailwind utility colours.
+ */
+export const curlPalette = {
+  face: '#0a0d29',
+  faceHighlight: '#171b47',
+  faceLowlight: '#0d1030',
+  roll: '#050718',
+  undersideDeep: '#3d240d',
+  undersideMid: '#8d5619',
+  underside: '#c9832e',
+  undersideLight: '#e8a548',
+  undersideHighlight: '#f7c076',
+  paperEdge: '#ffdba6',
+  recessDeep: '#03041a',
+  recessMid: '#080a25',
+  recess: '#111433',
+  edgeSoft: '#ffe7be',
+  edgeBright: '#fff4de',
+  grid: '#8c9be1',
+  shadow: '#02030e',
+  pureLight: '#ffffff',
+  pureDark: '#000000',
+  softFaceHighlight: '#252a5f',
+  softUnderside: '#b9742b',
+  selectedFace: '#070a27',
+  selectedFaceHighlight: '#915d2b',
+  selectedRoll: '#bd9651',
+} as const
+
 export type BrandToken = keyof typeof brand
 
 /**

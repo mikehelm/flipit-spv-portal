@@ -18,11 +18,12 @@ import { evaluateAllowlist } from './sign-in-policy'
  * `operator_invites` table, which is already what §15 asks for — a single-use,
  * expiring, hashed admin invite — so no new storage was needed for it.
  *
- * Redeeming a link spends it and establishes a session. That session can reach
- * exactly one page — "choose a password" — because `requirePasswordSet` in
+ * Redeeming a link establishes a session but does not spend the link yet. That
+ * session can reach exactly one page — "choose a password" — because `requirePasswordSet` in
  * lib/auth/guards.ts sends an account with no verifier there and nowhere else.
- * Choosing a password then ends every session including that one, so a spent
- * bearer token is not what anybody is still relying on a minute later.
+ * The link is spent only after a valid password has actually been stored.
+ * Reloading, using the wrong local hostname, or correcting a rejected password
+ * therefore cannot strand the account halfway through setup.
  *
  * The same route redeems an operator invitation (§3 step 3). Both are rows in
  * `operator_invites`, both are single-use hashed tokens, and both have to work
@@ -115,10 +116,9 @@ export type RedeemResult =
 /**
  * Redeems a setup link and establishes a session.
  *
- * Single use is enforced by the conditional update, not by the read above it,
- * so two simultaneous redemptions cannot both succeed. The caller gets a bare
- * `false` on any failure — an expired link and an invented one look the same
- * from outside.
+ * The caller gets a bare `false` on any failure — an expired link and an
+ * invented one look the same from outside. A valid unspent link may be opened
+ * repeatedly until the account has successfully chosen its first password.
  */
 export async function redeemAdminSetupLink(rawToken: string): Promise<RedeemResult> {
   const token = rawToken.trim()
@@ -135,6 +135,7 @@ export async function redeemAdminSetupLink(rawToken: string): Promise<RedeemResu
 
   const user = await db.query.users.findFirst({ where: eq(users.email, decision.email) })
   if (!user) return { ok: false }
+  if (user.passwordHash !== null) return { ok: false }
 
   // Reuse the invite rules exactly: revoked, used and expired all refuse.
   const assessment = assessInvite({
@@ -154,20 +155,6 @@ export async function redeemAdminSetupLink(rawToken: string): Promise<RedeemResu
     return { ok: false }
   }
 
-  const [claimed] = await db
-    .update(operatorInvites)
-    .set({ usedAt: new Date(), acceptedById: user.id })
-    .where(
-      and(
-        eq(operatorInvites.id, invite.id),
-        isNull(operatorInvites.usedAt),
-        isNull(operatorInvites.revokedAt),
-      ),
-    )
-    .returning()
-
-  if (!claimed) return { ok: false }
-
   await createAdminSession(user.id)
 
   await audit({
@@ -179,4 +166,22 @@ export async function redeemAdminSetupLink(rawToken: string): Promise<RedeemResu
   })
 
   return { ok: true, userId: user.id, email: user.email }
+}
+
+/**
+ * Spend every live setup link only after the first password is safely stored.
+ * The password itself never reaches this function.
+ */
+export async function completeAdminSetup(userId: string, email: string): Promise<void> {
+  const now = new Date()
+  await db
+    .update(operatorInvites)
+    .set({ usedAt: now, acceptedById: userId })
+    .where(
+      and(
+        eq(operatorInvites.email, email),
+        isNull(operatorInvites.usedAt),
+        isNull(operatorInvites.revokedAt),
+      ),
+    )
 }

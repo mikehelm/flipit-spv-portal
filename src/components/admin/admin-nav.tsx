@@ -2,21 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
 import type { AdminRole } from '@/lib/roles'
-
-/**
- * Admin navigation.
- *
- * Owner-only destinations are hidden from the operator here, and refused again
- * on the server by `requireOwner()`. The hiding is manners; the refusal is the
- * access control.
- *
- * Compliance approval (BUILD_SPEC §8.2) is linked here for the OWNER only. The
- * link is not what restricts it: `/compliance` calls `requireOwner()` itself
- * and audits anyone else's attempt before turning them away. It is deliberately
- * absent from the settings page, so that no future change to who reaches
- * settings can hand the approval control to the operator.
- */
 
 interface NavItem {
   href: string
@@ -24,72 +11,261 @@ interface NavItem {
   roles: AdminRole[]
 }
 
-const ITEMS: NavItem[] = [
-  { href: '/admin', label: 'Overview', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
-  { href: '/recipients', label: 'Review and send', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
-  { href: '/investors', label: 'Investors', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
-  { href: '/import', label: 'Import', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/templates', label: 'Email templates', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/round', label: 'The round', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
-  { href: '/updates', label: 'Updates', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
-  { href: '/questions', label: 'Questions', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
-  { href: '/reminders', label: 'Reminders', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/register', label: 'Register', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/compliance', label: 'Compliance', roles: ['OWNER'] },
-  // §8.2 puts the acknowledgement wording under compliance — "approved wording
-  // applied without a code change" — and §8.2's fourth clause keeps compliance
-  // out of the operator's hands. Owner only, for the reason the approval is.
-  { href: '/admin/acknowledgements', label: 'Acknowledgements', roles: ['OWNER'] },
-  // Every role, the read-only one included. A second factor is a property of
-  // the account rather than of what the account may do, and a viewer's session
-  // reaches every investor by name and every amount they hold. The password
-  // page is here for the same reason — it was reachable only by redirect
-  // before, so an administrator who simply wanted to change their password had
-  // nowhere to click.
-  { href: '/admin/security', label: 'Two-factor', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
-  { href: '/admin/password', label: 'Password', roles: ['OWNER', 'OPERATOR', 'VIEWER'] },
-  { href: '/admin/onboarding', label: 'Setup', roles: ['OPERATOR'] },
-  { href: '/admin/invites', label: 'Operator access', roles: ['OWNER'] },
-  { href: '/audit', label: 'Audit log', roles: ['OWNER'] },
-  // Both roles. The operator is the person who would have to act on almost
-  // everything this page reports — a stopped scheduler, a stuck reminder, a mail
-  // credential that expired — so hiding it from him would be hiding it from the
-  // only person likely to look.
-  { href: '/health', label: 'System health', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/admin/roadmap', label: 'Portal tiles', roles: ['OWNER'] },
-  // §13.2 names both roles for the media library. §13.3's video is the
-  // operator's own — the owner sees this entry so he can watch the preview,
-  // and every control that writes on that page refuses him server-side.
-  { href: '/admin/media', label: 'Media', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/admin/video', label: 'Video', roles: ['OWNER', 'OPERATOR'] },
-  { href: '/admin/settings', label: 'Settings', roles: ['OWNER'] },
+interface MenuSection {
+  label?: string
+  items: NavItem[]
+}
+
+interface Menu {
+  id: string
+  label: string
+  sections: MenuSection[]
+}
+
+const OVERVIEW: NavItem = {
+  href: '/admin',
+  label: 'Overview',
+  roles: ['OWNER', 'OPERATOR', 'VIEWER'],
+}
+
+const MENUS: Menu[] = [
+  {
+    id: 'work',
+    label: 'Investor work',
+    sections: [
+      {
+        items: [
+          {
+            href: '/recipients',
+            label: 'Review and send',
+            roles: ['OWNER', 'OPERATOR', 'VIEWER'],
+          },
+          {
+            href: '/investors',
+            label: 'Investors',
+            roles: ['OWNER', 'OPERATOR', 'VIEWER'],
+          },
+          {
+            href: '/access-requests',
+            label: 'Access requests',
+            roles: ['OWNER', 'OPERATOR'],
+          },
+          { href: '/import', label: 'Import', roles: ['OWNER', 'OPERATOR'] },
+          { href: '/register', label: 'Register', roles: ['OWNER', 'OPERATOR'] },
+          {
+            href: '/round',
+            label: 'The round',
+            roles: ['OWNER', 'OPERATOR', 'VIEWER'],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'communication',
+    label: 'Communication',
+    sections: [
+      {
+        items: [
+          {
+            href: '/templates',
+            label: 'Email templates',
+            roles: ['OWNER', 'OPERATOR'],
+          },
+          {
+            href: '/updates',
+            label: 'Updates',
+            roles: ['OWNER', 'OPERATOR', 'VIEWER'],
+          },
+          {
+            href: '/questions',
+            label: 'Questions',
+            roles: ['OWNER', 'OPERATOR', 'VIEWER'],
+          },
+          { href: '/reminders', label: 'Reminders', roles: ['OWNER', 'OPERATOR'] },
+          {
+            href: '/admin/media',
+            label: 'Media library',
+            roles: ['OWNER', 'OPERATOR'],
+          },
+          {
+            href: '/admin/video',
+            label: 'Personal video',
+            roles: ['OWNER', 'OPERATOR'],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'manage',
+    label: 'Manage',
+    sections: [
+      {
+        label: 'Account and system',
+        items: [
+          {
+            href: '/admin/security',
+            label: 'Two-factor security',
+            roles: ['OWNER', 'OPERATOR', 'VIEWER'],
+          },
+          {
+            href: '/admin/password',
+            label: 'Password',
+            roles: ['OWNER', 'OPERATOR', 'VIEWER'],
+          },
+          { href: '/health', label: 'System health', roles: ['OWNER', 'OPERATOR'] },
+        ],
+      },
+      {
+        label: 'Just for Mike',
+        items: [
+          { href: '/compliance', label: 'Compliance approvals', roles: ['OWNER'] },
+          {
+            href: '/admin/acknowledgements',
+            label: 'Acknowledgement wording',
+            roles: ['OWNER'],
+          },
+          { href: '/admin/invites', label: 'David’s access', roles: ['OWNER'] },
+          { href: '/audit', label: 'Audit log', roles: ['OWNER'] },
+          { href: '/admin/roadmap', label: 'Portal tiles', roles: ['OWNER'] },
+          { href: '/admin/settings', label: 'Settings', roles: ['OWNER'] },
+        ],
+      },
+      {
+        label: 'Just for David',
+        items: [{ href: '/admin/onboarding', label: 'My setup', roles: ['OPERATOR'] }],
+      },
+    ],
+  },
 ]
+
+function isActive(pathname: string, href: string): boolean {
+  return pathname === href || (href !== '/admin' && pathname.startsWith(`${href}/`))
+}
 
 export function AdminNav({ role }: { role: AdminRole }) {
   const pathname = usePathname()
-  const items = ITEMS.filter((item) => item.roles.includes(role))
+  const navRef = useRef<HTMLElement>(null)
+  const [opened, setOpened] = useState<{ id: string; pathname: string } | null>(null)
+  const openMenu = opened?.pathname === pathname ? opened.id : null
+
+  const menus = MENUS.map((menu) => ({
+    ...menu,
+    sections: menu.sections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => item.roles.includes(role)),
+      }))
+      .filter((section) => section.items.length > 0),
+  })).filter((menu) => menu.sections.length > 0)
+
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (!navRef.current?.contains(event.target as Node)) setOpened(null)
+    }
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpened(null)
+    }
+
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeWithEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeWithEscape)
+    }
+  }, [])
 
   return (
-    <nav aria-label="Admin sections" className="-mx-1 overflow-x-auto">
-      <ul className="flex min-w-max gap-1 px-1">
-        {items.map((item) => {
-          const active =
-            pathname === item.href ||
-            (item.href !== '/admin' && pathname.startsWith(`${item.href}/`))
+    <nav ref={navRef} aria-label="Admin sections">
+      <ul className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <li>
+          <Link
+            href={OVERVIEW.href}
+            aria-current={isActive(pathname, OVERVIEW.href) ? 'page' : undefined}
+            onClick={() => setOpened(null)}
+            className={`flex min-h-11 items-center justify-center rounded-sm border px-4 text-sm font-semibold transition-colors ${
+              isActive(pathname, OVERVIEW.href)
+                ? 'border-orange/40 bg-orange/12 text-orange'
+                : 'hairline bg-bg2 text-dim hover:border-orange/40 hover:text-ftext'
+            }`}
+          >
+            Overview
+          </Link>
+        </li>
+
+        {menus.map((menu, index) => {
+          const items = menu.sections.flatMap((section) => section.items)
+          const active = items.some((item) => isActive(pathname, item.href))
+          const open = openMenu === menu.id
+          const alignRight = index === menus.length - 1
 
           return (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                aria-current={active ? 'page' : undefined}
-                className={`inline-flex min-h-11 items-center rounded-sm px-3 text-sm font-medium transition-colors ${
-                  active
-                    ? 'bg-orange/12 text-orange'
-                    : 'text-dim hover:text-ftext'
+            <li key={menu.id} className="relative">
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={`admin-menu-${menu.id}`}
+                onClick={() =>
+                  setOpened(open ? null : { id: menu.id, pathname })
+                }
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-sm border px-4 text-sm font-semibold transition-colors sm:w-auto ${
+                  active || open
+                    ? 'border-orange/40 bg-orange/12 text-orange'
+                    : 'hairline bg-bg2 text-dim hover:border-orange/40 hover:text-ftext'
                 }`}
               >
-                {item.label}
-              </Link>
+                {menu.label}
+                <span
+                  aria-hidden="true"
+                  className={`text-[9px] transition-transform ${open ? 'rotate-180' : ''}`}
+                >
+                  ▼
+                </span>
+              </button>
+
+              {open ? (
+                <div
+                  id={`admin-menu-${menu.id}`}
+                  className={`absolute top-[calc(100%+0.45rem)] z-30 w-[min(22rem,calc(100vw-2rem))] rounded-sm border hairline bg-bg2/98 p-3 shadow-2xl backdrop-blur-md ${
+                    alignRight ? 'right-0' : 'left-0'
+                  }`}
+                >
+                  {menu.sections.map((section, sectionIndex) => (
+                    <section
+                      key={section.label ?? `${menu.id}-${sectionIndex}`}
+                      className={sectionIndex > 0 ? 'mt-3 border-t hairline pt-3' : ''}
+                    >
+                      {section.label ? (
+                        <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-orange">
+                          {section.label}
+                        </p>
+                      ) : null}
+                      <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                        {section.items.map((item) => {
+                          const itemActive = isActive(pathname, item.href)
+                          return (
+                            <li key={item.href}>
+                              <Link
+                                href={item.href}
+                                aria-current={itemActive ? 'page' : undefined}
+                                onClick={() => setOpened(null)}
+                                className={`flex min-h-11 items-center rounded-sm px-3 text-sm transition-colors ${
+                                  itemActive
+                                    ? 'bg-orange/12 font-semibold text-orange'
+                                    : 'text-dim hover:bg-white/5 hover:text-ftext'
+                                }`}
+                              >
+                                {item.label}
+                              </Link>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </section>
+                  ))}
+                </div>
+              ) : null}
             </li>
           )
         })}

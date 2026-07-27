@@ -6,7 +6,9 @@ import {
   updateSenderDefaultsAction,
   updateServiceSettingsAction,
 } from '@/actions/settings'
+import { connectOwnerSendingAccountAction } from '@/actions/mail-connection'
 import { ActionForm } from '@/components/admin/action-form'
+import { MailConnectionPanel } from '@/components/admin/mail-connection-panel'
 import {
   Card,
   Checkbox,
@@ -21,6 +23,7 @@ import {
 import { requireOwner } from '@/lib/auth/guards'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { maskConfigured } from '@/lib/crypto'
+import { describeMailConnection } from '@/lib/email/transport'
 import { readSpendSummary } from '@/lib/import/persist'
 
 /**
@@ -35,6 +38,7 @@ import { readSpendSummary } from '@/lib/import/persist'
 export default async function SettingsPage() {
   await requireOwner()
   const config = await readServiceConfig()
+  const mailHealth = describeMailConnection(config)
   // §9.1 — usage shown on the settings page, not merely capped.
   const spend = await readSpendSummary()
 
@@ -46,6 +50,41 @@ export default async function SettingsPage() {
       </SectionHeading>
 
       <div className="space-y-4">
+        <MailConnectionPanel health={mailHealth} showDisconnect />
+
+        {mailHealth.state === 'NOT_CONFIGURED' ? (
+          <Card
+            title="Connect the shared Gmail account"
+            description="Owner-only. The Gmail app password is write-only, encrypted before storage, and never shown or logged. Saving performs an authentication check against Gmail but sends no email."
+          >
+            <ActionForm
+              action={connectOwnerSendingAccountAction}
+              submitLabel="Save and test connection"
+            >
+              <Field label="Gmail address" name="smtpUser">
+                <TextInput
+                  name="smtpUser"
+                  type="email"
+                  autoComplete="username"
+                  defaultValue="flipit.spv.portal@gmail.com"
+                />
+              </Field>
+              <Field
+                label="Google App Password"
+                name="smtpPassword"
+                hint="Paste the 16-letter App Password from Google. Spaces are removed automatically. Do not use the normal Gmail password."
+              >
+                <TextInput
+                  name="smtpPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="•••• •••• •••• ••••"
+                />
+              </Field>
+            </ActionForm>
+          </Card>
+        ) : null}
+
         {/* -------------------------------------------------------------- */}
         <Card
           title="Service mode and portal behaviour"

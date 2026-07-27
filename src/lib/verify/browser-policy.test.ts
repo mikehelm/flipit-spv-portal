@@ -180,12 +180,11 @@ describe('Content-Security-Policy', () => {
     expect(middlewareSource).toContain('nextUrl.pathname')
   })
 
-  it('never allows unsafe-eval, in either build', () => {
-    // Next's development server evaluates code to hot-reload. Allowing it in
-    // production would undo most of the policy's value, and the word appears
-    // in neither branch of the module — only in the comment saying why.
-    expect(withoutComments(policySource)).not.toContain('unsafe-eval')
-    expect(contentSecurityPolicy({ nonce: NONCE, development: true })).not.toContain('unsafe-eval')
+  it('allows eval only in the development policy', () => {
+    expect(policy).not.toContain('unsafe-eval')
+    expect(contentSecurityPolicy({ nonce: NONCE, development: true })).toContain(
+      "'unsafe-eval'",
+    )
   })
 
   // -------------------------------------------------------------------------
@@ -245,6 +244,12 @@ describe('Content-Security-Policy', () => {
     expect(policy).not.toContain('script-src-elem')
     expect(contentSecurityPolicy({ nonce: NONCE, development: true })).toContain(
       "script-src-elem 'self' 'unsafe-inline'",
+    )
+    expect(contentSecurityPolicy({ nonce: NONCE, development: true })).toContain(
+      "style-src 'self' 'unsafe-inline'",
+    )
+    expect(contentSecurityPolicy({ nonce: NONCE, development: true })).toContain(
+      "connect-src 'self' ws: wss:",
     )
   })
 

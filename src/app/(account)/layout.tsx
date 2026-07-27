@@ -50,7 +50,7 @@ export default async function AccountLayout({
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div className="min-w-0">
               <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-orange">
-                <PageCurl size={16} />
+                <PageCurl size={30} className="drop-shadow-[0_5px_10px_rgba(0,0,0,0.55)]" />
                 Flipit Global SPV
               </p>
               <p className="mt-1 text-sm break-words text-dim">

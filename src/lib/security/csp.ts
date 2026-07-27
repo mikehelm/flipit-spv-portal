@@ -168,6 +168,15 @@ export function contentSecurityPolicy({
   development = false,
 }: CspOptions): string {
   const may = (capability: CspCapability): boolean => capabilities.includes(capability)
+  const scriptSource = development
+    ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval'`
+    : `script-src 'self' 'nonce-${nonce}'`
+  const styleSource = development
+    ? "style-src 'self' 'unsafe-inline'"
+    : STYLE_SRC
+  const connectSource = development
+    ? "connect-src 'self' ws: wss:"
+    : "connect-src 'self'"
 
   const directives = [
     "default-src 'self'",
@@ -191,8 +200,8 @@ export function contentSecurityPolicy({
      * loads the rest by URL from this origin, which `'self'` already covers.
      * The version without `'strict-dynamic'` is the narrower of the two here.
      */
-    `script-src 'self' 'nonce-${nonce}'`,
-    STYLE_SRC,
+    scriptSource,
+    styleSource,
     /**
      * `data:` only where the two-factor QR is drawn.
      *
@@ -213,7 +222,7 @@ export function contentSecurityPolicy({
     // No `@font-face` anywhere, and no `next/font`. `data:` was here for a font
     // that was never added.
     "font-src 'self'",
-    "connect-src 'self'",
+    connectSource,
     /**
      * `worker-src 'self'`, with no `blob:`.
      *
@@ -235,9 +244,10 @@ export function contentSecurityPolicy({
     "worker-src 'self'",
   ]
 
-  // Next's development server evaluates code to hot-reload. Never in a
-  // production build — `'unsafe-eval'` there would undo most of the value of
-  // the policy, and this branch is the only place the word could appear.
+  // Next's development overlay injects script elements and inline styles in
+  // addition to evaluating its debugging helpers. These allowances exist only
+  // in `next dev`; production retains the nonce-only script policy and the
+  // self-only style policy above.
   if (development) {
     directives.push("script-src-elem 'self' 'unsafe-inline'")
   }

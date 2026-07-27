@@ -4,7 +4,9 @@ import { redirect } from 'next/navigation'
 import { portalSignOutAction, recordResponseAction } from '@/actions/portal'
 import { ActionForm } from '@/components/admin/action-form'
 import { PageCurl } from '@/components/page-curl'
+import { PortalPreviewSwitch } from '@/components/portal-preview-switch'
 import { SiteFooter } from '@/components/site-footer'
+import { requireAdmin } from '@/lib/auth/guards'
 import { canRespond, canView } from '@/lib/portal/access'
 import { flagEnabled, PORTAL_FLAGS, readFeatureFlags } from '@/lib/flags'
 import { CONTACT_COPY, type PortalContact } from '@/lib/portal/contact'
@@ -13,7 +15,8 @@ import {
   OPERATOR_CONTACT_SAFETY,
 } from '@/lib/portal/operator-contact'
 import { noticeCopy } from '@/lib/portal/notices'
-import { loadPortalView, type PortalOffer } from '@/lib/portal/data'
+import { loadPortalView, type PortalOffer, type PortalView } from '@/lib/portal/data'
+import { johnDoeDemoPortalView } from '@/lib/portal/demo'
 import { PAYMENT_SAFETY_NOTICE, type TimelineStep } from '@/lib/portal/timeline'
 import { readInvestorAccount } from '@/lib/portal/session'
 import { loadInvestorQa } from '@/lib/qa/data'
@@ -39,6 +42,7 @@ import { RegisterSection } from './register-section'
 import { DocumentsSection } from './documents-section'
 import { UpdatesSection } from './updates-section'
 import { VideoSection } from './video-section'
+import styles from './premium-effects.module.css'
 
 export const metadata: Metadata = {
   title: 'Your private invitation — Flipit',
@@ -176,7 +180,7 @@ function OfferSection({
 }) {
   return (
     <section className="mt-10">
-      <div className="rounded-sm border hairline bg-paper p-5">
+      <div className={`${styles.surface} rounded-sm border hairline bg-paper p-5`}>
         <h2 className="text-sm font-semibold text-white">Your invitation</h2>
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
           <div>
@@ -280,7 +284,7 @@ function OfferSection({
           Each step below updates as the process moves forward. You will not need to do
           anything until a step asks you to.
         </p>
-        <ol className="mt-5">
+        <ol className={`${styles.timeline} mt-5`}>
           {offer.timeline.map((step) => (
             <Step key={step.stage} step={step} />
           ))}
@@ -288,7 +292,9 @@ function OfferSection({
       </div>
 
       {offer.certificates.length > 0 ? (
-        <section className="mt-8 rounded-sm border hairline bg-paper p-5">
+        <section
+          className={`${styles.surface} ${styles.certificateSurface} mt-8 rounded-sm border hairline p-5`}
+        >
           <h2 className="text-sm font-semibold text-white">Your participation certificate</h2>
           <p className="mt-2 text-xs leading-relaxed text-dim">
             It confirms receipt of your funds and the position recorded for you. It is not a
@@ -299,7 +305,7 @@ function OfferSection({
             {offer.certificates.map((certificate) => (
               <li
                 key={certificate.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-sm border hairline bg-bg2 px-3 py-2.5"
+                className={`${styles.certificateRow} flex flex-wrap items-center justify-between gap-3 rounded-sm border hairline bg-bg2 px-3 py-2.5`}
               >
                 <div className="min-w-0">
                   <p className="text-sm text-ftext">
@@ -338,22 +344,38 @@ function OfferSection({
   )
 }
 
-export default async function PortalPage() {
-  const account = await readInvestorAccount()
-  if (!account) redirect('/portal/signin')
+export async function renderPortalPage(isDemoPreview = false) {
+  let accountId: string
+  let view: PortalView
 
-  const view = await loadPortalView(account.id)
-  if (!view) redirect('/portal/signin')
+  if (isDemoPreview) {
+    // This is the real access boundary. The switch being hidden from a viewer
+    // is only presentation; a guessed or shared URL still reaches this guard.
+    await requireAdmin()
+    view = johnDoeDemoPortalView()
+    accountId = view.accountId
+  } else {
+    const account = await readInvestorAccount()
+    if (!account) redirect('/portal/signin')
+
+    const loaded = await loadPortalView(account.id)
+    if (!loaded) redirect('/portal/signin')
+    view = loaded
+    accountId = account.id
+  }
 
   const notice = view.access.notice
     ? noticeCopy(view.access.notice, { closingDate: view.closingDate })
     : null
-  const qa = canView(view.access) ? await loadInvestorQa(account.id, view.access) : null
-  const register = canView(view.access)
-    ? await loadInvestorRegisterView(account.id, view.access)
+  const qa =
+    !isDemoPreview && canView(view.access)
+      ? await loadInvestorQa(accountId, view.access)
+      : null
+  const register = !isDemoPreview && canView(view.access)
+    ? await loadInvestorRegisterView(accountId, view.access)
     : null
-  const updates = canView(view.access)
-    ? await loadInvestorUpdates(account.id, view.access)
+  const updates = !isDemoPreview && canView(view.access)
+    ? await loadInvestorUpdates(accountId, view.access)
     : null
 
   // §13.3. The section exists only when there is a published video: no
@@ -373,16 +395,19 @@ export default async function PortalPage() {
   // through this account's own offers, so another investor's document is never
   // selected rather than being fetched and filtered out. §7 keeps these
   // readable in `read_only` and `sunset`, which `canView` already allows.
-  const documents = canView(view.access) ? await investorDocuments(account.id) : []
+  const documents =
+    !isDemoPreview && canView(view.access) ? await investorDocuments(accountId) : []
 
   // §13. Keyed on this account, so there is no pending request here but their
   // own — and nothing is loaded at all for a reader who cannot see their record.
-  const pending = canView(view.access) ? await pendingEmailChange(account.id) : null
+  const pending =
+    !isDemoPreview && canView(view.access) ? await pendingEmailChange(accountId) : null
 
   // §13, §8.2. The configured wording, and what this investor has already
   // ticked so the form comes back as they left it. Both are keyed on their own
   // offers; the wording is global and belongs to nobody.
-  const acknowledgements = canRespond(view.access) ? await activeAcknowledgementItems() : []
+  const acknowledgements =
+    !isDemoPreview && canRespond(view.access) ? await activeAcknowledgementItems() : []
   const tickedByOffer = new Map<string, Set<string>>()
   if (acknowledgements.length > 0) {
     for (const offer of view.offers) {
@@ -392,7 +417,42 @@ export default async function PortalPage() {
 
   return (
     <>
+      <aside className="mx-auto mt-4 flex w-[min(42rem,calc(100%-2rem))] flex-wrap items-center justify-between gap-3 rounded-sm border hairline bg-panel/95 px-4 py-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ftext">{view.name}</p>
+          <p className="truncate text-xs text-dim">
+            {view.email} · {isDemoPreview ? 'Demo investor' : 'Investor'}
+          </p>
+        </div>
+        {isDemoPreview ? (
+          <Link
+            href="/admin"
+            className="inline-flex min-h-11 items-center justify-center rounded-sm border border-orange/35 bg-orange/10 px-3 text-xs font-semibold text-orange"
+          >
+            Exit preview
+          </Link>
+        ) : (
+          <form action={portalSignOutAction}>
+            <button
+              type="submit"
+              className="inline-flex min-h-11 items-center justify-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
+            >
+              Sign out
+            </button>
+          </form>
+        )}
+      </aside>
+
+      {isDemoPreview ? <PortalPreviewSwitch mode="INVESTOR" /> : null}
+
       <main id="main" className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
+        {isDemoPreview ? (
+          <p className="mb-6 rounded-sm border border-orange/25 bg-orange/6 p-3 text-xs leading-relaxed text-silver2">
+            Private demo for Mike and David. John Doe is synthetic, nothing is saved,
+            and no email can be sent.
+          </p>
+        ) : null}
+
         <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-orange">
           <PageCurl size={18} />
           Private Flipit Investment Invitation
@@ -425,7 +485,7 @@ export default async function PortalPage() {
               <OfferSection
                 key={offer.offerId}
                 offer={offer}
-                allowResponse={canRespond(view.access)}
+                allowResponse={!isDemoPreview && canRespond(view.access)}
                 acknowledgements={acknowledgements}
                 ticked={tickedByOffer.get(offer.offerId) ?? new Set()}
               />
@@ -454,7 +514,7 @@ export default async function PortalPage() {
           <EmailSection
             currentEmail={view.email}
             pending={pending}
-            canChange={view.access.capability === 'FULL'}
+            canChange={!isDemoPreview && view.access.capability === 'FULL'}
           />
         ) : null}
 
@@ -492,14 +552,11 @@ export default async function PortalPage() {
         ) : null}
 
         <div className="mt-12 border-t hairline pt-6">
-          <form action={portalSignOutAction}>
-            <button
-              type="submit"
-              className="inline-flex min-h-11 items-center text-sm font-semibold text-dim underline underline-offset-2"
-            >
-              Sign out
-            </button>
-          </form>
+          {isDemoPreview ? (
+            <p className="text-sm font-semibold text-orange">
+              Demo preview — no investor session has been created.
+            </p>
+          ) : null}
 
           <p className="mt-6 text-xs leading-relaxed text-muted">
             This portal displays your own record only. Nothing shown here is an offer to the
@@ -551,4 +608,8 @@ export default async function PortalPage() {
       <SiteFooter surface="PORTAL" />
     </>
   )
+}
+
+export default async function PortalPage() {
+  return renderPortalPage()
 }

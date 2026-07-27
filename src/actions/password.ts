@@ -1,9 +1,13 @@
 'use server'
 
+import { eq } from 'drizzle-orm'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { actionError, type ActionState } from '@/components/admin/action-state'
+import { db } from '@/db'
+import { users } from '@/db/schema'
 import { audit } from '@/lib/audit'
+import { completeAdminSetup } from '@/lib/auth/bootstrap'
 import { drizzleCredentialStore } from '@/lib/auth/credential-store'
 import { requireOwnAccount } from '@/lib/auth/guards'
 import { setAdminPassword } from '@/lib/auth/set-password'
@@ -38,6 +42,7 @@ const schema = z.object({
   currentPassword: z.string().max(200).optional(),
   newPassword: z.string().min(1, 'Choose a password.').max(200),
   confirmation: z.string().min(1, 'Type the password a second time.').max(200),
+  passwordHint: z.string().trim().max(160, 'Keep the reminder under 160 characters.'),
 })
 
 async function apply(
@@ -50,12 +55,23 @@ async function apply(
     currentPassword: formData.get('currentPassword') ?? undefined,
     newPassword: formData.get('newPassword') ?? '',
     confirmation: formData.get('confirmation') ?? '',
+    passwordHint: formData.get('passwordHint') ?? '',
   })
 
   if (!parsed.success) {
     return actionError(
       parsed.error.issues[0]?.message ?? 'That form could not be read. Nothing was changed.',
     )
+  }
+
+  const hint = parsed.data.passwordHint
+  if (
+    hint !== '' &&
+    hint.toLocaleLowerCase().includes(parsed.data.newPassword.toLocaleLowerCase())
+  ) {
+    return actionError('The reminder must not contain the password itself.', {
+      passwordHint: 'Write a clue, not the password.',
+    })
   }
 
   const result = await setAdminPassword(
@@ -80,6 +96,15 @@ async function apply(
     })
     return actionError(result.message)
   }
+
+  if (!expectCurrent) {
+    await completeAdminSetup(admin.id, admin.email)
+  }
+
+  await db
+    .update(users)
+    .set({ passwordHint: hint === '' ? null : hint })
+    .where(eq(users.id, admin.id))
 
   await audit({
     actor: { kind: 'user', id: admin.id, label: admin.email },
@@ -108,4 +133,3 @@ export async function changePasswordAction(
 ): Promise<ActionState> {
   return apply(formData, true)
 }
-

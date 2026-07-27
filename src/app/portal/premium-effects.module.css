@@ -1,0 +1,193 @@
+.surface {
+  --edge: rgba(245, 154, 35, 0.26);
+  --rim: rgba(255, 184, 77, 0.16);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  box-shadow:
+    0 24px 60px -48px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  transition:
+    border-color 420ms var(--ease),
+    box-shadow 420ms var(--ease);
+}
+
+.surface::before,
+.surface::after {
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+}
+
+.surface::before {
+  inset: 0;
+  background:
+    linear-gradient(110deg, transparent 18%, var(--rim) 49%, transparent 80%)
+      top left / 180% 1px no-repeat,
+    radial-gradient(
+      30rem 18rem at 106% -18%,
+      rgba(245, 154, 35, 0.07),
+      transparent 64%
+    );
+  opacity: 0.72;
+  transform: translateX(-24%);
+  transition:
+    opacity 420ms var(--ease),
+    transform 700ms var(--ease);
+}
+
+.surface::after {
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.018),
+    transparent 34%,
+    rgba(245, 154, 35, 0.018)
+  );
+}
+
+.surface:hover,
+.surface:focus-within {
+  border-color: var(--edge);
+  box-shadow:
+    0 30px 70px -48px rgba(0, 0, 0, 0.56),
+    0 0 0 1px rgba(245, 154, 35, 0.035),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.surface:hover::before,
+.surface:focus-within::before {
+  opacity: 1;
+  transform: translateX(18%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .timeline > li {
+    animation: step-settle 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .timeline > li:nth-child(2) {
+    animation-delay: 35ms;
+  }
+
+  .timeline > li:nth-child(3) {
+    animation-delay: 70ms;
+  }
+
+  .timeline > li:nth-child(4) {
+    animation-delay: 105ms;
+  }
+
+  .timeline > li:nth-child(5) {
+    animation-delay: 140ms;
+  }
+
+  .timeline > li:nth-child(6) {
+    animation-delay: 175ms;
+  }
+
+  .timeline > li:nth-child(7) {
+    animation-delay: 210ms;
+  }
+
+  .timeline > li:nth-child(8) {
+    animation-delay: 245ms;
+  }
+}
+
+@keyframes step-settle {
+  from {
+    opacity: 0.54;
+    transform: translateY(7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.certificateSurface {
+  background:
+    radial-gradient(
+      28rem 16rem at 104% -12%,
+      rgba(245, 154, 35, 0.065),
+      transparent 68%
+    ),
+    var(--color-paper);
+}
+
+.certificateSurface::before {
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      118deg,
+      transparent 0 13px,
+      rgba(203, 209, 222, 0.035) 13px 14px,
+      transparent 14px 29px
+    ),
+    repeating-linear-gradient(
+      62deg,
+      transparent 0 19px,
+      rgba(245, 154, 35, 0.025) 19px 20px,
+      transparent 20px 41px
+    );
+  -webkit-mask-image: radial-gradient(ellipse at 94% 12%, #000 0 14%, transparent 66%);
+  mask-image: radial-gradient(ellipse at 94% 12%, #000 0 14%, transparent 66%);
+  opacity: 0.8;
+  transform: none;
+}
+
+.certificateSurface::after {
+  inset: -45% -60%;
+  z-index: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 43%,
+    rgba(203, 209, 222, 0.045) 48%,
+    rgba(255, 184, 77, 0.09) 50%,
+    rgba(203, 209, 222, 0.035) 52%,
+    transparent 57%
+  );
+  opacity: 0;
+  transform: translateX(-42%);
+  transition:
+    opacity 240ms ease,
+    transform 760ms var(--ease);
+}
+
+.certificateSurface:hover::after,
+.certificateSurface:focus-within::after {
+  opacity: 0.72;
+  transform: translateX(42%);
+}
+
+.certificateSurface > * {
+  position: relative;
+  z-index: 1;
+}
+
+.certificateRow {
+  transition:
+    border-color 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.certificateRow:hover,
+.certificateRow:focus-within {
+  border-color: rgba(245, 154, 35, 0.24);
+  background-color: rgba(13, 15, 46, 0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .surface,
+  .surface::before,
+  .surface::after,
+  .certificateRow {
+    transform: none !important;
+  }
+}

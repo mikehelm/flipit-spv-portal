@@ -51,7 +51,10 @@ function scryptAsync(
  * people towards `Password1!` and buy nothing.
  */
 
-export const MIN_PASSWORD_LENGTH = 12
+// The owner has explicitly chosen a short-password convenience trade-off for
+// this private portal, including the three-character local password he named.
+// Empty, one-character and two-character submissions are still refused.
+export const MIN_PASSWORD_LENGTH = 3
 
 /**
  * An upper bound so a very long submission cannot be used to make the server do
