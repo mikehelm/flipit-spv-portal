@@ -5722,6 +5722,83 @@ and it restores a limit the middleware had lowered rather than raising one.
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
 
+## David can review the email without inheriting an invented rationale
+
+**Built.**
+
+- `/admin/email-review` is a private owner/operator workspace containing David
+  Serene's preserved original email and the canonical current
+  `EMAIL_TEMPLATE.txt`, side by side.
+- A 20-row clause guide records the original wording, current wording, reason
+  and evidence for every material change. Its evidence split is **8 SPEC, 6
+  TEST and 6 UNVERIFIED**.
+- Every unsupported explanation is stated as **"Reason not recorded
+  anywhere."** The interface warns that unknown means unknown and never turns a
+  plausible explanation into history.
+- David or Mike can ask about the whole document or jump from one selected
+  clause into an AI question. The AI boundary uses
+  **OpenAI GPT-5.6 Sol (`gpt-5.6-sol`)**, high reasoning, response storage
+  disabled, no tools, and instructions that forbid invented rationale, changed
+  figures or legal advice.
+- The reusable client component receives the private texts only after the
+  server page has repeated the administrator guard. Investor-facing routes do
+  not import, render or link the material. Navigation exposes the page only to
+  owners and operators.
+- The viewport verifier now visits the new authenticated page and requires the
+  visible "Unknown means unknown" warning.
+
+**Decisions.**
+
+- The historical comparison is deterministic application data, not AI output.
+  AI explains the evidence on request; it does not decide what changed.
+- The selected-clause mode sends only that clause's original wording, current
+  wording and recorded evidence. Whole-document mode sends both complete
+  emails and all recorded clause evidence.
+- Questions and answers are not stored by the portal. The audit record contains
+  the model, scope, selected clause identifier and token counts, but not the
+  question or answer.
+- The model is fixed for this workspace instead of inheriting the import
+  helper's configured model, so the version displayed to David is the version
+  actually called.
+
+**Deviations.** The live OpenAI call was not exercised because this disposable
+verification environment has no OpenAI key. The full comparison and clause
+guide remain available without one, and the AI panel gives Mike a direct route
+to Settings.
+
+**Checklist.**
+
+1. *Does an investor-facing surface reveal another investor?* No. The page and
+   action both repeat the administrator guard, and the viewer role is excluded
+   from navigation.
+2. *Was missing legal reasoning reconstructed?* No. Six rows remain explicitly
+   UNVERIFIED.
+3. *Can the AI change a figure or source document?* No. It has no tools and
+   returns display-only text.
+4. *Is private question text written to the audit log?* No.
+5. *Is the canonical template preserved?* Yes. The source constant matches
+   `EMAIL_TEMPLATE.txt` byte-for-byte including its canonical SHA-256.
+6. *Can the page be indexed?* No. It inherits the private administrator
+   boundary and emits no-index metadata.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2494) and `pnpm build` are green.
+`pnpm verify:viewport` is 385 of 385. A production-mode browser pass opened the
+comparison, expanded an UNVERIFIED clause, selected it for AI review and
+reported no console or page errors.
+
+**Uncertain.**
+
+- A live answer remains unverified until Mike configures an OpenAI key.
+- The copied original email has not been cross-checked character-for-character
+  against Gmail in this build. Its preserved source receipt remains the
+  authority available to the repository.
+- The missing historical rationale was never recovered. The six UNVERIFIED
+  rows are the precise confirmation queue; they must not be silently reduced.
+- This evidence workspace is not legal advice. Counsel or the compliance
+  approver still needs to confirm any legal conclusion David wants to rely on.
+- Email-review AI usage records token counts but is not yet part of the import
+  helper's monthly usage summary because that schema is tied to import jobs.
+
 ## The canonical release candidate, without borrowing the unfinished curl
 
 **Built.**
