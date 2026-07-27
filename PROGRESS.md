@@ -7255,3 +7255,184 @@ brings a screen up to the standard every other screen already met.
 - SMTP remains a separate launch prerequisite. David can now review wording
   before it is connected, but no real invitation should be enabled until the
   sending account, test invitation and exact-hash approval have all passed.
+
+## 2026-07-27 — Paper review: the two letters as marked-up pages
+
+**Built.**
+
+- `/admin/email-review` opens on a new **Paper review** mode. A segmented switch
+  at the top of the workspace chooses between it and the **Technical view**,
+  which is the previous dark comparison, unchanged and still one click away.
+- Each email is a white sheet with black ink: warm paper stock, a restrained
+  edge/shadow treatment, a serif measure, and a dark "desk" trough that sets both
+  sheets clearly apart from the change map on the left and the tools on the
+  right. The whole spread is one CSS grid — each paired change is one row, and
+  the two sheets are grid items spanning every row behind the text — so the two
+  sides stay level with each other with no synchronising JavaScript.
+- A **Markup on/off** switch sits beside the view switch. Off gives two clean
+  pages with every diff mark hidden; selection, hover, focus and the explanation
+  balloon all keep working, and the selected passage keeps a plain graphite
+  margin bracket so the interaction is still legible.
+- The marks are a reviewer's pencil, not a software diff: a graphite underline
+  under wording that arrived, a strike through wording that left, a restrained
+  open loop around a rewritten passage, a wobbling rule down the margin beside
+  every marked paragraph with a small insert/delete/revise proof mark, and a
+  dashed stroke across the gutter tying the selected pair together. Every stroke
+  is an SVG path built by arithmetic in `src/components/email-review/markup.ts`;
+  there are no images and no new packages.
+- Marks are word-level. `markPassage()` aligns the two sides of a paired change
+  by longest common subsequence over words, so the strike lands on *Hong Kong*
+  and the underline on *Global Limited* rather than on the whole paragraph.
+  Beyond 400 words a side it marks the passage whole, which is what the eye
+  wants at that length anyway.
+- Hover, keyboard focus or a click on a passage opens an explanation balloon
+  carrying the clause title, the Added/Removed/Changed status, and the recorded
+  reason and evidence. Clicking pins it; Escape closes a pinned one. It is
+  rendered through a portal into `document.body`, because the spread is an
+  overflow box and an in-flow balloon would be clipped by exactly the passages a
+  reviewer reads at large text sizes.
+- Selecting either side still selects the pair, still scrolls the change map's
+  target into view, and still drives the Evidence, Ask AI, Propose and Review
+  tools. David's proposal flow and Mike's review/promote flow are untouched.
+
+**Decisions.**
+
+- **The balloon may not invent a reason.** The rationale record stores the
+  literal sentence "Reason not recorded anywhere." for six clauses; rendering
+  that into a box headed "Recorded reason" would present all six as explained.
+  `recordedText()` turns the placeholder back into an absence, and the balloon
+  says *Unknown means unknown* with an UNVERIFIED chip instead. A passage with no
+  recorded clause at all is treated as unverified rather than as explained.
+- **The pencil wobble is seeded, not random.** A path from `Math.random()`
+  renders differently on the server and in the browser — a hydration mismatch —
+  and it would move a reviewer's marks between visits. Every stroke is derived
+  from the change id through an FNV-1a seed.
+- **The paper keeps its own colour variables**, scoped under `.root` in
+  `src/components/email-review/paper.module.css`. `globals.css` is the palette
+  contract that `palette.test.ts` reads token by token, and it describes a dark
+  portal; pushing six light-mode values into it to make one screen white would
+  put them in front of every other screen too.
+- Column minimums are in `ch`, not pixels, so the spread only begins to scroll
+  sideways once the text is genuinely too large for two readable measures. At the
+  project's 1.5× default it does not scroll at ordinary desktop widths.
+- Motion is gated behind `prefers-reduced-motion: no-preference`, and
+  `chooseUnit()` now reads the same preference in JavaScript — the `!important`
+  rule in `globals.css` cannot reach a `scrollIntoView({behavior: 'smooth'})`.
+
+**Verified.**
+
+1. *Is the technical view still available and unchanged?* Yes. It is the second
+   segment, and its markup is the previous block verbatim inside a conditional.
+2. *Does markup-off hide every diff mark?* Yes. `[data-markup="off"]` removes
+   the SVG marks and the underline/strike decorations. The gutter tie is drawn
+   only for the selected pair in both modes, so it is a selection cue rather
+   than a diff mark.
+3. *Can the balloon show a reason that was never recorded?* No — asserted for
+   every UNVERIFIED clause in the real record, in
+   `src/components/email-review/markup.test.ts`.
+4. *Do the pencil marks point at the right words?* Asserted, including that the
+   aligner loses and duplicates nothing and never strikes across a paragraph
+   break.
+5. *Are the strokes stable between renders?* Asserted.
+6. *Focused verification?* **Not run — see Uncertain.** The sandbox this package
+   was built in refused every command that executes code (`pnpm`, `npx`,
+   `node -e`, the local binaries), so `pnpm typecheck`, focused ESLint and
+   `pnpm vitest run` could not be run here. `git diff --check` passed and is
+   clean. Everything else in this entry is a claim about the source, not about a
+   passing run.
+
+**Uncertain.**
+
+- The required checks have not been run. `pnpm typecheck`, focused ESLint over
+  the changed TS/TSX, and `pnpm vitest run src/lib/email-review
+  src/lib/email/templates/templates.test.ts src/components/email-review` are the
+  exact commands, and they are the first thing to run against this working tree.
+- No browser has rendered this yet. The paper spread, the pencil strokes, the
+  balloon's flip-above-when-there-is-no-room behaviour, and the point at which
+  the spread starts to scroll sideways are all geometry, and geometry is checked
+  by looking.
+- `scripts/verify-viewport.ts` expects the phrase *Unknown means unknown* on
+  `/admin/email-review`; at the previous commit nothing on that page contained
+  it, so that assertion was already failing. The paper view's footer now states
+  it plainly — it is the rule this screen actually follows — and the default
+  view is rendered on the server, so a static fetch should find it. That is
+  reasoning about the source, not a passing run of `pnpm verify:viewport`.
+- The AGENTS.md What Next lifecycle events for this package were not posted; the
+  sandbox refused the `whatnext.js` command as well.
+
+### The stylesheet the policy refused
+
+Browser acceptance at 1163×654 and 150% text found the paper view rendering as
+giant solid-black shapes across the header, with the view switch and the markup
+toggle unreachable underneath them. DOM measurement named the cause: the
+`<style>` element was present, carrying exactly the expected CSS text, and none
+of its rules applied — `.margin` computed `position: static; display: inline`
+and its SVG measured 1539×1005 at y −41.
+
+**It was the Content-Security-Policy, and it was refusing two things, not one.**
+`src/lib/security/csp.ts` sets `style-src 'self'`. That directive refuses a
+`<style>` element in the served markup that carries no nonce, and — because
+`style-src-attr` falls back to it and a nonce cannot reach an attribute — it also
+refuses **every `style` attribute parsed from markup**. So the grid placement,
+which was `style={{ gridColumn, gridRow }}` on the sheets and on every cell, was
+dropped on the server-rendered page as well. The grid collapsed, the pencil
+marks lost the positioned containers they hang from, and an SVG path with no
+`fill` declared is filled black. The comment in `csp.ts` had already written this
+down: *"an inline style added anywhere from now on is refused: the element
+renders with that one rule missing and nothing says so."*
+
+**Fixed within the writable map, with no change to the policy.**
+
+- `paper-styles.tsx` is deleted. The stylesheet is now
+  `src/components/email-review/paper.module.css`, a CSS Module compiled at build
+  time and served from this origin, which `'self'` already covers. No nonce, no
+  widening, no `'unsafe-inline'`, no change to `globals.css`.
+- **No component in the folder carries a `style` attribute any more.** The grid
+  rows come from auto-placement: every cell declares a *column* class only, and
+  with `grid-auto-flow: row` the placement cursor runs left, gutter, right and
+  then drops a row — so a paired change is still exactly one grid row and the two
+  sides still stay level with no synchronising JavaScript. The two sheets moved
+  out of the grid into an absolutely-positioned layer that resolves the same
+  `--columns` against the same width, because a grid item with a definite row
+  *and* column occupies those cells and auto-placement would have had to route
+  every paragraph around it.
+- The balloon's measured coordinates are written through `element.style` after
+  mount. `verify:viewport` documents why that is the one legitimate route:
+  *"a style set through the CSSOM still applies — and CSP does not"* govern it.
+  Everything else about the balloon — visibility before it has been measured,
+  and whether it accepts the pointer — is a class keyed off a data attribute, so
+  an unplaced balloon is invisible rather than parked in the corner.
+- Every stroke now carries `fill="none"`, `stroke`, `stroke-width` and a
+  `width`/`height` of `100%` as **SVG presentation attributes** as well as in the
+  stylesheet. Attributes cannot be refused by any policy, so with no CSS at all
+  the marks are hairlines bounded by their own passage rather than black shapes
+  the size of the page. CSS still wins where both are present, which is how the
+  gutter tie keeps its pale stroke.
+- **Markup off is enforced in the component, not in the stylesheet.** With the
+  pencil down no mark is rendered at all and no underline or strike class is
+  applied, so the guarantee does not depend on a rule arriving.
+
+`markup.test.ts` gained five checks that read source, because this failure
+renders perfectly in a unit test and only appears behind a real policy: no
+`<style>` element and no `dangerouslySetInnerHTML` in the folder, no `style`
+attribute in any component, the stylesheet imported from the CSS Module by all
+three files that need it, every `styles.x` naming a class the stylesheet
+actually defines — a CSS Module returns `undefined` for a name it does not have,
+which looks identical to a refused rule — and every `<path>` drawn with an
+explicit fill.
+
+### Codex acceptance
+
+- `pnpm typecheck`: passed.
+- Focused ESLint over the workspace and the new presentation folder: passed.
+- Focused email-review/template/paper tests: 69 passed in 6 files.
+- `pnpm build`: passed.
+- `git diff --check`: passed.
+- Browser acceptance at the application's 150% text default verified the
+  default Paper review, distinct white sheets, bounded pencil marks, clean
+  markup-off mode, working Technical view switch, paired selection, and a
+  pinned explanation balloon. The balloon kept an unknown reason visibly
+  UNVERIFIED and explained that unknown means unknown.
+- The first browser build exposed CSP-blocked inline styles as oversized black
+  SVGs. The final build was recompiled and rechecked after the CSS Module fix;
+  the black shapes and blocked controls were gone without weakening CSP.

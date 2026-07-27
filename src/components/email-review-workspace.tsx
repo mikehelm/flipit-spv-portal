@@ -10,6 +10,11 @@ import {
   type EmailReviewAiState,
 } from '@/actions/email-review'
 import { idleState } from '@/components/admin/action-state'
+import { PaperReview } from '@/components/email-review/paper-review'
+import {
+  ReviewViewSwitch,
+  type ReviewView,
+} from '@/components/email-review/view-switch'
 import type {
   EmailReviewClause,
   EmailReviewDocument,
@@ -345,6 +350,11 @@ export function EmailReviewWorkspace({
   const [selectedId, setSelectedId] = useState<string | null>(firstChanged?.id ?? null)
   const [filter, setFilter] = useState<ChangeFilter>('CHANGED')
   const [tab, setTab] = useState<InspectorTab>('EVIDENCE')
+  // Paper is the default. The technical comparison is unchanged and one click
+  // away; nothing about the selection, the evidence record or the proposal
+  // flow depends on which of the two is on screen.
+  const [view, setView] = useState<ReviewView>('PAPER')
+  const [markup, setMarkup] = useState(true)
   const [aiScope, setAiScope] = useState<'SELECTION' | 'DOCUMENT'>('SELECTION')
   const selected =
     workspace.diffUnits.find((unit) => unit.id === selectedId) ?? firstChanged
@@ -407,10 +417,14 @@ export function EmailReviewWorkspace({
     if (unit.editableSectionId) setProposalSectionId(unit.editableSectionId)
     if (nextTab) setTab(nextTab)
     if (bringIntoView) {
+      // `scroll-behavior: auto !important` in globals.css cannot reach a
+      // scroll asked for in JavaScript, so the preference is read here too.
+      const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       window.requestAnimationFrame(() => {
-        window.document
-          .getElementById(unit.id)
-          ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        window.document.getElementById(unit.id)?.scrollIntoView({
+          behavior: still ? 'auto' : 'smooth',
+          block: 'center',
+        })
       })
     }
   }
@@ -421,6 +435,13 @@ export function EmailReviewWorkspace({
 
   return (
     <div className="space-y-4">
+      <ReviewViewSwitch
+        view={view}
+        onView={setView}
+        markup={markup}
+        onMarkup={setMarkup}
+      />
+
       <section
         aria-label="Invitation safety status"
         className={`sticky top-2 z-20 grid gap-2 rounded-sm border px-4 py-3 shadow-2xl backdrop-blur-md lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${driftTone}`}
@@ -445,7 +466,13 @@ export function EmailReviewWorkspace({
         </div>
       </section>
 
-      <div className="grid min-h-[72vh] grid-cols-1 gap-3 lg:grid-cols-[11rem_minmax(0,1fr)_18rem] 2xl:grid-cols-[14rem_minmax(0,1fr)_22rem]">
+      <div
+        className={`grid min-h-[72vh] grid-cols-1 lg:grid-cols-[11rem_minmax(0,1fr)_18rem] 2xl:grid-cols-[14rem_minmax(0,1fr)_22rem] ${
+          // Paper wants air around it: the sheets have to read as objects on a
+          // desk rather than as a third panel butted against two others.
+          view === 'PAPER' ? 'gap-4 xl:gap-6' : 'gap-3'
+        }`}
+      >
         <aside className="rounded-sm border hairline bg-paper lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
           <header className="border-b hairline p-4">
             <p className="text-[10px] font-bold uppercase tracking-[0.17em] text-orange">
@@ -543,6 +570,15 @@ export function EmailReviewWorkspace({
           </nav>
         </aside>
 
+        {view === 'PAPER' ? (
+          <PaperReview
+            diffUnits={workspace.diffUnits}
+            clauses={document.clauses}
+            selectedId={selected?.id ?? null}
+            markup={markup}
+            onSelect={(unit) => chooseUnit(unit)}
+          />
+        ) : (
         <section className="min-w-0 overflow-hidden rounded-sm border hairline bg-paper">
           <header className="sticky top-0 z-10 grid grid-cols-2 border-b hairline bg-paper/95 backdrop-blur-md">
             <div className="border-r hairline p-4">
@@ -586,6 +622,7 @@ export function EmailReviewWorkspace({
             ))}
           </div>
         </section>
+        )}
 
         <aside className="rounded-sm border hairline bg-paper lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
           <nav
