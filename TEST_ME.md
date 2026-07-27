@@ -894,7 +894,25 @@ Three things worth knowing about that private address, all of them checked in a 
 - **It is never stored.** Somebody's correspondence is not cached, not kept, and not indexable.
 - **Looking is recorded.** Opening a preview writes to the audit log, and so does fetching the email body itself. Two entries, because two things were read — and the second one is what makes a direct look at somebody's correspondence visible rather than silent.
 
-**The phone-sized run is now 510 checks**, up from 497 — and the check that used to record this defect is gone, replaced by twelve that prove it is gone.
+**The phone-sized run is now 532 checks**, up from 497 — and the check that used to record this defect is gone, replaced by twelve that prove it is gone.
+
+---
+
+## The media library, with a picture actually in it
+
+Uploading a logo or a headshot is one of the few things in here that is purely for you, and until now **nothing had ever put a file in it successfully**. The screen had been checked many times and checked *empty* every time, so what was being measured was the "nothing uploaded yet" message, under the name of the real screen.
+
+An image is now uploaded through the real form on a phone-sized screen, and what appears afterwards is looked at properly:
+
+- **The picture actually appears.** This sounds too obvious to check. It is not: a broken image shows up as its description text, which has a size and a colour and passes every other check on the page while showing you nothing at all. It is now confirmed that the browser genuinely drew the image, at the size the record says it is.
+- **What was hidden in the file is gone from what your browser receives.** The test file has a street address buried in four separate places inside it — the kind of thing a phone photo carries. §13.2 promises that is removed before anything is written to disk. That promise was tested against the code before; it is now tested against the actual bytes a browser downloads.
+- **The address printed under the image works.** That is the line you would paste into an email template, and nothing had ever followed it.
+
+### And a problem worth knowing about
+
+The first time this ran, the picture did not appear — and the reason turned out to be the *test file*, not the application. Every sample image in this project was built to be readable by a person rather than by a browser: correct in shape, deliberately wrong in its checksums. That was a sensible trade for everything that had read one until now, and it quietly meant this particular question could never have been asked.
+
+One genuinely valid sample image has been added, and the others deliberately left as they were. So the media library is now confirmed to store pictures that browsers can actually display — which, for a library of logos and headshots, is the whole point of it.
 
 ---
 

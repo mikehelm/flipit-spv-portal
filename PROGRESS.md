@@ -7965,3 +7965,183 @@ of 510 in this container — see the first Uncertain item.
 - *Two rows in CLAIMS.md are past the six-hour staleness rule and were left
   alone.*
 - *The password-reset journey is still not built — OPEN_DECISIONS.md §10.*
+
+## The library nobody had put a file in — and the fixture that could not be drawn
+
+The previous entry's oldest unstarted item:
+
+> ***The image upload preview on `/admin/media` is still unexercised***, and it
+> is now the oldest item on this list that nobody has started. It appears after a
+> file is chosen, and nothing has ever chosen one there.
+
+**`/admin/media` has been audited since the beginning, and audited empty every
+time.** It carries no `mustShow`, so every run measured whichever of its two
+empty states the environment happened to produce — *"there is nowhere to store a
+file yet"* or *"nothing uploaded yet"* — and reported the result under the name
+of the populated screen. That is the defect `mustShow`'s own docstring describes,
+sitting on a screen for months, found by reading the list rather than the code.
+
+The populated screen is a different screen. Per image it draws a thumbnail, three
+pills, a storage address in a `<code>` element that does not wrap by nature, an
+edit form and a destructive button. None of it had been at 375px.
+
+**And the successful upload band on §13.2 had never been driven from a browser
+at all.** `verify:uploads` drives this form twice, both times to be *refused* —
+6 MB and 30 MB. Nothing had ever uploaded a file that worked.
+
+### The defect this found
+
+**No fixture in this repository produces an image a browser can display.**
+
+`pngChunk` says so in its own comment: *"the CRC is not recomputed. Nothing in
+this codebase validates one."* That was true, and it was the right trade —
+`ingest` reads a signature and an `IHDR`, the stripper works on chunk boundaries
+and never looks inside one, and a fixture anybody can read beats a fixture
+anybody can decode.
+
+A **browser** validates one. So the plainest question anybody can ask of a media
+library — *does the image this application stored appear on a screen?* — could
+not be asked, because nothing here could produce an image capable of appearing.
+The first run of this check reported `naturalWidth was 0`, and it was the fixture.
+
+That matters beyond the fixture, because of what a broken image is: **alt text**.
+It has a size, a contrast ratio and a tap target. It passes every layout, colour
+and touch check on that screen. A library that stored undisplayable images would
+have been green on all of them.
+
+`drawablePngWithMetadata` is the answer — 128 × 64, eight-bit greyscale, correct
+CRCs, a real zlib stream, and the same metadata blocks the fixture beside it
+carries. It is deliberately the **only** real one; the others are left exactly as
+they are, and `fixtures.test.ts` asserts that they are still fake, so the
+contrast that explains why two exist cannot be tidied away.
+
+The deflate stream is written by hand as a stored block rather than by importing
+`node:zlib`, because `fixtures.ts` is loaded by the verify scripts and by the
+unit suite and its own docstring promises bytes anybody can read. `inflateSync`
+appears in the **test**, which is the independent reader that says whether the
+hand-written stream was written correctly.
+
+### What is now measured
+
+Twelve checks in `verify:viewport`, and three of them ask things nothing had
+asked:
+
+- ***Does the thumbnail decode?*** `naturalWidth > 0`, at the dimensions the row
+  recorded. `/media/[key]` is the one route in this application with no session
+  check — deliberately, because an email client carries no cookie — and nothing
+  had ever confirmed it serves something a browser will draw.
+- ***Is §13.2's headline promise true of the bytes a browser receives?*** The
+  fixture hides a street address in four metadata blocks, in chunks whose CRCs
+  are **also** real — so a browser would draw the unstripped file, and *"the
+  served copy has none of these"* is a statement about this application rather
+  than about a malformed input it happened to reject. `ingest` is unit tested;
+  the served artefact was not.
+- ***Does the address printed on the screen fetch the image it names?*** It is
+  the string an operator pastes into an email template, and it was rendered and
+  never followed.
+
+Plus the screen itself at 375px, populated, with `mustShow` set to the asset's
+own name — so a run that silently lost the upload measures nothing and says so.
+
+`pnpm verify:viewport` is **532**, up from 510.
+
+**Decisions.**
+
+- ***One real fixture, not a repository of them.*** Rewriting the other eight to
+  carry correct checksums would cost the eleven tests that read them nothing and
+  would remove the visible distinction between a fixture built for a byte reader
+  and one built for a decoder. `fixtures.test.ts` pins both directions.
+- ***Greyscale, and a gradient rather than a flat fill.*** Eight-bit greyscale is
+  the smallest form that is unambiguously an image; a gradient means a decoder
+  that produced the right *size* from the wrong data would still be visibly
+  wrong. A flat fill would decode identically from almost any mistake.
+- ***`node:zlib` in the test and not in the fixture.*** `fixtures.ts` is imported
+  by four verify scripts and by the unit suite, and its own docstring is a
+  promise that what is in a fixture is legible in the source. A stored deflate
+  block is a length, its complement and the bytes.
+- ***The upload is cleaned up by id, file and audit row together.*** A row
+  without its file leaves a card whose thumbnail is broken, which is the exact
+  state this function asserts cannot happen; a file without its row leaves bytes
+  nothing points at.
+- ***`MEDIA_STORE` unset is a failure here, not a skip.*** `verify:deployment`
+  already takes that position and names the variable. A check count that varies
+  with the environment is a check count nobody can compare between runs.
+
+**Deviations.** None. No production code changed in this entry — one fixture
+added, one test file, one verification function.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. Nothing here computes.
+2. *A send path bypassing a gate?* No. Nothing here sends. The media library is
+   brand assets and has no recipient.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* Nothing in this library belongs to an
+   investor — `media-boundary.test.ts` asserts that as an absence — and the
+   uploaded fixture carries a name that is nobody's.
+6. *Tokens?* Untouched. The storage key is twenty-four random bytes and is the
+   capability, which is stated in the route and unchanged here.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The upload's audit
+   row carries a name and a size and never the file, as §13.2 requires, and the
+   check reads the served bytes rather than printing them.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2509, up from 2502) and `pnpm build`
+are green. `pnpm verify:viewport` is 531 of 532 in this container — the failing
+one is the camera check described in the previous entry and is not this
+application's.
+
+**Uncertain.**
+
+- ***One image, one format, one size.*** A PNG. JPEG and WebP are accepted and
+  neither has been uploaded through the screen, and neither has a drawable
+  fixture — so the thumbnail check cannot yet be asked of them. The stripper is
+  unit tested on all three; only one is now known to survive as a *displayable*
+  file.
+- ***The library is measured with one image in it.*** Two cards is a different
+  layout from one at 375px, and the list has no pagination, so a library with
+  thirty images in it is a page nobody has seen.
+- ***Nothing drives the edit or the remove form to completion.*** Both are
+  asserted present and legible on the populated screen; neither is pressed. The
+  removal warning — *"anywhere this address already appears, including an email
+  that has already been sent, will stop showing the image"* — is a real
+  consequence and nothing demonstrates it.
+- ***The `<code>` element holding the storage address is measured at one
+  length.*** Storage keys are a fixed size here, so this is stable — but it is
+  the one string on the screen that cannot be shortened and it has never been
+  seen beside a long asset name at 375px.
+- ***`drawablePngWithMetadata` is proved by a decoder in one browser.*** Chromium
+  drew it and `inflateSync` read it. No other decoder has.
+- *The styles in the email preview are proved applied by absence, not by
+  measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *The refusal screen is measured with one kind of refusal.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS.md
+  §11.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *The six newly-wired scripts are wired, not scheduled; there is no
+  `verify:all`, and `DEPLOYMENT.md` names none of them.* This is now the oldest
+  item on this list that nobody has started.
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *Nothing measures how long a 20 MB upload takes.*
+- *`waitFor` on a locator whose appearance depends on server state has still not
+  been read with that question in mind.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*
+- *Nothing else in OPEN_DECISIONS.md has been checked against the code; §7 is the
+  one to read first.*
+- *Two rows in CLAIMS.md are past the six-hour staleness rule and were left
+  alone.*
+- *The password-reset journey is still not built — OPEN_DECISIONS.md §10.*

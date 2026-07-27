@@ -108,6 +108,138 @@ export function pngWithMetadata(options: { secret?: string } = {}): Uint8Array {
 }
 
 // ---------------------------------------------------------------------------
+// A PNG a browser will actually draw
+// ---------------------------------------------------------------------------
+
+/**
+ * **Every fixture above this line is undrawable, on purpose, and that turned out
+ * to matter.**
+ *
+ * `pngChunk` says it: *"the CRC is not recomputed. Nothing in this codebase
+ * validates one."* That was true of everything in this repository — `ingest`
+ * reads a signature and an `IHDR`, the stripper works on chunk boundaries and
+ * never looks inside one, and neither has any use for a CRC. So a fixture that
+ * is real *in shape* is exactly the right tool for both, and cheaper to read.
+ *
+ * A **browser** validates one. And that meant the plainest question anybody
+ * could ask of a media library — *does the image this application stored appear
+ * on a screen?* — could not be asked at all, because nothing here could produce
+ * an image capable of appearing. `verify:viewport` uploads a file through the
+ * real form and looks at the thumbnail; the fixtures above give it a broken
+ * image, which renders as alt text and passes every layout, contrast and tap
+ * target check on the screen while showing an operator nothing.
+ *
+ * So this one is real: correct CRCs, a valid zlib stream and pixels. It is
+ * deliberately the *only* one, and the others are deliberately left alone — a
+ * repository where every fixture is a real file is a repository where nobody can
+ * see what is in one.
+ *
+ * **Written by hand, with no `zlib` import.** The deflate stream is a single
+ * *stored* block, which is a length, its complement and the bytes. That keeps
+ * this module what its own docstring says it is — bytes anybody can read, built
+ * in front of you — and keeps it free of a Node-only import, which matters
+ * because `verify:viewport` imports it and so does the unit suite.
+ */
+
+/** CRC-32, as PNG specifies it. Built once, on first use. */
+let crcTable: Uint32Array | null = null
+
+function crc32(bytes: Uint8Array): number {
+  if (!crcTable) {
+    crcTable = new Uint32Array(256)
+    for (let n = 0; n < 256; n += 1) {
+      let c = n
+      for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+      crcTable[n] = c >>> 0
+    }
+  }
+  let crc = 0xffffffff
+  for (const byte of bytes) crc = crcTable[(crc ^ byte) & 0xff]! ^ (crc >>> 8)
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+/** Adler-32, which is what closes a zlib stream. */
+function adler32(bytes: Uint8Array): number {
+  let a = 1
+  let b = 0
+  for (const byte of bytes) {
+    a = (a + byte) % 65521
+    b = (b + a) % 65521
+  }
+  return ((b << 16) | a) >>> 0
+}
+
+/** A chunk whose CRC is real, unlike `pngChunk`'s. */
+function checkedChunk(type: string, payload: Uint8Array): Uint8Array {
+  const typed = concat([ascii(type), payload])
+  return concat([be32(payload.length), typed, be32(crc32(typed))])
+}
+
+/**
+ * A zlib stream holding `raw`, stored rather than compressed.
+ *
+ * `0x78 0x01` is the zlib header for the lowest compression setting, which is
+ * what a stored block is. Each block carries at most 65535 bytes; the fixture
+ * below is 8,256, so there is one — but the loop is written for more, because a
+ * fixture that silently truncated at 64 KB would be a broken image again.
+ */
+function storedZlib(raw: Uint8Array): Uint8Array {
+  const blocks: Uint8Array[] = []
+  for (let at = 0; at < raw.length; at += 65535) {
+    const slice = raw.subarray(at, Math.min(at + 65535, raw.length))
+    const final = at + 65535 >= raw.length ? 1 : 0
+    blocks.push(
+      concat([
+        u8(final),
+        u8(slice.length & 0xff, (slice.length >> 8) & 0xff),
+        u8(~slice.length & 0xff, (~slice.length >> 8) & 0xff),
+        slice,
+      ]),
+    )
+  }
+  return concat([u8(0x78, 0x01), ...blocks, be32(adler32(raw))])
+}
+
+/**
+ * 128 × 64, eight-bit greyscale, with the same metadata blocks the fixture above
+ * carries — and drawable.
+ *
+ * The dimensions match `pngWithMetadata` so a check can be moved between the two
+ * without its assertions changing. The pixels are a gradient rather than a flat
+ * fill, so a decoder that produced the right *size* from the wrong data would
+ * still be showing something recognisably wrong.
+ */
+export function drawablePngWithMetadata(options: { secret?: string } = {}): Uint8Array {
+  const secret = options.secret ?? 'Author: David Serene, 42 Privet Drive'
+  const width = 128
+  const height = 64
+
+  // One filter byte per row, filter 0 (none), then one byte per pixel.
+  const raw = new Uint8Array(height * (width + 1))
+  for (let y = 0; y < height; y += 1) {
+    const row = y * (width + 1)
+    raw[row] = 0
+    for (let x = 0; x < width; x += 1) raw[row + 1 + x] = (x * 2 + y) & 0xff
+  }
+
+  return concat([
+    PNG_SIGNATURE,
+    checkedChunk('IHDR', concat([be32(width), be32(height), u8(8, 0, 0, 0, 0)])),
+    // The blocks the stripper is meant to remove. Their CRCs are real too, so a
+    // browser reading the *unstripped* fixture would also draw it — which is
+    // what makes "the served copy has none of these" a statement about the
+    // application rather than about a malformed input it happened to reject.
+    checkedChunk('tEXt', concat([ascii('Comment\0'), ascii(secret)])),
+    checkedChunk('iTXt', concat([ascii('XML:com.adobe.xmp\0\0\0\0\0'), ascii(secret)])),
+    checkedChunk('eXIf', ascii(secret)),
+    checkedChunk('tIME', u8(0x07, 0xe6, 7, 25, 12, 0, 0)),
+    checkedChunk('pHYs', concat([be32(2835), be32(2835), u8(1)])),
+    checkedChunk('IDAT', storedZlib(raw)),
+    checkedChunk('IEND', new Uint8Array(0)),
+  ])
+}
+
+// ---------------------------------------------------------------------------
 // WebP
 // ---------------------------------------------------------------------------
 

@@ -57,6 +57,7 @@ import {
   importJobs,
   interestRegisterEntries,
   investorAccounts,
+  mediaAssets,
   investorSessions,
   offers,
   portalTokens,
@@ -73,6 +74,8 @@ import { everythingSent, flatten, onScreen } from '@/lib/verify/page-text'
 import { issueToken } from '@/lib/crypto'
 import { AA_LARGE, AA_TEXT, contrastRatio, reportRatio } from '@/lib/contrast'
 import { EMAIL_BODY_POLICY } from '@/lib/security/csp'
+import { drawablePngWithMetadata, FIXTURE_SECRET_MARKER } from '@/lib/media/fixtures'
+import { mediaStore } from '@/lib/media/store'
 
 const PREFIX = 'wp18-viewport'
 const PORT = 3210
@@ -1005,6 +1008,8 @@ async function main(): Promise<void> {
     await verifyTheBannerWithAFaultBehindIt(page)
 
     await verifyTheEmailPreview(page)
+
+    await verifyTheMediaLibraryWithSomethingInIt(page)
 
     await verifyTheErrorPage(browser)
   } catch (error) {
@@ -2163,6 +2168,214 @@ main()
     process.exitCode = 1
   })
   .finally(() => process.exit())
+
+/**
+ * The media library, with a file in it — the screen nobody had populated.
+ *
+ * `/admin/media` has been audited from the beginning, and audited **empty**
+ * every time. It carries no `mustShow`, so every run measured whichever of its
+ * two empty states the environment happened to produce — *"there is nowhere to
+ * store a file yet"* or *"nothing uploaded yet"* — and reported the result under
+ * the name of the populated screen. That is the exact defect `mustShow` exists
+ * to prevent, described in its own docstring, sitting on a screen for months.
+ *
+ * The populated screen is a different screen. Per image it draws a thumbnail, a
+ * row of three pills, a storage address in a `<code>` element that does not
+ * wrap by nature, two forms and a destructive button — none of which had ever
+ * been at 375px.
+ *
+ * **And it uploads a real file through the real form**, which is the other half
+ * of what was missing. `verify:uploads` drives this form twice and both times to
+ * be *refused*; the successful band on §13.2 has never been driven from a
+ * browser at all. So this chooses a file with metadata in it, presses the
+ * button, and then asks three questions nothing had asked:
+ *
+ *   - does the thumbnail actually **load**? It is served by `/media/[key]`,
+ *     which is the one route in this application with no session check, and a
+ *     broken image renders as alt text that would pass every layout check on
+ *     this screen.
+ *   - is §13.2's headline promise true **of the bytes a browser receives**? The
+ *     fixture carries a street address in five metadata blocks. `ingest` is unit
+ *     tested; the served response is not, and that is the artefact.
+ *   - does the address printed on the screen fetch the image it names?
+ */
+async function verifyTheMediaLibraryWithSomethingInIt(page: Page): Promise<void> {
+  console.log('\nThe media library, with something in it')
+
+  const store = mediaStore()
+  check(
+    'a media store is configured for this run',
+    store !== null,
+    'set MEDIA_STORE in .env — the populated library cannot be measured without one',
+  )
+  if (!store) return
+
+  const NAME = `${PREFIX} brand mark`
+  /** The street address the fixture hides in five separate metadata blocks. */
+  const SECRET = FIXTURE_SECRET_MARKER
+
+  try {
+    await page.goto(`${ORIGIN}/admin/media`, { waitUntil: 'networkidle' })
+
+    // The contrast is the point: this run has seen the empty state, and every
+    // previous run saw nothing else.
+    check(
+      'it starts empty, which is the only state anything had ever measured',
+      /Nothing uploaded yet/.test(await onScreen(page)),
+      'the library was not empty at the start of this check',
+    )
+
+    /*
+     * A PNG a browser will actually draw, with real metadata in it, chosen
+     * through the real input.
+     *
+     * `drawablePngWithMetadata` rather than `pngWithMetadata`, and that
+     * distinction is the finding this check produced. Every other fixture in
+     * this repository writes a deliberately fake CRC — correct for `ingest`,
+     * which reads a signature and an `IHDR`, and correct for the stripper, which
+     * works on chunk boundaries. A browser validates one, so until this fixture
+     * existed nothing here could produce an image capable of being displayed,
+     * and the plainest question anybody could ask of a media library could not
+     * be asked at all.
+     *
+     * `setInputFiles` with a buffer rather than a path: the fixture is generated
+     * and writing it to disk to feed a file picker would leave a file behind on
+     * a run that dies.
+     */
+    await page.locator('#file').setInputFiles({
+      name: 'brand-mark.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(drawablePngWithMetadata()),
+    })
+
+    check(
+      'choosing a file puts its name on the screen',
+      (await page.locator('#file').evaluate(
+        (input) => (input as HTMLInputElement).files?.[0]?.name ?? '',
+      )) === 'brand-mark.png',
+      'the input reported no file — nothing below is measuring an upload',
+    )
+
+    await page.fill('input[name="name"]', NAME)
+    await page.fill(
+      'textarea[name="description"]',
+      'For the email header. Orange on dark.',
+    )
+    await page.locator('form:has(#file)').getByRole('button', { name: 'Upload it' }).click()
+
+    // The card is server-rendered after a revalidate, so this waits for the
+    // name rather than for a fixed delay.
+    await page.getByText(NAME, { exact: false }).first().waitFor({ timeout: 30_000 })
+
+    const [asset] = await db
+      .select()
+      .from(mediaAssets)
+      .where(eq(mediaAssets.name, NAME))
+    check('the upload reached the library', asset !== undefined)
+    if (!asset) return
+
+    const shown = await onScreen(page)
+    check(
+      'the card names the format, the size and the dimensions',
+      /png/i.test(shown) && /KB/.test(shown) && /128\s*×\s*64/.test(shown),
+      shown.slice(0, 400),
+    )
+    check(
+      'and prints the address it is served from',
+      shown.includes(`/media/${asset.storageKey}`),
+      'the operator cannot copy the address into an email template',
+    )
+
+    /*
+     * The thumbnail, asked of the browser.
+     *
+     * `naturalWidth` is 0 for an image that failed to load and non-zero for one
+     * that decoded. A broken thumbnail renders as alt text — which has a size, a
+     * contrast ratio and a tap target, and would pass every other check on this
+     * screen while showing the operator nothing.
+     */
+    const thumbnail = await page.evaluate(() => {
+      const element = document.querySelector('img')
+      if (!element) return null
+      return {
+        src: element.getAttribute('src') ?? '',
+        loaded: element.naturalWidth > 0,
+        width: element.naturalWidth,
+        height: element.naturalHeight,
+      }
+    })
+    check('a thumbnail is drawn at all', thumbnail !== null)
+    check(
+      'and the browser actually decoded it',
+      thumbnail?.loaded === true,
+      `naturalWidth was ${thumbnail?.width} — the image did not load and the alt text would pass every layout check here`,
+    )
+    check(
+      'at the dimensions the row recorded',
+      thumbnail?.width === asset.width && thumbnail?.height === asset.height,
+      `${thumbnail?.width}×${thumbnail?.height} against ${asset.width}×${asset.height} on the row`,
+    )
+
+    /*
+     * §13.2's headline promise, on the bytes rather than on the function.
+     *
+     * *"A photograph taken on a phone carries the coordinates it was taken at;
+     * that is stripped before anything is written to disk."* `ingest` is unit
+     * tested against that. What a browser receives from `/media/[key]` is a
+     * different artefact, and nothing had ever read one.
+     */
+    const served = await page.request.get(`${ORIGIN}${thumbnail!.src}`)
+    const bytes = Buffer.from(await served.body())
+    check(
+      'the address on the screen fetches the image it names',
+      served.status() === 200 && (served.headers()['content-type'] ?? '').startsWith('image/'),
+      `${served.status()} ${served.headers()['content-type']}`,
+    )
+    check(
+      'and what the browser receives carries none of the metadata that went in',
+      !bytes.includes(SECRET) && !bytes.includes('tEXt') && !bytes.includes('eXIf'),
+      'the served file still contains what §13.2 promises is removed before anything is written to disk',
+    )
+    check(
+      'served as the type sniffed from the file, never one a browser proposed',
+      served.headers()['content-type'] === asset.contentType &&
+        served.headers()['x-content-type-options'] === 'nosniff',
+      `${served.headers()['content-type']} / ${served.headers()['x-content-type-options']}`,
+    )
+
+    /*
+     * And now the screen itself, at 375px, populated — which is the whole reason
+     * this function exists. `mustShow` is the asset's own name, so a run that
+     * silently lost the upload measures nothing and says so.
+     */
+    await measureScreen(page, 'media library — with an image in it', {
+      mustShow: new RegExp(PREFIX),
+      html: await (await page.request.get(`${ORIGIN}/admin/media`)).text(),
+    })
+
+    check(
+      'the destructive control is present and named plainly',
+      /Remove/.test(shown) && /Removing deletes the stored file as well/.test(shown),
+      'an operator can delete a file with no warning about what else it breaks',
+    )
+  } finally {
+    /*
+     * By id, and the stored file with it. A row deleted without its file leaves
+     * bytes on disk that nothing points at; a file deleted without its row
+     * leaves a card whose thumbnail is broken — which is the state this function
+     * asserts cannot happen.
+     */
+    const leftovers = await db
+      .select()
+      .from(mediaAssets)
+      .where(like(mediaAssets.name, `${PREFIX}%`))
+    for (const leftover of leftovers) {
+      await store.remove(leftover.storageKey)
+      await db.delete(auditEvents).where(eq(auditEvents.entityId, leftover.id))
+      await db.delete(mediaAssets).where(eq(mediaAssets.id, leftover.id))
+    }
+  }
+}
 
 /**
  * The error page, rendered by a real error.
