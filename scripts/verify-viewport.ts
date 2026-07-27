@@ -64,8 +64,10 @@ import {
   recipients,
   reminderEvents,
   rounds,
+  serviceConfig,
   users,
 } from '@/db/schema'
+import { SERVICE_CONFIG_ID } from '@/lib/auth/service-config'
 import { hashPassword } from '@/lib/auth/password'
 import { everythingSent, flatten, onScreen } from '@/lib/verify/page-text'
 import { issueToken } from '@/lib/crypto'
@@ -367,6 +369,16 @@ async function checkNothingInlineStyled(label: string, html: string): Promise<vo
   )
 }
 
+/**
+ * The complaints the last `measureScreen` was told to expect and duly heard.
+ *
+ * Filtering a complaint away and never asserting it is the vacuous shape again:
+ * the screen stops complaining, the check goes on passing, and nobody learns
+ * that the thing being tolerated has been fixed. A caller that passes
+ * `expectedComplaint` can read this and assert the complaint was actually made.
+ */
+let expectedComplaintsHeard: string[] = []
+
 async function auditScreen(
   page: Page,
   label: string,
@@ -392,6 +404,8 @@ async function auditScreen(
    * empty state, reported under the name of the populated one.
    */
   mustShow?: RegExp,
+  /** See `measureScreen`. One complaint this screen is supposed to make. */
+  expectedComplaint?: RegExp,
 ): Promise<void> {
   complaints.length = 0
 
@@ -401,7 +415,12 @@ async function auditScreen(
   check(`${label}: loads (${status})`, acceptable, `${path} returned ${status}`)
   if (!acceptable) return
 
-  await measureScreen(page, label, { mustShow, expected, html: await response!.text() })
+  await measureScreen(page, label, {
+    mustShow,
+    expected,
+    expectedComplaint,
+    html: await response!.text(),
+  })
 }
 
 /**
@@ -487,6 +506,12 @@ async function measureScreen(
     // That is the screen working, not the screen complaining.
     .filter((c) => expected === 200 || !c.includes(`status of ${expected}`))
     .filter((c) => !expectedComplaint?.test(c))
+  // What the screen was allowed to say, kept so a caller can assert it happened
+  // rather than merely tolerating it. A complaint that is filtered and never
+  // asserted is a complaint nobody will notice stopping.
+  expectedComplaintsHeard = expectedComplaint
+    ? complaints.filter((c) => expectedComplaint.test(c))
+    : []
   const csp = heard.filter((c) => /CSP refused|Content Security Policy/i.test(c))
 
   check(
@@ -938,6 +963,8 @@ async function main(): Promise<void> {
     await verifyTheStylePolicy(page)
 
     await verifyTheBannerWithAFaultBehindIt(page)
+
+    await verifyTheEmailPreview(page)
 
     await verifyTheErrorPage(browser)
   } catch (error) {
@@ -2398,4 +2425,292 @@ async function verifyTheErrorAnInvestorGets(page: Page, origin: string): Promise
     !/Sign in|email address|password/i.test(shown),
     'an investor whose portal failed was asked to identify themselves',
   )
+}
+
+/**
+ * The email preview, which is the last screen anybody sees before a real
+ * invitation goes to a real person — and which nothing had ever opened.
+ *
+ * It has been on the Uncertain list, in the same sentence as the recorder and
+ * the image preview, since the CSP entries: *"the image upload preview and the
+ * email template preview are still unexercised."* `/templates` is audited;
+ * `/templates/preview/[offerId]` is a different screen behind a parameter, and
+ * nothing in this repository had ever been to it.
+ *
+ * It matters more than its position on that list suggests, for three reasons.
+ *
+ * **It renders untrusted markup.** An email body is markup by construction, and
+ * this page puts it in an `<iframe sandbox="">` rather than into the admin
+ * document. `sandbox=""` grants nothing: no scripts, no forms, and — the one
+ * that matters — no same-origin. That claim is a sentence in a docstring and an
+ * attribute in a source file, and neither of those is the browser. **The
+ * property is browser-enforced or it is not true**, and the only way to know is
+ * to ask a browser, which is what this script is for.
+ *
+ * **It is the pre-flight surface.** §11.4 makes an unresolved template variable
+ * a send-blocking fault; this is the screen where an operator would see one.
+ *
+ * **It is investor-facing content on an operator's screen.** The preview is of
+ * one recipient. A second investor is created for the duration precisely so
+ * that the leak check has something it *could* find — a check for another
+ * investor's name against a database holding one investor is the vacuous shape
+ * this repository has now been caught by four times.
+ */
+async function verifyTheEmailPreview(page: Page): Promise<void> {
+  console.log('\nThe email preview, which nothing had ever opened')
+
+  const [account] = await db
+    .select({ id: investorAccounts.id })
+    .from(investorAccounts)
+    .where(eq(investorAccounts.email, `${PREFIX}@example.test`))
+  if (!account) throw new Error('the seeded investor is missing')
+
+  const [offer] = await db.select().from(offers).where(eq(offers.accountId, account.id))
+  if (!offer) throw new Error('the seeded offer is missing')
+
+  // Somebody else, so the leak check below can fail.
+  const [other] = await db
+    .insert(investorAccounts)
+    .values({
+      name: 'Wilhelmina Draycott-Pemberley',
+      email: `${PREFIX}-other@example.test`,
+      status: 'ACTIVE',
+    })
+    .returning()
+  const [otherOffer] = await db
+    .insert(offers)
+    .values({
+      roundId: offer.roundId,
+      accountId: other!.id,
+      proposedAmountUsd: '98765.43',
+      spvPercentage: '9.000000',
+      indirectPercentage: '2.700000',
+      responseDeadline: '2026-12-31',
+    })
+    .returning()
+
+  const tokensBefore = await db
+    .select({ id: portalTokens.id })
+    .from(portalTokens)
+    .where(eq(portalTokens.accountId, account.id))
+
+  const [configBefore] = await db
+    .select({
+      name: serviceConfig.defaultSenderName,
+      email: serviceConfig.defaultSenderEmail,
+    })
+    .from(serviceConfig)
+    .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
+
+  try {
+    /*
+     * The blocked state first, because it is the state this repository is
+     * actually in and nobody had looked at it.
+     *
+     * The seeded database has no sending account configured — that is Michael
+     * and David's step, not a build's — so `sender_name` and `sender_email` do
+     * not resolve, and §11.4 refuses to render an email with a gap in it. What
+     * an operator gets instead is a card naming each missing variable. It is the
+     * send-blocking surface, it is the screen this build shows until the day the
+     * app password is connected, and it had never been measured anywhere.
+     */
+    await auditScreen(
+      page,
+      'email preview — nothing to preview yet',
+      `/templates/preview/${offer.id}`,
+      200,
+      /Alexandra Fenwick-Harrington/,
+    )
+
+    const blocked = await onScreen(page)
+    check(
+      'with no sending account configured, the preview refuses rather than rendering a gap',
+      /cannot be sent yet/.test(blocked) && !/HTML part/.test(blocked),
+      blocked.slice(0, 300),
+    )
+    check(
+      'and it names each variable that could not be resolved',
+      /sender_name/.test(blocked) && /sender_email/.test(blocked),
+      'the operator is told there is a problem and not which one',
+    )
+
+    /*
+     * Now the rendered state, which needs a sender.
+     *
+     * **This sets a display name and an address. It does not touch the
+     * mail-connection gate.** Everything the §8 gate reads — the encrypted
+     * credential, the recorded connection — is left exactly as it is; what is
+     * set here is the two `service_config` fields the operator's own onboarding
+     * form sets, and the address is an `@example.test` one that could not
+     * receive mail if anything tried. Nothing here sends. Both values go back in
+     * the `finally` below.
+     */
+    await db
+      .update(serviceConfig)
+      .set({
+        defaultSenderName: 'David Serene',
+        defaultSenderEmail: `${PREFIX}-sender@example.test`,
+      })
+      .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
+
+    /*
+     * A known defect, asserted present rather than filtered away.
+     *
+     * A `srcdoc` frame inherits the embedding document's Content-Security-
+     * Policy, and this application serves `style-src 'self'` — deliberately, and
+     * an earlier entry spent a day removing the widenings that were there for
+     * nothing. A designed HTML email is inline styles by construction; the
+     * invitation carries **69** of them, because that is the only styling an
+     * email client will honour. So every one is refused inside the preview
+     * frame, and an operator reviewing the last screen before a real invitation
+     * goes to a real person is shown an **unstyled** version of it. The card
+     * above the frame says *"this is the markup that will be sent, byte for
+     * byte"* — and the markup is. The rendering is not.
+     *
+     * Recorded rather than fixed. The fix is not a wider policy: it is serving
+     * the body from its own authenticated route with its own narrow policy and
+     * pointing the frame at `src`, and that is a new surface serving untrusted
+     * markup, which is not a thing to build unattended. See PROGRESS.md.
+     *
+     * Asserted **present**, so the day somebody fixes it this check fails and
+     * sends them here to delete it. A filtered-away complaint would have been
+     * forgotten by the next entry.
+     */
+    await auditScreen(
+      page,
+      'email preview',
+      `/templates/preview/${offer.id}`,
+      200,
+      /Alexandra Fenwick-Harrington/,
+      /Refused to apply inline style/,
+    )
+
+    check(
+      "KNOWN DEFECT: the email's own inline styles are refused inside the preview frame",
+      expectedComplaintsHeard.length > 0,
+      'the refusals have stopped — if the preview now renders the designed email, delete this check and the note in PROGRESS.md',
+    )
+
+    const shown = await onScreen(page)
+
+    check(
+      'both parts of the email are on the screen, not just the HTML one',
+      /HTML part/.test(shown) && /Plain-text part/.test(shown),
+      'a text part is mandatory and materially helps deliverability — §11.4',
+    )
+
+    check(
+      'no template variable is left unresolved on the screen',
+      !/\{\{|\}\}/.test(shown),
+      'an unresolved variable is a send-blocking fault and this is where it would be seen',
+    )
+
+    check(
+      'the figures in the email are the stored ones',
+      /12,500/.test(shown),
+      'the preview showed an amount that is not the one on the offer',
+    )
+
+    /*
+     * The sandbox, asked of the browser rather than of the source.
+     *
+     * `contentDocument` is `null` for a frame the browser has given an opaque
+     * origin to, and non-null the moment `allow-same-origin` appears or the
+     * attribute is dropped. That is the whole claim — *"no same-origin"* — and
+     * it is the difference between an email body being inert markup and an
+     * email body being able to read the administrator's page it is drawn on.
+     */
+    const frame = await page.evaluate(() => {
+      const element = document.querySelector('iframe')
+      if (!element) return null
+      return {
+        sandbox: element.getAttribute('sandbox'),
+        referrerPolicy: element.getAttribute('referrerpolicy'),
+        reachable: element.contentDocument !== null,
+        hasBody: (element.getAttribute('srcdoc') ?? '').length > 0,
+      }
+    })
+
+    check('the email is drawn in a frame at all', frame !== null)
+    check(
+      'and the frame carries a body to draw',
+      frame?.hasBody === true,
+      'an empty preview frame would pass every check below and show nothing',
+    )
+    check(
+      'the frame grants nothing — sandbox is present and empty',
+      frame?.sandbox === '',
+      `sandbox="${frame?.sandbox}"`,
+    )
+    check(
+      'and the browser enforces it: the email cannot be reached from the page',
+      frame?.reachable === false,
+      'contentDocument was reachable, so the frame shares this origin and an email body can read the administrator’s screen',
+    )
+    check(
+      'and it sends no referrer',
+      frame?.referrerPolicy === 'no-referrer',
+      `referrerPolicy="${frame?.referrerPolicy}"`,
+    )
+
+    /*
+     * §16 and the fifth review question, on an operator's screen that renders
+     * one investor's correspondence while another exists two rows away.
+     */
+    const sent = await everythingSent(page)
+    for (const [what, pattern] of [
+      ["the other investor's name", /Draycott-Pemberley/],
+      ["the other investor's address", new RegExp(`${PREFIX}-other@example\\.test`)],
+      ["the other investor's amount", /98,?765/],
+    ] as const) {
+      check(`the preview contains no ${what}`, !pattern.test(sent), `${pattern} matched`)
+    }
+
+    check(
+      'previewing issued no credential — a read does not mint a token',
+      (
+        await db
+          .select({ id: portalTokens.id })
+          .from(portalTokens)
+          .where(eq(portalTokens.accountId, account.id))
+      ).length === tokensBefore.length,
+      'opening the preview created a portal token, which would make a preview a way of issuing access',
+    )
+
+    check(
+      'and the link it shows is not one that works',
+      !/\/portal\/claim\?token=[A-Za-z0-9_-]{20,}/.test(sent),
+      'the preview rendered a claimable link',
+    )
+
+    // The reminder is a different template through the same screen, and the
+    // `kind` parameter is parsed rather than cast — an unknown value falls back
+    // to the invitation rather than throwing.
+    await auditScreen(
+      page,
+      'email preview — the reminder',
+      `/templates/preview/${offer.id}?kind=REMINDER`,
+      200,
+      /Alexandra Fenwick-Harrington/,
+      /Refused to apply inline style/,
+    )
+    await auditScreen(
+      page,
+      'email preview — an unknown kind falls back rather than failing',
+      `/templates/preview/${offer.id}?kind=NONSENSE`,
+      200,
+      /Alexandra Fenwick-Harrington/,
+      /Refused to apply inline style/,
+    )
+  } finally {
+    await db.delete(offers).where(eq(offers.id, otherOffer!.id))
+    await db.delete(investorAccounts).where(eq(investorAccounts.id, other!.id))
+    await db
+      .update(serviceConfig)
+      .set({
+        defaultSenderName: configBefore?.name ?? null,
+        defaultSenderEmail: configBefore?.email ?? null,
+      })
+      .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
+  }
 }

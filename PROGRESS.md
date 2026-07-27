@@ -7460,3 +7460,177 @@ are green. `pnpm verify:viewport` is 441 of 441.
 - *Two rows in CLAIMS.md are past the six-hour staleness rule and were left
   alone.*
 - *The password-reset journey is still not built — OPEN_DECISIONS.md §10.*
+
+## The last screen before a real email goes to a real person
+
+> *"The image upload preview and the email template preview are still
+> unexercised. This is now the oldest item on the list that nobody has started."*
+
+It had been on the Uncertain list, in that sentence, since the CSP entries.
+`/templates` is audited. `/templates/preview/[offerId]` is a different screen
+behind a parameter, and **nothing in this repository had ever been to it.**
+
+It matters more than its position on that list suggested. It is the screen an
+operator looks at immediately before pressing send on an invitation to a named
+individual about their money, and it renders **untrusted markup by
+construction** — an email body is markup, and this page puts it in an
+`<iframe sandbox="">` rather than into the administrator's document.
+
+**Two states, and this build is in the first one.** The seeded database has no
+sending account configured, so `sender_name` and `sender_email` do not resolve,
+and §11.4 refuses to render an email with a gap in it. What an operator gets is a
+card naming each missing variable. That is the send-blocking surface, it is the
+screen this build shows *until the day the app password is connected*, and it had
+never been measured anywhere. It is now, and it is asserted to refuse rather than
+render, and to name both variables rather than saying only that something is
+wrong.
+
+The rendered state needs a sender, so the fixture sets the two `service_config`
+display fields the operator's own onboarding form sets — a name and an
+`@example.test` address — and puts both back afterwards. **Nothing the §8 mail
+gate reads is touched**, and nothing sends.
+
+**The sandbox, asked of the browser rather than of the source.** The docstring
+claims `sandbox=""` grants nothing: no scripts, no forms, no same-origin. That
+claim was a sentence in a comment and an attribute in a file, and neither of
+those is a browser. It is now asked of one: `contentDocument` is `null`, which is
+true for an opaque origin and false the moment `allow-same-origin` appears or the
+attribute is dropped. That is the difference between an email body being inert
+markup and an email body being able to read the administrator's screen it is
+drawn on. Also checked: the attribute is present and **empty**, the frame carries
+a body to draw — an empty frame would pass every other check and show nothing —
+and the referrer policy is `no-referrer`.
+
+**A second investor exists for the duration**, so §16's check has something it
+*could* find. A leak check for another investor's name against a database holding
+one investor is the vacuous shape this repository has now been caught by four
+times. Her name, her address and her amount are all absent from the response.
+
+**And previewing issues no credential.** The docstring says *"previewing is a
+read; a read does not issue credentials."* The portal token count for the
+account is identical before and after, and the link on the screen does not match
+a claimable one.
+
+`pnpm verify:viewport` is **497**, up from 441 — and up from 357 at the start of
+the day.
+
+### The defect this found
+
+**The operator cannot see the email they are about to send.**
+
+A `srcdoc` frame inherits the embedding document's Content-Security-Policy. This
+application serves `style-src 'self'`, deliberately — an earlier entry spent a
+day removing the widenings that were there for nothing. A designed HTML email is
+inline styles by construction: the invitation carries **69 of them**, because
+that is the only styling an email client will honour. Every one is refused inside
+the preview frame.
+
+So the card that says *"this is the markup that will be sent, byte for byte"* is
+telling the truth about the markup and not about the picture. The operator
+reviewing an invitation to a named individual sees an unstyled document — no
+brand, no layout, no colour — and the recipient will see something else entirely.
+On the last screen before a real send, that is the wrong way round.
+
+**It is recorded rather than fixed**, and the reason is the shape of the fix. The
+tempting one-line version is to widen `style-src`, which would put back on every
+page exactly what was removed from every page, for a preview. The correct fix is
+to serve the body from **its own authenticated route with its own narrow policy**
+— `default-src 'none'`, `style-src 'unsafe-inline'`, `frame-ancestors 'self'` —
+and point the frame at `src` instead of `srcDoc`. That is a new surface serving
+untrusted markup behind an admin guard, and it is not a thing to build unattended
+at the end of a session. **It is the next session's first item.**
+
+The check for it is asserted **present**, not filtered away: the day somebody
+fixes it, the check fails and sends them to delete it. A tolerated complaint that
+nothing asserts is the same vacuous shape as everything else in this run of
+entries — the screen stops complaining, the check goes on passing, and nobody
+learns the thing was fixed. `measureScreen` and `auditScreen` now record what
+they were told to tolerate so a caller can insist it happened.
+
+**Decisions.**
+
+- ***The policy was not widened.*** The one-line fix is `style-src
+  'unsafe-inline'`, and it would undo an entry that exists specifically to have
+  narrowed this. A defect on one screen is better than a widening on every screen.
+- ***The sender fields are configuration, not a gate.*** `default_sender_name`
+  and `default_sender_email` are what the onboarding form writes. The encrypted
+  credential and the recorded connection — everything §8 reads before allowing a
+  send — are untouched, and the address used is one that could not receive mail.
+- ***The blocked state is measured first and kept.*** The obvious move was to
+  configure a sender at the top and measure only the rendered screen. The blocked
+  screen is the one this deployment actually shows today, and it is the one an
+  operator will meet if a variable ever stops resolving.
+- ***`contentDocument` rather than an injected script.*** Proving *"no scripts"*
+  would mean putting a script into the email template, which means changing the
+  template that a compliance approval hashes. `contentDocument` proves the
+  same-origin denial, which is the property that decides whether the rest of the
+  sandbox can be got around at all.
+- ***A second investor is created and destroyed inside the function.*** The
+  alternative was seeding one for the whole run, which changes what nineteen
+  other screens are measured against.
+
+**Deviations.** None. No production code changed in this entry.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. The amount on the preview is asserted as the
+   rendered string `12,500`.
+2. *A send path bypassing a gate?* **No, and this entry is careful about it.**
+   The fixture sets two display fields and nothing the §8 gate reads. The blocked
+   state is asserted to refuse rather than render, which is §11.4's own
+   send-blocking rule seen from the operator's side.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* **Asked with somebody to find.** A
+   second investor with a distinctive name, address and amount exists for the
+   duration of the check; none of the three is in the response.
+6. *Tokens?* **Asserted not issued.** Previewing creates no portal token and
+   renders no claimable link.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No. The failure detail
+   prints screen text.
+9. *Indexable routes?* Unchanged — the preview page is `noindex`, as every route
+   but `/verify` is.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2476) and `pnpm build` are green.
+`pnpm verify:viewport` is 497 of 497.
+
+**Uncertain.**
+
+- ***The preview frame's policy is the next session's first item.*** Design
+  above. It needs a route, an admin guard, a narrow policy of its own, a test
+  that the route refuses an unauthenticated request, and the deletion of the
+  KNOWN DEFECT check in `verify-viewport.ts`.
+- ***The image upload preview is still unexercised***, and it is now alone in the
+  sentence it shared with this one. It is on `/admin/media`, it appears after a
+  file is chosen, and nothing has ever chosen one there.
+- ***The sandbox is proved for same-origin and not for scripts.*** A script in an
+  email body would be refused by `sandbox=""` and this run does not demonstrate
+  it, because demonstrating it means putting a script in the template a
+  compliance approval hashes. A fixture template would do it and is not written.
+- ***The preview is measured for one recipient in one state.*** A **blocked**
+  recipient — the US one — renders an extra line in the heading (`· Blocked`) and
+  is the case where an operator most needs the screen to be unambiguous. It is
+  not measured.
+- *`global-error.tsx` remains unrendered, and that is now a stated position.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *The refusal screen is measured with one kind of refusal.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS.md
+  §11.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *The six newly-wired scripts are wired, not scheduled; there is no
+  `verify:all`, and `DEPLOYMENT.md` names none of them.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *Nothing measures how long a 20 MB upload takes.*
+- *`waitFor` on a locator whose appearance depends on server state has still not
+  been read with that question in mind.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *Two rows in CLAIMS.md are past the six-hour staleness rule and were left
+  alone.*
+- *The password-reset journey is still not built — OPEN_DECISIONS.md §10.*

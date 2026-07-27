@@ -840,7 +840,7 @@ It is now looked at on purpose, and the thing being checked is that you can tell
 
 Those two land on the same screen and mean very different things. The run now checks that the refusal screen says the whole file is stopped and does *not* use the word held; that it names the exact number that is wrong and what to change; that the import button is switched off; that it does not quietly offer to import just the surviving rows; and that nothing was created by any of it.
 
-**The whole phone-sized run is now 441 checks**, up from 357 at the start of the day.
+**The whole phone-sized run had reached 441 checks at this point.**
 
 ---
 
@@ -860,6 +860,37 @@ Two other things are checked on that same screen, and both are promises the page
 **And one last screen, which turns out not to exist.** There is a second, deeper error page in the application, meant for the case where even the outer shell of the page fails. Nothing had ever made it appear — and looking into why, it turns out **nothing can**. The outer shell of this application reads nothing at all: no database, no settings, no cookies. It is just the page frame. So it cannot fail, and the deeper error page can never be reached.
 
 It has been left in place — it costs nothing, and the day it is ever needed is the day nothing else is working. But the note inside it, which used to describe a way of reaching it that does not actually work, has been corrected. And there is now a test that fails the moment somebody makes the outer shell read something, because that would quietly change which of the two error pages a broken application shows you.
+
+---
+
+## The email preview — and something you will want to know before you send
+
+**This is the one to read.**
+
+There is a screen that shows you the exact email one particular person will receive, with their real name and their real figures in it. It is the last thing you look at before pressing send on an invitation about somebody's money. **Nothing had ever opened it.**
+
+It has now been opened, driven and measured, and there is good news and one real problem.
+
+### The good news
+
+- **The email is drawn in a locked box.** An email is untrusted content by its nature, so this page puts it in a sealed frame that is meant to be unable to touch the page around it. That was written down and believed; it has now been *proved in a real browser*. The frame genuinely cannot reach the admin page it sits on.
+- **Looking does not create anything.** Opening a preview issues no sign-in link and no access of any kind — checked by counting before and after. The link shown in the preview is deliberately a dead one.
+- **It shows nobody else.** A second investor was deliberately put into the database while the preview was open, with a distinctive name, address and amount, and none of the three appeared anywhere in what the browser received.
+- **And what you will actually see today** is not the email at all — it is a card saying *"this email cannot be sent yet"* and naming exactly what is missing, which right now is the sending name and address. That is correct behaviour: nothing renders an email with a gap in it. That screen had also never been looked at, and now is.
+
+### The problem
+
+**You cannot currently see what your email looks like.**
+
+A designed HTML email carries all of its styling inline — that is the only kind of styling email programs respect, and this invitation has sixty-nine separate pieces of it. But the security rules this application applies to its own pages also apply *inside* that preview frame, and those rules refuse inline styling. So the preview strips every one of them out.
+
+The result: the text is right, the figures are right, the wording is right — and **the picture is wrong**. You see a plain, unstyled document. Your recipient sees the designed one. The card above the frame says "this is the markup that will be sent, byte for byte", and that is true of the content and not of the appearance.
+
+**It has not been fixed, on purpose.** The quick fix is to relax the security rule — but it is a rule that applies to every page in the application, including the one holding investors' figures, and relaxing it everywhere to make one preview look right is a bad trade. The proper fix is to serve the email into that frame from its own address with its own, much narrower rule. That is a new piece of plumbing that handles untrusted content, and it was not something to build at the end of an unattended session. **It is written up as the first thing for the next round of work.**
+
+In the meantime: the preview is trustworthy for *what it says* and not for *how it looks*. If you want to see the designed version before sending, the practical route is to send one to yourself once the sending account is connected.
+
+**The phone-sized run is now 497 checks**, up from 357 at the start of the day.
 
 ---
 
