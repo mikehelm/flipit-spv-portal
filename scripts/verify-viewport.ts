@@ -48,7 +48,7 @@
 import 'dotenv/config'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { eq, inArray, like } from 'drizzle-orm'
-import { chromium, type Browser, type Page } from 'playwright'
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
 import { db } from '@/db'
 import {
   auditEvents,
@@ -67,7 +67,7 @@ import {
   users,
 } from '@/db/schema'
 import { hashPassword } from '@/lib/auth/password'
-import { onScreen } from '@/lib/verify/page-text'
+import { everythingSent, flatten, onScreen } from '@/lib/verify/page-text'
 import { issueToken } from '@/lib/crypto'
 import { AA_LARGE, AA_TEXT, contrastRatio, reportRatio } from '@/lib/contrast'
 
@@ -449,7 +449,28 @@ async function measureScreen(
      * `/import`, which is audited in its own right.
      */
     html,
-  }: { mustShow?: RegExp; expected?: number; html?: string } = {},
+    /**
+     * One complaint this screen is *supposed* to make.
+     *
+     * The 404 case above is the same idea and predates this: a screen whose job
+     * is to answer 404 makes the browser log the 404, and that is the screen
+     * working. The error page is the stronger case — React reports an errored
+     * server render to the console by design, and it is the only evidence in the
+     * browser that the boundary caught anything at all. Silencing the check
+     * entirely for that screen would have removed the only reading of what else
+     * the browser said while its layout was being measured; naming the one
+     * expected sentence leaves the rest of the check standing.
+     *
+     * Deliberately a pattern rather than a flag, so an unexpected second
+     * complaint on the same screen still fails.
+     */
+    expectedComplaint,
+  }: {
+    mustShow?: RegExp
+    expected?: number
+    html?: string
+    expectedComplaint?: RegExp
+  } = {},
 ): Promise<void> {
   if (mustShow) {
     const text = await onScreen(page)
@@ -465,6 +486,7 @@ async function measureScreen(
     // A screen whose whole job is to answer 404 makes the browser log the 404.
     // That is the screen working, not the screen complaining.
     .filter((c) => expected === 200 || !c.includes(`status of ${expected}`))
+    .filter((c) => !expectedComplaint?.test(c))
   const csp = heard.filter((c) => /CSP refused|Content Security Policy/i.test(c))
 
   check(
@@ -916,6 +938,8 @@ async function main(): Promise<void> {
     await verifyTheStylePolicy(page)
 
     await verifyTheBannerWithAFaultBehindIt(page)
+
+    await verifyTheErrorPage(browser)
   } catch (error) {
     console.error('\nThe run stopped early. The application said:\n')
     console.error(serverOutput().split('\n').slice(-30).join('\n'))
@@ -1263,9 +1287,100 @@ async function verifyTheImportWizardSteps(page: Page): Promise<void> {
     )
 
     await verifyStepFour(page)
+    await verifyTheRefusedFile(page)
   } finally {
     await clearImportFixtures()
   }
+}
+
+/**
+ * The review screen's *other* variant — the one an operator meets on a bad day.
+ *
+ * It was being measured by accident until this session, and the accident was the
+ * defect: the fixture's percentage did not divide, so every measurement of "the
+ * review table" was in fact a measurement of the refusal. Fixing the fixture
+ * fixed the wrong measurement and left the refusal unmeasured by anything, which
+ * would have been a worse trade if nobody noticed. So it is measured on purpose,
+ * with a file that is refused for the exact reason the old fixture was.
+ *
+ * The contrast is the point. §9 and AC7 draw a hard line between two severities
+ * that land on the same screen:
+ *
+ *   - a **file error** stops the whole file, good rows included, because a
+ *     spreadsheet with a bad address in it is not a spreadsheet to send offers
+ *     from;
+ *   - a **jurisdiction block** stops one recipient and leaves the batch alone.
+ *
+ * An operator has to be able to tell which they are looking at from the screen,
+ * and until now nothing had checked that they can.
+ */
+async function verifyTheRefusedFile(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const rows = [
+      'recipient_name,recipient_email,investment_amount_usd,spv_percentage,response_deadline,recipient_jurisdiction,indirect_flipit_percentage_override,internal_notes',
+      // Fine. Present to prove the refusal takes it down too.
+      'Clementine Ashworth,wp18-viewport-import-three@example.test,5000.00,1.500000,2026-10-01,GB,,',
+      // 41.666667% of the SPV is 12.5000001% of Flipit — seven decimals into a
+      // column that stores six. This is the row the previous fixture used, and
+      // the reason every earlier measurement of the review table was a
+      // measurement of this screen.
+      'Peregrine Ashby-Lowell,wp18-viewport-import-four@example.test,127500.00,41.666667,2026-12-31,GB,12.500000,',
+    ].join('\n')
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement | null
+    if (!input) throw new Error('no file input on the import screen')
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([rows], 'wp18-viewport-refused.csv', { type: 'text/csv' }))
+    input.files = transfer.files
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+
+  await page.getByRole('button', { name: /Read the file/ }).click()
+  await page.getByRole('button', { name: /Check the file/ }).waitFor({ timeout: 40_000 })
+  await page.getByRole('button', { name: /Check the file/ }).click()
+  await page.getByRole('button', { name: /Import \d+ recipient/ }).waitFor({ timeout: 40_000 })
+
+  await measureScreen(page, 'import — a file it refuses', {
+    mustShow: /stop this whole file/,
+  })
+
+  const refused = await onScreen(page)
+
+  check(
+    'the refusal says the whole file is stopped, not that one row is held',
+    /error\(s\) stop this whole file/.test(refused) && !/Blocked/.test(refused),
+    refused.slice(0, 400),
+  )
+
+  check(
+    'and it names the row and the figure that will not divide',
+    /12\.5000001/.test(refused) && /Round the SPV percentage/.test(refused),
+    'the operator is told the file is wrong and not which number to change',
+  )
+
+  const button = page.getByRole('button', { name: /Import \d+ recipient/ })
+  check(
+    'the import button is switched off',
+    !(await button.isEnabled()),
+    'a file the application refused could still be imported',
+  )
+
+  check(
+    'and the good row is not offered on its own',
+    !/Import 1 recipient\(s\)/.test(refused) || !(await button.isEnabled()),
+    'the screen offered to import the survivors of a refused file',
+  )
+
+  check(
+    'and nothing was created by any of it',
+    (
+      await db
+        .select({ email: recipients.email })
+        .from(recipients)
+        .where(like(recipients.email, `${PREFIX}-import-three%`))
+    ).length === 0,
+    'a refused file created a recipient row',
+  )
 }
 
 /**
@@ -1981,3 +2096,231 @@ main()
     process.exitCode = 1
   })
   .finally(() => process.exit())
+
+/**
+ * The error page, rendered by a real error.
+ *
+ * This item has been on the Uncertain list for seven entries, always with the
+ * same sentence beside it: *"reaching it deliberately needs a fault that can be
+ * induced and undone."* The obstacle was never the measuring. It was that every
+ * obvious way to make this application fail — deleting a table, revoking a
+ * grant, corrupting a row — mutates the database the other 391 checks are
+ * standing on, and a run killed halfway leaves a developer with a broken
+ * development database and no note explaining it.
+ *
+ * **So the fault is put somewhere it cannot reach anything.** A second copy of
+ * the application is started, from the same build, on its own port, with
+ * `DATABASE_URL` naming a database that does not exist. Nothing is created and
+ * nothing is dropped; the working database is not touched, not even read. The
+ * fault is undone by killing a process.
+ *
+ * Reaching a page that queries is then the only remaining problem, because no
+ * public page in this application does — `/`, `/verify`, `/privacy`, `/signin`
+ * and both portal pages all answer 200 against a database that is not there,
+ * which is itself worth knowing. What queries is the **session lookup**, and it
+ * runs whenever a session cookie is present, before anything asks whether the
+ * cookie is any good. So the context carries a cookie that is not a session:
+ * `readAdminSession` hashes it, goes to the database to look it up, and the
+ * request fails inside a real page render exactly as it would if Postgres went
+ * away mid-morning.
+ *
+ * That is a fair simulation of the fault this page exists for. A database
+ * unreachable, or a migration that has not run, is by a distance the likeliest
+ * way this application will ever produce a 500.
+ *
+ * **What it found, on the first run:**
+ *
+ *   - the served response carries **no visible text at all**. `error.tsx` is a
+ *     client component, as the framework requires, so the branded page appears
+ *     on hydration and not before. A reader with JavaScript off gets a blank
+ *     page under a 500. That is a property of the framework rather than a
+ *     defect here, and nothing had said so.
+ *   - the response **does** carry the error digest, in the flight payload, twice
+ *     — while `error.tsx`'s own docstring says it *"withholds the digest too."*
+ *     It withholds it from the page. It cannot withhold it from the payload:
+ *     Next puts it there. The claim is now stated accurately in that file, and
+ *     the check below asserts the true and useful property — that **nothing
+ *     else** is in the response — using `everythingSent`, which reads the
+ *     payload and the attributes rather than the rendered text.
+ */
+async function verifyTheErrorPage(browser: Browser): Promise<void> {
+  console.log('\nThe error page, with a real error behind it')
+
+  const port = PORT + 1
+  const origin = `http://127.0.0.1:${port}`
+
+  const broken = spawn('node_modules/.bin/next', ['start', '--port', String(port)], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      APP_URL: origin,
+      BASE_PATH: '',
+      // A database that does not exist. Not a closed port: a refused connection
+      // and a missing database fail at different layers, and the missing one is
+      // the closer match to the fault this page will really meet — a migration
+      // that has not run, or a restore pointed at the wrong name.
+      DATABASE_URL: 'postgresql://postgres@127.0.0.1:5433/spv-no-such-database',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
+  })
+
+  let context: BrowserContext | undefined
+  try {
+    const deadline = Date.now() + 60_000
+    let up = false
+    while (Date.now() < deadline && !up) {
+      try {
+        const response = await fetch(`${origin}/verify`)
+        up = response.status < 500
+      } catch {
+        // Not listening yet.
+      }
+      if (!up) await new Promise((r) => setTimeout(r, 500))
+    }
+    check('a second copy of the application starts against a database that is not there', up)
+    if (!up) return
+
+    // Worth its own check: no public page in this application queries. An
+    // investor reading the anti-phishing page while the database is down still
+    // gets the anti-phishing page, which is the one time it is most needed.
+    const publicPages = await Promise.all(
+      ['/', '/verify', '/privacy', '/signin'].map(async (path) => ({
+        path,
+        status: (await fetch(`${origin}${path}`)).status,
+      })),
+    )
+    check(
+      'and every public page still answers, because none of them reads the database',
+      publicPages.every((p) => p.status < 400),
+      publicPages.map((p) => `${p.path} ${p.status}`).join(' | '),
+    )
+
+    context = await browser.newContext({
+      viewport: VIEWPORT,
+      deviceScaleFactor: 3,
+      isMobile: true,
+      hasTouch: true,
+    })
+    // Not a session. A string that makes the session lookup happen at all.
+    await context.addCookies([
+      { name: 'spv.admin_session', value: 'not-a-session', domain: '127.0.0.1', path: '/' },
+    ])
+    const page = await context.newPage()
+    watchTheConsole(page)
+    complaints.length = 0
+
+    const response = await page.goto(`${origin}/admin`, { waitUntil: 'networkidle' })
+    check(
+      'a page that reads the database answers 500',
+      response?.status() === 500,
+      `returned ${response?.status()}`,
+    )
+
+    const shown = await onScreen(page)
+    check(
+      'and the reader gets this application’s error page, not the framework’s',
+      /Something went wrong at our end/.test(shown),
+      shown.slice(0, 300),
+    )
+    check(
+      'which says nothing was lost and nothing was sent',
+      /Nothing you were doing has been lost/.test(shown) &&
+        /nothing has been sent anywhere/.test(shown),
+      shown.slice(0, 300),
+    )
+    check(
+      'and offers a retry rather than a sign-in form',
+      /Try again/.test(shown) && !/Sign in|password/i.test(shown),
+      'an investor whose portal failed to render was sent to a form asking for their address',
+    )
+
+    // The layout checks, on the one screen in the application that is drawn
+    // when everything else has stopped working. React reports an errored server
+    // render to the console by design, and that one sentence is the screen
+    // working; every other complaint still fails the check.
+    const expectedComplaint = /An error occurred in the Server Components render/
+    await measureScreen(page, 'error page', { expected: 500, expectedComplaint })
+
+    // And the sentence React logs is itself a surface. It is read by anybody the
+    // reader forwards a screenshot of the console to.
+    const logged = complaints.filter((c) => expectedComplaint.test(c)).join(' | ')
+    check(
+      'and what React logs to the console names no fault either',
+      logged !== '' &&
+        !/spv-no-such-database|does not exist|postgres(ql)?:\/\//i.test(logged) &&
+        /omitted in production builds/.test(logged),
+      logged.slice(0, 300),
+    )
+
+    /*
+     * The leak checks, and deliberately against `everythingSent` rather than
+     * `onScreen`.
+     *
+     * `error.tsx` says it shows no detail: not the message, not the stack, not
+     * the digest. Read off the rendered page that claim is true and easy. Read
+     * off the response it is not quite: the framework puts the digest in the
+     * flight payload and this application cannot take it out. So the digest is
+     * excluded from what follows and stated plainly in `error.tsx`, and what is
+     * asserted here is the part that matters and that this application does
+     * control — that a failed render sends the reader **no fact about the
+     * fault**.
+     */
+    const sent = await everythingSent(page)
+    const leaks = [
+      ['the database name', /spv-no-such-database/],
+      ['a Postgres error', /does not exist|relation|ECONNREFUSED|ENOTFOUND/i],
+      ['a connection string', /postgres(ql)?:\/\//i],
+      ['a stack frame', /\bat [A-Za-z_$][\w$]*\s*\(|\.ts:\d+:\d+|\.js:\d+:\d+/],
+      ['a path on the server', /\/root\/|\/home\/|node_modules/],
+      ['a table name', /\binvestor_accounts\b|\bsessions\b|\boffers\b/],
+      ['an address', /@example\.test|@flipthepage\.com|@gmail\.com/],
+    ] as const
+
+    for (const [what, pattern] of leaks) {
+      check(
+        `the response contains no ${what}`,
+        !pattern.test(sent),
+        `${pattern} matched what was sent`,
+      )
+    }
+
+    check(
+      'the digest is not on the screen, whatever the payload carries',
+      !/digest/i.test(shown),
+      'the reader is shown an opaque code they can only forward to a stranger',
+    )
+
+    check(
+      'the retry button is a real control at 44px',
+      await page.getByRole('button', { name: /Try again/ }).isEnabled(),
+      'the one control on the failure page cannot be pressed',
+    )
+
+    /*
+     * The pre-hydration state, which is the finding this section exists to have
+     * written down. The response body is measured directly rather than through
+     * the browser: what a reader with JavaScript off sees is what arrived, and
+     * a browser has already run the script by the time it can be asked.
+     */
+    const servedText = flatten(
+      (await (await fetch(`${origin}/admin`, { headers: { cookie: 'spv.admin_session=not-a-session' } })).text())
+        .replace(/<script[\s\S]*?<\/script>/g, '')
+        .replace(/<[^>]+>/g, ' '),
+    )
+    check(
+      'the served body carries no fault detail either, before any script runs',
+      !/does not exist|postgres|spv-no-such-database/i.test(servedText),
+      servedText.slice(0, 300),
+    )
+    check(
+      'and it is blank until hydration — a framework property, recorded not fixed',
+      servedText.replace(/Admin — Flipit SPV/, '').trim().length < 40,
+      `the served 500 body drew ${servedText.length} characters: ${servedText.slice(0, 200)}`,
+    )
+  } finally {
+    await context?.close()
+    stopServer(broken)
+  }
+}

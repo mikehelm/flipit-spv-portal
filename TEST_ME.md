@@ -811,6 +811,39 @@ All six now have a command: `pnpm verify:qa`, `pnpm verify:register`, `pnpm veri
 
 ---
 
+## What you see when it actually breaks
+
+Every application needs a page for the moment something goes wrong at its end. This one has had a proper, branded one for months — and **nothing had ever made it appear.** It had been checked by reading it, which tells you what it would say and nothing about what it does.
+
+It has now been made to appear, by breaking the application for real.
+
+**How, without breaking anything you care about.** A second copy of the application is started alongside the first, pointed at a database that does not exist. Nothing is created, nothing is deleted, and the real database is not so much as read. Then a page that needs the database is opened on a phone-sized screen, and what a person would see is measured: does it say what it is meant to say, is it laid out properly, is the "Try again" button big enough to press, and — the important one — **does it accidentally tell the reader anything about the fault.**
+
+**It found two things.**
+
+**The first is good news wrapped in a correction.** The page is written to show no detail at all — no error message, no technical code. That is true of what is *drawn*. It turns out the response still carries one number, an internal error reference, tucked away in data the browser uses rather than in anything a person sees. It cannot be removed; the framework puts it there. Nothing else is there: no error message, no database name, no file paths, no table names, no email addresses, nothing that says what went wrong. That is now checked against the *whole* response rather than against the visible page, which is a distinction this project has been bitten by before, and the note in the file has been corrected to say what is actually true.
+
+**The second is worth knowing before launch.** A page like this one can only appear once the browser has run its scripts. Somebody with JavaScript turned off gets a **blank page** under the error, rather than the branded apology. That is how the framework works rather than a mistake here, but nobody had ever looked, and now it is written down.
+
+**And one genuinely reassuring thing came out of it.** With the database completely gone, **the public pages still work** — the front page, the privacy policy, the sign-in page, and most importantly the **invitation-verification page**. That is the page somebody visits when they are asking "is this email real?", and it is exactly the page you would least want to be down during a problem. It does not touch the database at all, and that is now checked rather than assumed.
+
+---
+
+## The other import screen — the one you see when the file is wrong
+
+A footnote to the section above it, and an honest one. Fixing the import test file so that it would actually import left the **refusal** screen — the one you get when your spreadsheet has a problem in it — measured by nothing at all. It had only ever been looked at by accident.
+
+It is now looked at on purpose, and the thing being checked is that you can tell the two kinds of problem apart at a glance:
+
+- **A problem with the file** stops everything, including the rows that were fine. A spreadsheet with a bad address in it is not a spreadsheet to send investment offers from.
+- **A held country** stops that one person and leaves everyone else alone.
+
+Those two land on the same screen and mean very different things. The run now checks that the refusal screen says the whole file is stopped and does *not* use the word held; that it names the exact number that is wrong and what to change; that the import button is switched off; that it does not quietly offer to import just the surviving rows; and that nothing was created by any of it.
+
+**The whole phone-sized run is now 427 checks**, up from 357 at the start of the day.
+
+---
+
 ## The forty-eight things this was meant to do
 
 The specification ends with a list of forty-eight things that have to be true before this is finished. **`ACCEPTANCE.md` in this repository is that list, with the test that proves each one beside it.**

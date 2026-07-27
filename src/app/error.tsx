@@ -16,6 +16,21 @@
  * something to whoever can read the server log and nothing to the reader, and a
  * page carrying an opaque code invites somebody to send it to a stranger.
  *
+ * **"Shows" is exact, and the distinction was found by measuring rather than by
+ * reading.** This component does not render the digest. The *response* carries
+ * it anyway, twice, in the flight payload, because the framework puts it there
+ * for the client boundary and nothing here can take it out. Everything else is
+ * genuinely absent, and that is what `verify:viewport` now asserts — against the
+ * whole response rather than against the rendered text, which is the distinction
+ * `everythingSent` exists for: no message, no stack frame, no table name, no
+ * connection string, no path on the server, no address.
+ *
+ * **And nothing is drawn until hydration.** An error boundary must be a client
+ * component, so the 500 arrives with an empty body and this page appears when
+ * the script runs. A reader with JavaScript disabled gets a blank page under a
+ * 500 rather than the sentence below. That is the framework's shape rather than
+ * a choice made here, and it is measured so that it is at least known.
+ *
  * A retry, and nothing else. There is no automatic redirect to sign-in: an
  * investor whose portal failed to render should not be bounced to a form asking
  * for their address.

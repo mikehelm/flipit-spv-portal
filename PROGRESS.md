@@ -7115,3 +7115,204 @@ are green. `pnpm verify:viewport` is 391 of 391. The six newly-wired commands ar
 - *`mustShow` is set on six screens and absent on twenty-six.*
 - *The password-reset journey is still not built* — and it is **now** in
   OPEN_DECISIONS.md, where four entries have said it belongs.
+
+## The error page, with a real error behind it — and the screen the last entry stopped measuring
+
+Two items, and the second one is the last entry's own leavings.
+
+> *"The error page has never been rendered by a real error. Reaching it
+> deliberately needs a fault that can be induced and undone."*
+
+That sentence has been on the Uncertain list for **seven entries**. It is the
+oldest item on it. The obstacle was never the measuring — it was that every
+obvious way to make this application fail mutates the database the other 391
+checks are standing on, and a run killed halfway leaves a developer with a broken
+development database and no note saying why.
+
+**So the fault was put somewhere it cannot reach anything.** A second copy of the
+application, from the same build, on its own port, with `DATABASE_URL` naming a
+database that does not exist. Nothing is created and nothing is dropped; the
+working database is not touched, not even read. The fault is undone by killing a
+process.
+
+Reaching a page that queries was then the remaining problem, and solving it
+produced a check worth having on its own: **no public page in this application
+reads the database.** `/`, `/verify`, `/privacy` and `/signin` all answer 200
+against a database that is not there, which means an investor reading the
+anti-phishing page during an outage still gets the anti-phishing page — the one
+occasion it is most needed. That is now asserted rather than assumed.
+
+What does query is the **session lookup**, and it runs whenever a session cookie
+is present, before anything asks whether the cookie is any good. So the context
+carries a cookie that is not a session. `readAdminSession` hashes it, goes to the
+database, and the request fails inside a real page render exactly as it would if
+Postgres went away mid-morning — which is, by a distance, the likeliest way this
+application will ever produce a 500.
+
+**Two findings, both on the first run.**
+
+***The response carries the digest.*** `error.tsx`'s docstring says it *"withholds
+the digest too, because it is an identifier that means something to whoever can
+read the server log and nothing to the reader."* It withholds it from the
+**page**. The response carries it anyway, twice, in the flight payload, because
+the framework puts it there for the client boundary and nothing in this
+application can take it out.
+
+This is the distinction `everythingSent` was written for two entries ago —
+*"a leak check written against `onScreen` would pass on a page that shipped a
+name and hid it"* — and here it is again, in a file whose own comment is the
+claim being falsified. The comment now says what is true. The check asserts the
+part this application does control, against the whole response rather than the
+rendered text: **no message, no stack frame, no table name, no connection string,
+no path on the server, no address, no Postgres error, and not the database's
+name.** Seven patterns, and the digest deliberately not among them, with the
+reason written down beside it.
+
+***Nothing is drawn until hydration.*** The served 500 body has **no visible text
+at all**. An error boundary must be a client component, so the branded page
+appears when the script runs and not before: a reader with JavaScript disabled
+gets a blank page under a 500. That is the framework's shape rather than a choice
+made here, and it is now measured — including a check on the served body, fetched
+directly rather than read through a browser that has already run the script.
+
+**And what React logs is a surface too.** The console message is read by anybody
+the reader forwards a screenshot to. It is asserted to be present, to say *"the
+specific message is omitted in production builds"*, and to name no fault. Rather
+than silencing the console check for this screen, `measureScreen` takes **one**
+expected complaint as a pattern, so a second, unexpected complaint on the error
+page still fails.
+
+**The other item is the last entry's own.** Fixing the import fixture so the file
+is accepted left the wizard's **refusal** screen measured by nothing — it had been
+measured by accident for as long as the fixture was wrong, which was the defect,
+and removing the accident removed the coverage with it.
+
+It is now measured on purpose, with a file refused for the exact reason the old
+fixture was: `41.666667` again, whose derived figure needs seven decimals. The
+contrast is the point. §9 draws a hard line between two severities that land on
+the same screen — a **file error** stops the whole file including its good rows,
+a **jurisdiction block** stops one recipient and leaves the batch alone — and an
+operator has to be able to tell which they are looking at. Five checks: the
+screen says the whole file is stopped and does *not* say *Blocked*; it names the
+figure that will not divide and the number to change; the import button is
+switched off; the surviving good row is **not** offered on its own; and nothing
+was created by any of it.
+
+`pnpm verify:viewport` is **427**, up from 391 at the start of this session and
+357 at the start of the day.
+
+**Decisions.**
+
+- ***A missing database rather than a closed port.*** A refused connection and a
+  missing database fail at different layers. The missing one is the closer match
+  to what will actually happen — a migration that has not run, or a restore
+  pointed at the wrong name — and it needs no listener to be stopped and started.
+- ***A second server rather than a fault in the first.*** The alternative
+  considered was renaming a table for the duration, undone in a `finally`, which
+  is the shape the overview-banner fixture already uses for audit rows. Renaming
+  a **row** and renaming a **table** are not the same risk: a run killed with
+  `-9` between the two statements leaves a schema that no migration will repair
+  and nothing to explain it. A separate process costs one port and cannot do
+  that.
+- ***The digest is excluded from the leak checks and said out loud instead.***
+  Asserting its absence would fail, and the only ways to make it pass are to
+  patch the framework or to read the rendered text instead of the response —
+  which is the exact mistake `everythingSent` exists to prevent. An accurate
+  comment and a check of everything else is the honest version.
+- ***`expectedComplaint` is a pattern, not a flag.*** Turning the console check
+  off for the error page would have removed the only reading of what else the
+  browser said while its layout was measured. One named sentence is allowed
+  through; anything else still fails.
+- ***The leak loop was watched failing before it was trusted.*** A temporary
+  eighth pattern — `/digest/`, known present — was added and the run reported
+  `FAIL … /digest/ matched what was sent`, then removed. This repository has now
+  been caught four times with a check that was green about something it was not
+  reading, and a leak check nobody has seen fail is exactly that shape.
+- ***`error.tsx` was corrected rather than changed.*** The claim was wrong; the
+  behaviour is the framework's and is not this application's to alter. A comment
+  edit and a check are the whole of it — no production behaviour changed in this
+  entry.
+
+**Deviations.** None. The only production file touched is `src/app/error.tsx`,
+and only its docstring.
+
+**Checklist.**
+
+1. *Money as a `number`?* No. The refused-file section asserts on the string
+   `12.5000001`, which is the figure `decimal.js` produced and the reason the
+   file is refused.
+2. *A send path bypassing a gate?* No. Nothing here sends, and the refusal
+   section asserts a refused file creates nothing.
+3. *One recipient or the whole batch?* **Both severities are now on screen and
+   distinguished.** The refusal screen is asserted to say the whole file is
+   stopped and *not* to say *Blocked*; the accepted file's screen is asserted to
+   say *Blocked* beside *Ready*. An operator can tell them apart.
+4. *Can an operator record an approval?* Untouched.
+5. *Does any investor-facing response, page or error reveal that another investor
+   exists?* **This is the entry that asks it of an error.** The 500 response is
+   read whole — payload and attributes, not rendered text — and asserted to carry
+   no address, no table name, no stack frame and no fault detail. It is the one
+   response in the application nobody had ever read.
+6. *Tokens?* Untouched. The cookie the fixture sets is not a session and is
+   rejected as one; it exists only to make the lookup happen.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, a body or a key?* No — and the console
+   line React writes on an errored render is now asserted to name no fault.
+9. *Indexable routes?* Unchanged.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Untouched. The second server is given its own `APP_URL`,
+    the same way the first one is and for the same reason.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (2472) and `pnpm build` are green.
+`pnpm verify:viewport` is 427 of 427.
+
+**Uncertain.**
+
+- ***`global-error.tsx` is still unrendered by anything.*** This entry reaches
+  `error.tsx`, which renders inside the root layout. The file beside it handles a
+  failure **of** the root layout and is reachable only by breaking `env()` at
+  boot — at which point the server may not start at all, so the fixture is a
+  different shape and this entry did not attempt it. It is the last unrendered
+  screen in the application.
+- ***The blank pre-hydration body is recorded and not decided.*** A reader with
+  JavaScript disabled gets a 500 with nothing on it. A server-rendered fallback
+  is possible — `not-found.tsx` manages it, because a 404 is not an error
+  boundary — but an error boundary cannot be a server component. Whether that is
+  worth a middleware-level fallback is a question nobody has asked.
+- ***One fault shape, on one screen.*** A database that is not there is the
+  likeliest 500 and not the only one: a throw inside a server action, a failed
+  media stream mid-response, an out-of-memory. Each reaches a different boundary
+  and none is driven.
+- ***The error page has never been reached by an investor's route.*** `/admin` is
+  an operator's screen. `/portal/...` is where the sentence *"nothing has been
+  sent anywhere"* matters most, and reaching it needs a claimed portal session on
+  a server whose database is gone — which is a fixture ordering problem rather
+  than an obstacle.
+- ***The refusal screen is measured with one kind of refusal.*** A precision
+  failure. A malformed address, a duplicate inside the file, a past deadline and
+  an unrecognised country all produce the same box with different sentences, and
+  a box with eight messages in it is a different layout at 375px from a box with
+  one.
+- *The precision rule itself is still an open question for Michael* — see
+  OPEN_DECISIONS.md §11. This entry now depends on the current behaviour in two
+  places, so changing it will change two checks.
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *The six newly-wired scripts are wired, not scheduled; there is no
+  `verify:all`.*
+- *`DEPLOYMENT.md` still does not name any of the six.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *The image upload preview and the email template preview are still
+  unexercised.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *Nothing measures how long a 20 MB upload takes.*
+- *`waitFor` on a locator whose appearance depends on server state has still not
+  been read with that question in mind.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`mustShow` is set on eight screens and absent on twenty-six.*
+- *Two rows in CLAIMS.md are past the six-hour staleness rule and were left
+  alone* — the page-curl work and the three-view switcher, both claimed by
+  sessions on Michael's own machine, neither on any Uncertain list.
+- *The password-reset journey is still not built, and is now question 10 in
+  OPEN_DECISIONS.md.*
