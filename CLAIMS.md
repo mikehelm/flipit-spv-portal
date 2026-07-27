@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Full-screen email revision studio + David proposals + Mike review/promotion | Codex root | 2026-07-27 11:11 UTC | `src/app/(admin)/admin/email-review/**`; `src/components/email-review-workspace.tsx`; `src/actions/email-review.ts`; `src/lib/email-review/**`; `src/lib/email/policy.ts`; `src/lib/email/templates/**`; `src/db/schema.ts`; `drizzle/**`; `src/components/admin/admin-nav.tsx`; `src/app/(admin)/layout.tsx`; focused verification scripts/tests; `PROGRESS.md` |
 
 ## Done, so nobody starts it again
 
