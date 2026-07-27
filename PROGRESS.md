@@ -5738,7 +5738,8 @@ size control.
 - The curl appears on the landing, sign-in and access-request screens. In the
   admin and investor portal it conceals the name, email, role, password,
   two-factor and sign-out controls; hovering or focusing the corner reveals the
-  panel, while clicking the corner keeps the native details control available.
+  panel, while clicking the corner pins it until navigation, Escape or an
+  outside click closes it.
 - The low-left switch now offers three explicit destinations: Mike's owner
   overview, David's private email-review workspace and John Doe's guarded
   investor preview. It closes on navigation, outside pointer input and Escape.
