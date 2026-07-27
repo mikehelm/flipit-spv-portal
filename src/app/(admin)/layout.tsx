@@ -125,9 +125,12 @@ export default async function AdminLayout({
           role="status"
           className="fixed bottom-4 left-1/2 z-30 w-[min(44rem,calc(100vw-2rem))] -translate-x-1/2 rounded-full border border-warn/30 bg-bg2/95 px-5 py-3 text-center text-xs leading-relaxed text-dim shadow-2xl backdrop-blur-md"
         >
-          <span className="font-semibold text-warn">Testing deployment.</span>{' '}
-          Portal links embed this domain, so real invitations are refused from here. Test
-          sends to the operator&rsquo;s own address remain available.
+          <span className="font-semibold text-warn">
+            Review-only deployment.
+          </span>{' '}
+          Use this site to review the service, contracts and invitation wording. Real
+          investor invitations are refused from this address, and no sending account is
+          connected.
         </aside>
       ) : null}
     </div>
