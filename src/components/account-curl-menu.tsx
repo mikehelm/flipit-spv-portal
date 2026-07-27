@@ -75,6 +75,15 @@ export function AccountCurlMenu({
         aria-controls="account-curl-panel"
         onClick={() => setOpen((value) => !value)}
       >
+        <span
+          data-testid="curl-maker-credit"
+          aria-hidden={!visible}
+          className={`pointer-events-none absolute right-5 top-8 z-10 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.14em] text-silver2 transition-opacity duration-300 ${
+            visible ? 'opacity-80 delay-150' : 'opacity-0 delay-0'
+          }`}
+        >
+          Made with Mike
+        </span>
         <CurlCorner
           intro={false}
           activationRadius={380}
