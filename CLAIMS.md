@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Graham sign-in email prefill | Codex current task | 2026-07-28 10:39 UTC | `src/app/signin/page.tsx`, `src/actions/auth.ts`, focused tests, `PROGRESS.md` |
 
 ## Done, so nobody starts it again
 
