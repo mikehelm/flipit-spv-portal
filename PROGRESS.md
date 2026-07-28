@@ -9396,3 +9396,197 @@ involved.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src \'self\'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The sixteen count lines, and the refusal, on a screen
+
+Two items off the previous entry's Uncertain list, and they turned out to be one
+package rather than two:
+
+> ***The journey erases one investor with three messages and one offer.*** It
+> does not have a document, a certificate, a question or a register entry, so the
+> lines of the count list that describe those are rendered by nothing.
+
+> ***The `blockedBy` state is never rendered.*** The refusal when a media store
+> is unreachable is proved in the service by `verify:erasure` and its `<Notice>`
+> has never been on a screen.
+
+**Built.** `scripts/verify-account-access.ts` — the erasure journey only. No
+application file changed; the whole package is a fixture and the assertions over
+it. `pnpm verify:account-access` is now **68 checks**, up from 62.
+
+### The mistake this is actually hunting
+
+`erasureLines()` in `investors/page.tsx` is sixteen hand-written pairs of a
+sentence and a field name. The failure available to it is not a crash — it is a
+**swap**: `c.documentPackages` drawn against *"certificates blanked"*,
+`c.qaEntries` against *"follow-up messages on those questions"*. Every number on
+the screen is then a real number computed by a real query, and every sentence is
+true of something. It is true of the wrong thing.
+
+Nothing could see that. The unit tests assert on `ErasurePreview`, which is
+correct on both sides of the swap. The browser journey read the screen, but its
+investor held three messages and one offer, so fourteen of the sixteen lines
+were rendered by nothing at all and the two that were rendered were a 3 and a 1.
+A swap between any of the fourteen absent ones was invisible; a swap between the
+two present ones was two numbers that both existed.
+
+### What was built instead
+
+`ERASURE_COUNTS` declares the sixteen sentences against **sixteen different
+numbers, 1 to 16**, and the fixture is seeded from that list. The screen is then
+read for all sixteen `"<n> <sentence>"` pairs. Any permutation of the labels
+moves at least two numbers, and both are named in the failure.
+
+The numbers are not free where the schema has an opinion, and the ones that are
+pinned are pinned for a reason worth knowing:
+
+- **register entries = 1.** `interest_register_entries.account_id` is unique.
+  That line can never read anything else, for anybody.
+- **recipients = 2, offers = 5.** `offers_recipient_idx` is unique, so a
+  recipient carries at most one offer. Two offers with a recipient and three
+  without is the only shape in which these two counts differ — and three offers
+  with no recipient is an ordinary record, not a contrived one: it is an account
+  claimed without an import behind it.
+- **bank references = 3.** `funds_receipts.offer_id` is unique, so it is capped
+  by the five offers.
+- **stored files = 7** — the four document packages plus three of the six
+  certificates, being the three given a storage key. Deliberately neither the
+  document count nor the certificate count, because those are the two it would
+  most plausibly be confused with.
+
+**It was checked by breaking it**, which is what this repository asks of every
+check that claims to catch something. The bindings for `documentPackages` and
+`participationCertificates` were swapped in `page.tsx`, the app rebuilt, and the
+run failed with four named checks — including both sentences printed with the
+number they had wrongly acquired. They were put back.
+
+### The refusal, which came free
+
+A record holding stored files on a server with no media store configured is
+exactly `blockedBy`. Seeding stored files to make the seventh line real therefore
+put the fixture *into* the blocked state — so the journey now runs in two phases:
+
+1. **Blocked.** The card draws its count list and then, where the form would be,
+   the notice. This is where all sixteen sentences are read, and where the
+   refusal is seen on a screen for the first time. Three things are checked that
+   nothing had checked: that it says a media store is not configured, that it
+   names `MEDIA_STORE` rather than only refusing, and that there is **no form at
+   all** — no confirmation box, no tickbox, not a disabled one.
+2. **Unblocked.** The storage keys are taken away — the same edit an erasure
+   makes to those two columns — the page reloaded, and the form is there. The
+   stored-files line is gone with them rather than reading zero, and the other
+   fifteen counts are checked to be exactly as they were.
+
+### And a sweep, because the fixture finally made one possible
+
+The old journey checked the three conversation messages were redacted. With rows
+in eleven more tables, the same question can be asked of all of them: after the
+erasure, does any row of any table the count list names still carry the word the
+fixture wrote into its free text? Eleven tables, one check, and the failure names
+which table and how many rows.
+
+`funds_receipts.reference` is deliberately in that sweep. It is `notNull`, so it
+is *redacted* rather than cleared — a sweep that looked for nulls would report it
+clean while it still read the investor's name off their bank statement.
+
+**Decisions.**
+
+- ***Two phases on one server, rather than a second server without a media
+  store.*** `blockedBy` is computed from `mediaStore()`, which is process-wide,
+  so rendering both branches means either two servers or one record that
+  changes. The second server was rejected: it doubles the failure modes of the
+  script (two ports, two output buffers, two kills in the `finally`) to buy one
+  thing the one-server version cannot have, which is the bytes being destroyed
+  through a browser. That is recorded under Uncertain rather than built.
+- ***The fixture is seeded from `ERASURE_COUNTS` and the sentences are typed out
+  in it.*** The numbers must agree between the fixture and the expectation or
+  the check is meaningless, so they share one declaration. The *wording* must
+  not: a check that imported `erasureLines()` for its expected sentences would
+  pass a relabelling, which is the entire failure being hunted. So the sixteen
+  sentences are typed into the script and nothing imports them.
+- ***`MEDIA_STORE` was left unset for the server this script starts.***
+  Configuring one would have let the erasure destroy real bytes, and would also
+  have made the blocked branch unreachable. Unset is also the state every other
+  journey in this script has always run under, so this package changes nothing
+  about the eleven checks that were already there.
+- ***The storage keys are cleared by hand between the phases rather than by
+  deleting the rows.*** Deleting the document packages would have moved the
+  "document records redacted" count and broken the fifteen-unchanged check. The
+  edit made is the one the erasure itself makes: `ERASED_STORAGE_KEY` on the
+  documents, null on the certificates.
+- ***`qa_entries` was added to the fixture cleanup before the offers.***
+  `qa_entries.offer_id` has no `onDelete`, so it is the one table the old
+  cleanup would have tripped over. Everything else the fixture writes cascades
+  from an offer or an account.
+
+**Deviations.** None. No application file changed.
+
+**Checklist.** Nothing here touches the application, so 1–12 are unchanged. The
+one it strengthens is **5**, and only in the sense that the sweep now proves
+free text is gone from eleven tables rather than one, and the pseudonym check
+still holds: the finished card names the pseudonym and repeats neither the
+address nor the name back.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (2597) are green.
+`pnpm verify:account-access` is **68 checks**, up from 62, and passes.
+
+**Uncertain.**
+
+- ***The bytes are still never destroyed through a browser.*** The journey runs
+  on a server with no media store, so `store.remove()` is reached only by
+  `verify:erasure`. Doing it in a browser needs a second server and is written
+  up above as a rejected option rather than a missing one — but it is the one
+  thing about this screen that a person could still do and the machine has not.
+- ***The sixteen numbers prove the labels are not permuted. They do not prove
+  each label is the right sentence for its field.*** "certificates blanked"
+  against `c.participationCertificates` is now pinned; whether *blanked* is what
+  happens to a certificate is a reading of `plan.ts`, and nobody has done that
+  for all sixteen.
+- ***The erasure section is still not measured at 375px.*** `verify:viewport`
+  does not know about it. It is a `<ul>` inside a `<details>` and will almost
+  certainly be fine, which is exactly the reasoning that script exists to
+  distrust. **This is the largest buildable thing left on this screen.**
+- ***The count list is read from one card.*** `/investors` renders every
+  account and the locators are scoped to the fixture's card, which is correct —
+  but nothing checks that a *second* account's card carries its own numbers
+  rather than the first one's. The batching is proved correct in
+  `previewErasureMany` by unit tests and has never been rendered twice.
+- ***The batching is still proved correct and not proved fast.*** The journey
+  now has one investor with about a hundred and forty rows, which is heavier
+  than it was and still nothing like a page with forty investors.
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12***, and it is a conversation
+  with the formation agents rather than a package. **It remains the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited*** — every
+  citation resolves and cannot be added by hand, but whether a named test proves
+  the criterion it is filed under is a human reading of all 48.
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all, and
+  that is still the right answer.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is to leave it and write the recovery step into the runbook.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

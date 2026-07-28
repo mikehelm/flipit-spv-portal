@@ -48,17 +48,29 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { chromium, type Browser, type Page } from 'playwright'
 import { db } from '@/db'
 import {
+  accountStatusEvents,
   auditEvents,
   conversationMessages,
+  documentPackages,
+  emailChangeRequests,
+  emailSnapshots,
+  fundsReceipts,
+  interestRegisterEntries,
   investorAccounts,
+  investorResponses,
+  offerStatusEvents,
   offers,
   operatorInvites,
+  participationCertificates,
+  qaEntries,
+  qaThreadMessages,
   recipients,
   rounds,
   sessions,
   users,
 } from '@/db/schema'
-import { pseudonymEmail } from '@/lib/erasure/plan'
+import { ERASED_STORAGE_KEY, pseudonymEmail } from '@/lib/erasure/plan'
+import { newStorageKey } from '@/lib/media/store'
 import { issueAdminSetupLink } from '@/lib/auth/bootstrap'
 import { hashPassword } from '@/lib/auth/password'
 import { onScreen } from '@/lib/verify/page-text'
@@ -83,6 +95,59 @@ const OPERATOR_EMAIL = (process.env.OPERATOR_EMAILS ?? '').split(',')[0]?.trim()
 
 /** Fixtures for the erasure journey, all prefixed so cleanup can find them. */
 const ERASURE_PREFIX = 'AccessVerifyErasure'
+
+/**
+ * The sixteen lines the erasure card can draw, and a **different** number
+ * against every one of them.
+ *
+ * The point of the distinct numbers is the only thing this can prove that a
+ * unit test cannot. `erasureLines()` in `investors/page.tsx` is sixteen
+ * hand-written pairs of a sentence and a field name, and the failure available
+ * to it is not a crash but a *swap* — `documentPackages` drawn against
+ * "certificates blanked", `qaEntries` against "follow-up messages". Every count
+ * is then a real number computed by a real query and every sentence is true of
+ * something; it is simply true of the wrong thing. On a fixture where the rows
+ * are one of each, or three of two kinds, that swap renders identically and no
+ * assertion anywhere can see it.
+ *
+ * So the fixture holds one row of one kind, two of another, and so on to
+ * sixteen, and the screen is read for all sixteen sentences with their numbers
+ * attached. Any permutation of the labels moves at least two numbers.
+ *
+ * The values are not arbitrary where the schema has an opinion. `register
+ * entries` is 1 because `interest_register_entries.account_id` is unique;
+ * `recipients` is 2 and `offers` is 5 because `offers_recipient_idx` is unique,
+ * so two offers carry a recipient and three carry none; `bank references` is 3
+ * because `funds_receipts.offer_id` is unique and there are five offers. The
+ * ceiling on the other thirteen is nothing but this list.
+ *
+ * `stored files` is 7 = the four document packages plus three of the six
+ * certificates, which are the certificates given a storage key. That is also
+ * what makes the *first* phase of the journey possible: a record with stored
+ * files and no media store configured is the one state in which the card
+ * refuses to offer the form at all.
+ */
+const ERASURE_COUNTS: readonly { readonly label: string; readonly n: number }[] = [
+  { label: 'offers, whose figures stay', n: 5 },
+  { label: 'stored files destroyed outright', n: 7 },
+  { label: 'document records redacted', n: 4 },
+  { label: 'conversation messages redacted', n: 9 },
+  { label: 'emails as sent, redacted', n: 8 },
+  { label: 'questions redacted and unpublished', n: 10 },
+  { label: 'follow-up messages on those questions', n: 11 },
+  { label: 'response messages cleared', n: 12 },
+  { label: 'bank references redacted', n: 3 },
+  { label: 'certificates blanked', n: 6 },
+  { label: 'imported recipient rows pseudonymised', n: 2 },
+  { label: 'status-change reasons redacted', n: 13 },
+  { label: 'stage-change notes cleared', n: 14 },
+  { label: 'address-change requests pseudonymised', n: 15 },
+  { label: 'register entries with their reason cleared', n: 1 },
+  { label: 'audit rows relabelled — none removed', n: 16 },
+]
+
+/** How many of the six certificates carry a storage key. */
+const CERTIFICATES_WITH_A_STORED_FILE = 3
 
 let passed = 0
 let failed = 0
@@ -378,6 +443,222 @@ async function viewer(browser: Browser): Promise<void> {
 
 /** Every route a signed-out browser can ask for settles somewhere. */
 /**
+ * One investor holding a different number of rows of each of sixteen kinds.
+ *
+ * Every number here comes from `ERASURE_COUNTS` rather than from a literal, so
+ * the list a reader checks the screen against and the list the database is
+ * built from cannot drift apart. What is *not* shared is the sentence: those
+ * are typed out in `ERASURE_COUNTS` and read off the screen, and neither side
+ * imports `erasureLines()`. A test that took its expected wording from the code
+ * under test would pass a relabelling, which is the whole failure being hunted.
+ */
+async function seedErasureFixture(): Promise<{
+  account: { id: string }
+  investorEmail: string
+  offer: { id: string }
+}> {
+  const want = (label: string): number => {
+    const row = ERASURE_COUNTS.find((entry) => entry.label === label)
+    if (!row) throw new Error(`No expected count declared for “${label}”.`)
+    return row.n
+  }
+  const times = (n: number): number[] => Array.from({ length: n }, (_, index) => index)
+
+  const [round] = await db
+    .insert(rounds)
+    .values({
+      name: `${ERASURE_PREFIX} round`,
+      aggregateTargetUsd: '250000.00',
+      flipitShare: '30.000000',
+    })
+    .returning()
+
+  const investorEmail = `${ERASURE_PREFIX}-target@example.invalid`
+
+  const [account] = await db
+    .insert(investorAccounts)
+    .values({ email: investorEmail, name: `${ERASURE_PREFIX} Target`, status: 'ACTIVE' })
+    .returning()
+
+  // `offers_recipient_idx` is unique, so a recipient carries at most one offer.
+  // Two recipients and five offers is therefore three offers with none — which
+  // is an ordinary state (an account claimed without an import behind it) and
+  // the only way these two counts can differ.
+  const recipientRows = await db
+    .insert(recipients)
+    .values(
+      times(want('imported recipient rows pseudonymised')).map((index) => ({
+        roundId: round!.id,
+        name: `${ERASURE_PREFIX} Target ${index}`,
+        email: `${ERASURE_PREFIX}-target-${index}@example.invalid`,
+        jurisdiction: 'GB',
+        internalNotes: `Wants the short version. Row ${index}.`,
+      })),
+    )
+    .returning()
+
+  const offerRows = await db
+    .insert(offers)
+    .values(
+      times(want('offers, whose figures stay')).map((index) => ({
+        roundId: round!.id,
+        accountId: account!.id,
+        recipientId: recipientRows[index]?.id ?? null,
+        proposedAmountUsd: `${10000 + index}.00`,
+        spvPercentage: '1.000000',
+        indirectPercentage: '0.300000',
+        responseDeadline: '2026-09-01',
+        responseNote: `Offer ${index}: yes, from the erasure screen fixture.`,
+      })),
+    )
+    .returning()
+
+  /** Round-robin across the offers, so no count is trapped by a unique index. */
+  const onOffer = (index: number): string => offerRows[index % offerRows.length]!.id
+
+  await db.insert(accountStatusEvents).values(
+    times(want('status-change reasons redacted')).map((index) => ({
+      accountId: account!.id,
+      fromStatus: 'INVITED' as const,
+      toStatus: 'ACTIVE' as const,
+      reason: `Status reason ${index} from the erasure screen fixture.`,
+    })),
+  )
+
+  await db.insert(offerStatusEvents).values(
+    times(want('stage-change notes cleared')).map((index) => ({
+      offerId: onOffer(index),
+      fromStage: 'INVITATION_SENT' as const,
+      toStage: 'RESPONSE_RECORDED' as const,
+      reason: `Stage reason ${index} from the erasure screen fixture.`,
+      internalNote: `Internal note ${index} from the erasure screen fixture.`,
+    })),
+  )
+
+  await db.insert(emailSnapshots).values(
+    times(want('emails as sent, redacted')).map((index) => ({
+      offerId: onOffer(index),
+      kind: 'INVITATION' as const,
+      subject: `Snapshot ${index} from the erasure screen fixture`,
+      htmlBody: `<p>Snapshot ${index}.</p>`,
+      textBody: `Snapshot ${index}.`,
+      fromAddress: 'serenedavid@example.invalid',
+      fromName: 'David Serene',
+      toAddress: investorEmail,
+      templateHash: 'b'.repeat(64),
+    })),
+  )
+
+  await db.insert(conversationMessages).values(
+    times(want('conversation messages redacted')).map((index) => ({
+      accountId: account!.id,
+      offerId: onOffer(index),
+      direction: index % 2 === 1 ? ('FROM_OPERATOR' as const) : ('FROM_INVESTOR' as const),
+      body: `Message ${index} from the erasure screen fixture.`,
+    })),
+  )
+
+  await db.insert(investorResponses).values(
+    times(want('response messages cleared')).map((index) => ({
+      offerId: onOffer(index),
+      choice: 'INTERESTED' as const,
+      message: `Response ${index} from the erasure screen fixture.`,
+    })),
+  )
+
+  await db.insert(emailChangeRequests).values(
+    times(want('address-change requests pseudonymised')).map((index) => ({
+      accountId: account!.id,
+      newEmail: `${ERASURE_PREFIX}-new-${index}@example.invalid`,
+      previousEmail: investorEmail,
+      tokenHash: `${ERASURE_PREFIX}-change-${index}`,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    })),
+  )
+
+  // `funds_receipts.offer_id` is unique, so this one is capped by the offers.
+  await db.insert(fundsReceipts).values(
+    times(want('bank references redacted')).map((index) => ({
+      offerId: offerRows[index]!.id,
+      amount: '1000.00',
+      currency: 'USD',
+      valueDate: '2026-07-20',
+      reference: `SWIFT ref ${index} from the erasure screen fixture`,
+    })),
+  )
+
+  await db.insert(documentPackages).values(
+    times(want('document records redacted')).map((index) => ({
+      offerId: onOffer(index),
+      title: `Subscription agreement ${index}`,
+      description: `Document ${index} from the erasure screen fixture.`,
+      storageKey: newStorageKey('doc'),
+      contentType: 'application/pdf',
+      sizeBytes: 1024 + index,
+    })),
+  )
+
+  // Only some of the certificates carry a stored file, which is the ordinary
+  // state — a certificate is regenerated from `data` and normally stores
+  // nothing. It also makes "stored files" a number that is neither the
+  // documents nor the certificates.
+  await db.insert(participationCertificates).values(
+    times(want('certificates blanked')).map((index) => ({
+      offerId: onOffer(index),
+      version: index + 1,
+      storageKey: index < CERTIFICATES_WITH_A_STORED_FILE ? newStorageKey('doc') : null,
+      data: { name: `${ERASURE_PREFIX} Target`, amountUsd: '10000.00' },
+    })),
+  )
+
+  const entryRows = await db
+    .insert(qaEntries)
+    .values(
+      times(want('questions redacted and unpublished')).map((index) => ({
+        askedByAccountId: account!.id,
+        offerId: onOffer(index),
+        questionOriginal: `Question ${index} from the erasure screen fixture.`,
+        questionPublic: `Question ${index}?`,
+        answer: 'When David presses the button.',
+        isPublished: true,
+        publishedAt: new Date(),
+      })),
+    )
+    .returning()
+
+  await db.insert(qaThreadMessages).values(
+    times(want('follow-up messages on those questions')).map((index) => ({
+      entryId: entryRows[index % entryRows.length]!.id,
+      direction: 'FROM_INVESTOR' as const,
+      body: `Follow-up ${index} from the erasure screen fixture.`,
+    })),
+  )
+
+  // Unique per account, so this one can only ever be 1.
+  await db.insert(interestRegisterEntries).values(
+    times(want('register entries with their reason cleared')).map(() => ({
+      accountId: account!.id,
+      joinedAt: new Date(),
+      indicativeAmountUsd: '25000.00',
+      overrideReason: 'Asked to be first and David agreed.',
+    })),
+  )
+
+  await db.insert(auditEvents).values(
+    times(want('audit rows relabelled — none removed')).map((index) => ({
+      actorAccountId: account!.id,
+      actorLabel: investorEmail,
+      entityType: 'portal',
+      entityId: account!.id,
+      action: 'portal.signed_in',
+      metadata: { method: 'link', index },
+    })),
+  )
+
+  return { account: account!, investorEmail, offer: offerRows[0]! }
+}
+
+/**
  * The erasure screen, driven in a browser. OPEN_DECISIONS.md item 12.
  *
  * **This screen had never been rendered when it was written.** Every claim
@@ -394,77 +675,33 @@ async function viewer(browser: Browser): Promise<void> {
  * Four things, in the order they would bite:
  *
  *   1. The page renders at all for an owner, with the section on it.
- *   2. The counts on it are the real ones, not placeholders.
+ *   2. The counts on it are the real ones, not placeholders — **all sixteen of
+ *      them, each against a different number**. See `ERASURE_COUNTS`.
  *   3. The wrong address refuses, and refuses *visibly* — a destructive form
  *      that silently does nothing is the worst outcome available here.
  *   4. The right address erases, and the row afterwards proves it.
  *
  * And the fifth, which is a claim about somebody who is not the owner: the
  * section is **absent** for an operator, not disabled.
+ *
+ * ---
+ *
+ * **It runs in two phases, and the first one is a refusal.** The fixture is
+ * seeded holding stored files, and no media store is configured for the server
+ * this script starts — which is the state `previewErasure` calls `blockedBy`.
+ * A blocked card draws the count list and then a notice *instead of* the form,
+ * so phase one is where the sixteen sentences are read and where that notice is
+ * seen on a screen for the first time. Phase two takes the storage keys away —
+ * the same thing an erasure does to them — and the form appears.
+ *
+ * That ordering is not a convenience. `blockedBy` is computed from the media
+ * store, which is process-wide, so the only way to render both branches without
+ * standing up a second server is to change the record between them.
  */
 async function erasureScreen(browser: Browser): Promise<void> {
   console.log('\nThe erasure screen, in a browser')
 
-  const [round] = await db
-    .insert(rounds)
-    .values({
-      name: `${ERASURE_PREFIX} round`,
-      aggregateTargetUsd: '250000.00',
-      flipitShare: '30.000000',
-    })
-    .returning()
-
-  const investorEmail = `${ERASURE_PREFIX}-target@example.invalid`
-  const [recipient] = await db
-    .insert(recipients)
-    .values({
-      roundId: round!.id,
-      name: `${ERASURE_PREFIX} Target`,
-      email: investorEmail,
-      jurisdiction: 'GB',
-      internalNotes: 'Wants the short version.',
-    })
-    .returning()
-
-  const [account] = await db
-    .insert(investorAccounts)
-    .values({ email: investorEmail, name: `${ERASURE_PREFIX} Target`, status: 'ACTIVE' })
-    .returning()
-
-  const [offer] = await db
-    .insert(offers)
-    .values({
-      roundId: round!.id,
-      accountId: account!.id,
-      recipientId: recipient!.id,
-      proposedAmountUsd: '10000.00',
-      spvPercentage: '1.000000',
-      indirectPercentage: '0.300000',
-      responseDeadline: '2026-09-01',
-    })
-    .returning()
-
-  // Three messages, so a count on the screen is a number somebody could get
-  // wrong rather than a one.
-  await db.insert(conversationMessages).values(
-    [0, 1, 2].map((index) => ({
-      accountId: account!.id,
-      offerId: offer!.id,
-      direction: index === 1 ? ('FROM_OPERATOR' as const) : ('FROM_INVESTOR' as const),
-      body: `Message ${index} from the erasure screen fixture.`,
-    })),
-  )
-
-  // One audit row the investor wrote, so the relabelling line on the screen is
-  // a real number rather than a row filtered out for being zero.
-  await db.insert(auditEvents).values({
-    actorAccountId: account!.id,
-    actorLabel: investorEmail,
-    entityType: 'portal',
-    entityId: account!.id,
-    action: 'portal.signed_in',
-    metadata: { method: 'link' },
-  })
+  const { account, investorEmail, offer } = await seedErasureFixture()
 
   const context = await browser.newContext()
   const page = await context.newPage()
@@ -486,30 +723,117 @@ async function erasureScreen(browser: Browser): Promise<void> {
    */
   const section = page.locator('details', { hasText: 'Erase their personal data' }).first()
 
-  async function openSection(): Promise<string> {
+  async function openSection(expect: 'a form' | 'no form' = 'a form'): Promise<string> {
     if (!(await section.evaluate((node) => (node as HTMLDetailsElement).open))) {
       await section.locator('summary').click()
     }
-    await section.locator('form input[name="confirmation"]').waitFor({ state: 'visible' })
+    if (expect === 'a form') {
+      await section.locator('form input[name="confirmation"]').waitFor({ state: 'visible' })
+    } else {
+      // A blocked card has no form to wait for, so the wait is for the thing it
+      // has instead. Waiting for nothing at all would read the card mid-render.
+      await section.locator('[role="alert"], .notice, li').first().waitFor({ state: 'visible' })
+    }
     return (await section.innerText()).replace(/\s+/g, ' ')
   }
 
-  const opened = await openSection()
+  // ---- phase one: blocked, because the record holds stored files -----------
+  const blocked = await openSection('no form')
   check(
     'opened, it says what erasing is and is not',
-    /cannot be undone/.test(opened) && /not the same as closing an account/.test(opened),
-    opened.slice(0, 300),
+    /cannot be undone/.test(blocked) && /not the same as closing an account/.test(blocked),
+    blocked.slice(0, 300),
+  )
+
+  /*
+   * All sixteen sentences, each with its own number.
+   *
+   * Read `ERASURE_COUNTS` for why the numbers are all different. The failure
+   * this catches and no unit test can is a label drawn against the wrong field:
+   * every count is then a real number and every sentence is true of something.
+   */
+  let sentencesWrong = 0
+  for (const row of ERASURE_COUNTS) {
+    const wanted = `${row.n} ${row.label}`
+    if (blocked.includes(wanted)) continue
+    sentencesWrong += 1
+    check(`the card says “${wanted}”`, false, blocked.slice(0, 900))
+  }
+  check(
+    `all sixteen count lines are on the screen, each with its own number`,
+    sentencesWrong === 0,
+    `${sentencesWrong} of ${ERASURE_COUNTS.length} were wrong or missing`,
   )
   check(
-    'the counts are the real ones — three conversation messages, not a placeholder',
-    /3 conversation messages redacted/.test(opened),
-    opened.slice(0, 300),
+    'and the numbers really are all different, so a swapped label cannot pass',
+    new Set(ERASURE_COUNTS.map((row) => row.n)).size === ERASURE_COUNTS.length,
   )
-  check('and one offer, whose figures stay', /1 offers?, whose figures stay/.test(opened))
+
+  /*
+   * The refusal, on a screen.
+   *
+   * `previewErasure` sets `blockedBy` when the record holds stored files and no
+   * media store is configured, and `verify:erasure` proves the service returns
+   * it. Until now nothing had ever *rendered* it: the `<Notice>` that replaces
+   * the whole form in that state had never been on a page. A destructive form
+   * that appears when the bytes cannot be destroyed would be the worst of the
+   * available bugs here, and it was one component branch away.
+   */
   check(
-    'and it says the audit rows are relabelled rather than removed',
-    /audit rows? relabelled — none removed/.test(opened),
-    opened.slice(0, 300),
+    'a record holding stored files, with no media store, says so on the screen',
+    /no media store is configured/.test(blocked) && /cannot be destroyed/.test(blocked),
+    blocked.slice(0, 600),
+  )
+  check(
+    'and offers no form at all — not a disabled one',
+    (await section.locator('input[name="confirmation"]').count()) === 0 &&
+      (await section.locator('input[name="acknowledged"]').count()) === 0,
+  )
+  check(
+    'and names the variable to set rather than only refusing',
+    /MEDIA_STORE/.test(blocked),
+    blocked.slice(0, 600),
+  )
+
+  /*
+   * ---- phase two: the storage keys go, and the form comes back ------------
+   *
+   * This is the same edit an erasure makes to these two columns, done by hand
+   * so that the rest of the journey can run on a server that has no media
+   * store. Everything else about the record is untouched, so the fifteen other
+   * counts below are unchanged.
+   */
+  const offerIdsForFixture = (
+    await db.select({ id: offers.id }).from(offers).where(eq(offers.accountId, account.id))
+  ).map((row) => row.id)
+  await db
+    .update(documentPackages)
+    .set({ storageKey: ERASED_STORAGE_KEY })
+    .where(inArray(documentPackages.offerId, offerIdsForFixture))
+  await db
+    .update(participationCertificates)
+    .set({ storageKey: null })
+    .where(inArray(participationCertificates.offerId, offerIdsForFixture))
+
+  await land(page, '/investors')
+  const opened = await openSection()
+  check(
+    'with no stored files left, the refusal is gone and the form is offered',
+    !/no media store is configured/.test(opened) &&
+      (await section.locator('input[name="confirmation"]').count()) === 1,
+    opened.slice(0, 400),
+  )
+  check(
+    'the stored-files line goes with them, rather than reading zero',
+    !/stored files destroyed outright/.test(opened),
+    opened.slice(0, 400),
+  )
+  check(
+    'and the other fifteen counts are exactly as they were',
+    ERASURE_COUNTS.filter((row) => row.label !== 'stored files destroyed outright').every((row) =>
+      opened.includes(`${row.n} ${row.label}`),
+    ),
+    opened.slice(0, 900),
   )
   check(
     'and there is no reason box, which is the deliberate part',
@@ -563,7 +887,7 @@ async function erasureScreen(browser: Browser): Promise<void> {
   )
 
   const untouched = await db.query.investorAccounts.findFirst({
-    where: eq(investorAccounts.id, account!.id),
+    where: eq(investorAccounts.id, account.id),
   })
   check('and the record is untouched', untouched?.email === investorEmail)
 
@@ -596,24 +920,155 @@ async function erasureScreen(browser: Browser): Promise<void> {
   )
 
   const erased = await db.query.investorAccounts.findFirst({
-    where: eq(investorAccounts.id, account!.id),
+    where: eq(investorAccounts.id, account.id),
   })
-  check('the row is erased in the database', erased?.email === pseudonymEmail(account!.id))
+  check('the row is erased in the database', erased?.email === pseudonymEmail(account.id))
   check('and archived', erased?.status === 'ARCHIVED')
 
   const bodies = await db
     .select({ body: conversationMessages.body })
     .from(conversationMessages)
-    .where(eq(conversationMessages.accountId, account!.id))
+    .where(eq(conversationMessages.accountId, account.id))
+  const wantedMessages = ERASURE_COUNTS.find(
+    (row) => row.label === 'conversation messages redacted',
+  )!.n
   check(
-    'all three messages are redacted',
-    bodies.length === 3 && bodies.every((row) => !row.body.includes('fixture')),
+    `all ${wantedMessages} messages are redacted, and every one of them`,
+    bodies.length === wantedMessages && bodies.every((row) => !row.body.includes('fixture')),
+    `${bodies.filter((row) => row.body.includes('fixture')).length} still hold the fixture text`,
+  )
+
+  /*
+   * The free text everywhere else, swept the same way.
+   *
+   * The count list is a promise about sixteen kinds of row, and the journey has
+   * so far read it on a screen and then checked one of the sixteen in the
+   * database. These are the rest: every table the list names, asked whether any
+   * row of it still carries the word the fixture wrote into its free text.
+   *
+   * `funds_receipts.reference` is deliberately in here. It is the one an
+   * investor's bank statement identifies them by, and it is `notNull`, so it is
+   * redacted rather than cleared — a sweep that only looked for nulls would
+   * report it clean while it still read SWIFT REF TARGET.
+   */
+  const leftovers: string[] = []
+  const sweep = async (name: string, rows: (string | null)[]): Promise<void> => {
+    const dirty = rows.filter((value) => value !== null && value.includes('fixture')).length
+    if (dirty > 0) leftovers.push(`${name} (${dirty})`)
+  }
+  await sweep(
+    'account_status_events.reason',
+    (
+      await db
+        .select({ v: accountStatusEvents.reason })
+        .from(accountStatusEvents)
+        .where(eq(accountStatusEvents.accountId, account.id))
+    ).map((row) => row.v),
+  )
+  await sweep(
+    'email_change_requests.new_email',
+    (
+      await db
+        .select({ v: emailChangeRequests.newEmail })
+        .from(emailChangeRequests)
+        .where(eq(emailChangeRequests.accountId, account.id))
+    ).map((row) => row.v),
+  )
+  await sweep(
+    'qa_entries.question_original',
+    (
+      await db
+        .select({ v: qaEntries.questionOriginal })
+        .from(qaEntries)
+        .where(eq(qaEntries.askedByAccountId, account.id))
+    ).map((row) => row.v),
+  )
+  await sweep(
+    'interest_register_entries.override_reason',
+    (
+      await db
+        .select({ v: interestRegisterEntries.overrideReason })
+        .from(interestRegisterEntries)
+        .where(eq(interestRegisterEntries.accountId, account.id))
+    ).map((row) => row.v),
+  )
+  for (const [name, rows] of [
+    [
+      'offer_status_events.reason',
+      (
+        await db
+          .select({ v: offerStatusEvents.reason })
+          .from(offerStatusEvents)
+          .where(inArray(offerStatusEvents.offerId, offerIdsForFixture))
+      ).map((row) => row.v),
+    ],
+    [
+      'email_snapshots.subject',
+      (
+        await db
+          .select({ v: emailSnapshots.subject })
+          .from(emailSnapshots)
+          .where(inArray(emailSnapshots.offerId, offerIdsForFixture))
+      ).map((row) => row.v),
+    ],
+    [
+      'investor_responses.message',
+      (
+        await db
+          .select({ v: investorResponses.message })
+          .from(investorResponses)
+          .where(inArray(investorResponses.offerId, offerIdsForFixture))
+      ).map((row) => row.v),
+    ],
+    [
+      'funds_receipts.reference',
+      (
+        await db
+          .select({ v: fundsReceipts.reference })
+          .from(fundsReceipts)
+          .where(inArray(fundsReceipts.offerId, offerIdsForFixture))
+      ).map((row) => row.v),
+    ],
+    [
+      'document_packages.description',
+      (
+        await db
+          .select({ v: documentPackages.description })
+          .from(documentPackages)
+          .where(inArray(documentPackages.offerId, offerIdsForFixture))
+      ).map((row) => row.v),
+    ],
+    [
+      'offers.response_note',
+      (
+        await db
+          .select({ v: offers.responseNote })
+          .from(offers)
+          .where(inArray(offers.id, offerIdsForFixture))
+      ).map((row) => row.v),
+    ],
+  ] as [string, (string | null)[]][]) {
+    await sweep(name, rows)
+  }
+  const threadBodies = await db
+    .select({ v: qaThreadMessages.body })
+    .from(qaThreadMessages)
+    .innerJoin(qaEntries, eq(qaThreadMessages.entryId, qaEntries.id))
+    .where(eq(qaEntries.askedByAccountId, account.id))
+  await sweep(
+    'qa_thread_messages.body',
+    threadBodies.map((row) => row.v),
+  )
+  check(
+    'and no free text the fixture wrote survives anywhere the count list names',
+    leftovers.length === 0,
+    leftovers.join(', '),
   )
 
   const stillThere = await db
     .select({ amount: offers.proposedAmountUsd })
     .from(offers)
-    .where(eq(offers.id, offer!.id))
+    .where(eq(offers.id, offer.id))
   check('and the amount is exactly as it was', stillThere[0]?.amount === '10000.00')
 
   // Reload: the section now says it has already been done, rather than offering
@@ -750,10 +1205,14 @@ async function cleanUpErasureFixture(): Promise<void> {
 
   if (offerIds.length > 0) {
     await db.delete(conversationMessages).where(inArray(conversationMessages.offerId, offerIds))
+    // `qa_entries.offer_id` has no `onDelete`, so the offers cannot go first.
+    // Everything else the fixture writes cascades from an offer or an account.
+    await db.delete(qaEntries).where(inArray(qaEntries.offerId, offerIds))
     await db.delete(offers).where(inArray(offers.id, offerIds))
   }
   if (accountIds.length > 0) {
     await db.delete(conversationMessages).where(inArray(conversationMessages.accountId, accountIds))
+    await db.delete(qaEntries).where(inArray(qaEntries.askedByAccountId, accountIds))
     await db.delete(auditEvents).where(inArray(auditEvents.actorAccountId, accountIds))
     await db.delete(auditEvents).where(inArray(auditEvents.entityId, accountIds))
     await db.delete(investorAccounts).where(inArray(investorAccounts.id, accountIds))
