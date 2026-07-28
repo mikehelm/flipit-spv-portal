@@ -1376,34 +1376,6 @@ export const auditEvents = pgTable(
   ],
 )
 
-/**
- * Short-lived, first-party usability signals for David's review period.
- *
- * This table is deliberately incapable of holding page text, form values, AI
- * questions, click targets, coordinates, screenshots or replay data. A row is
- * only a coarse page bucket plus aggregate counts. Rows older than seven days
- * are deleted by both the write path and the scheduled pruning command.
- */
-export const usabilityEvents = pgTable(
-  'usability_events',
-  {
-    id: id(),
-    actorUserId: text('actor_user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    pagePath: text('page_path').notNull(),
-    durationMs: integer('duration_ms').notNull().default(0),
-    clickCount: integer('click_count').notNull().default(0),
-    rapidClickCount: integer('rapid_click_count').notNull().default(0),
-    browserErrorCount: integer('browser_error_count').notNull().default(0),
-    createdAt: createdAt(),
-  },
-  (t) => [
-    index('usability_events_actor_created_idx').on(t.actorUserId, t.createdAt),
-    index('usability_events_created_idx').on(t.createdAt),
-  ],
-)
-
 export const exportJobs = pgTable('export_jobs', {
   id: id(),
   requestedById: text('requested_by_id')

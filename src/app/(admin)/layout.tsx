@@ -6,12 +6,10 @@ import { AdminMainFrame } from '@/components/admin/admin-main-frame'
 import { AdminNav } from '@/components/admin/admin-nav'
 import { PortalPreviewSwitch } from '@/components/portal-preview-switch'
 import { SiteFooter } from '@/components/site-footer'
-import { UsabilityTracker } from '@/components/usability-tracker'
 import { requireReader } from '@/lib/auth/guards'
 import { countSubmittedEmailReviewProposals } from '@/lib/email-review/data'
 import { ROLE_LABELS, VIEWER_BANNER } from '@/lib/roles'
 import { env } from '@/lib/env'
-import { DAVID_EMAIL, USABILITY_RETENTION_DAYS } from '@/lib/usability'
 
 export const metadata: Metadata = {
   title: 'Admin — Flipit SPV',
@@ -52,13 +50,9 @@ export default async function AdminLayout({
       : admin.role === 'OPERATOR'
         ? 'David'
         : 'Read-only account')
-  const usabilityTestActive =
-    admin.role === 'OPERATOR' &&
-    admin.email.toLowerCase() === DAVID_EMAIL
 
   return (
     <div className="flex min-h-full flex-col">
-      {usabilityTestActive ? <UsabilityTracker basePath={config.BASE_PATH} /> : null}
       <AccountCurlMenu
         name={accountName}
         email={admin.email}
@@ -108,16 +102,6 @@ export default async function AdminLayout({
           {admin.role === 'VIEWER' ? (
             <p className="mt-4 border-l-2 border-orange bg-orange/6 p-3 text-xs leading-relaxed text-silver2">
               {VIEWER_BANNER}
-            </p>
-          ) : null}
-
-          {usabilityTestActive ? (
-            <p className="mt-4 border-l-2 border-orange bg-orange/6 p-3 text-xs leading-relaxed text-silver2">
-              <strong className="text-ftext">Test help is active.</strong> To help
-              Mike spot a broken or confusing page, this site counts page visits,
-              time, clicks, rapid clicking and browser errors for{' '}
-              {USABILITY_RETENTION_DAYS} days. It never records what you type,
-              read, ask AI, or click on, and it does not record your screen.
             </p>
           ) : null}
 

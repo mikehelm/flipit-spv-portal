@@ -1,0 +1,1 @@
+DROP TABLE "usability_events" CASCADE;

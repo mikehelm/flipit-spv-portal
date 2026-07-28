@@ -7770,3 +7770,38 @@ explicit fill.
   deployed. Existing browser history is neither available nor reconstructed.
 - The owner should treat a trouble signal as a reason to check in with David,
   not as surveillance or a diagnosis of intent.
+
+## 2026-07-28 — David usability tracking removed
+
+**Built.**
+
+- The David login/trouble heartbeat was deleted.
+- The browser collector, ingestion route, owner report, navigation link,
+  disclosure copy and scheduled pruning command were removed.
+- Migration 0017 drops `usability_events`, deleting the tracking rows and the
+  database's ability to store more of them.
+
+**Decisions.**
+
+- Mike withdrew the feature entirely, so it is removed rather than merely
+  paused or hidden.
+- Migration 0016 remains in history because an applied migration is never
+  rewritten; migration 0017 reverses it explicitly and reproducibly.
+
+**Deviations.**
+
+- None. Investor records, email review, roles, credentials, sending controls
+  and the ordinary append-only audit trail are unchanged.
+
+**Checklist.**
+
+1. *Monitor gone?* Yes; the heartbeat automation was deleted.
+2. *Collection gone?* Yes; no client collector or API route remains.
+3. *Stored tracking data gone?* Yes after migration 0017 drops the whole table.
+4. *Owner report gone?* Yes; the route and menu item were removed.
+5. *Focused verification?* The production build, TypeScript, focused ESLint and
+   `git diff --check` passed.
+
+**Uncertain.**
+
+- None.

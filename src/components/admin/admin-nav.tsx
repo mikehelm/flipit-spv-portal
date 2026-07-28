@@ -133,11 +133,6 @@ const MENUS: Menu[] = [
           },
           { href: '/admin/invites', label: 'David’s access', roles: ['OWNER'] },
           { href: '/audit', label: 'Audit log', roles: ['OWNER'] },
-          {
-            href: '/admin/usability',
-            label: 'David’s test activity',
-            roles: ['OWNER'],
-          },
           { href: '/admin/roadmap', label: 'Portal tiles', roles: ['OWNER'] },
           { href: '/admin/settings', label: 'Settings', roles: ['OWNER'] },
         ],
