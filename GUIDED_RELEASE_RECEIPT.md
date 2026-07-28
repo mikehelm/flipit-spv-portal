@@ -126,3 +126,28 @@ Health-truth commit: `04b2aef`
 
 The release may be deployed for private review with investor sending locked.
 It is not cleared for real invitations.
+
+## Phase 8 — Immutable private-review deployment
+
+- Frozen release commit:
+  `4f303e59948d6c409a5c7fa61a3f01aefd480674`
+- Immutable runtime:
+  `/Users/otto/Documents/spv-releases/20260728-guided-review-4f303e5`
+- The production build passed again from the immutable runtime.
+- The pre-cutover backup is non-empty and a full scratch restore passed
+  14/14 checks.
+- The live service and all four scheduled jobs now target the same immutable
+  runtime; no job targets the old mutable checkout.
+- Public sign-in returned 200. Protected admin, email-review and demo paths
+  redirect signed-out visitors to sign-in.
+- Security headers were present.
+- A live rollback to the previous release returned 200, then the guided release
+  was restored and returned 200.
+- A fresh one-time Graham setup link was issued after cutover. Graham remains a
+  read-only viewer; automated viewer boundaries passed and his personal
+  walkthrough remains the human acceptance step.
+- Real investor sending remains locked by the review/production domain
+  mismatch, disconnected mail, and unapproved invitation/reminder wording.
+
+Durable operational receipt:
+`/Users/otto/Documents/spv-releases/DEPLOYMENT-20260728-guided-review-4f303e5.md`
