@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { GuidedStart } from '@/components/admin/guided-start'
 import { MailConnectionPanel } from '@/components/admin/mail-connection-panel'
 import { Card, Notice, Pill, SectionHeading, SecretState } from '@/components/admin/ui'
 import { requireReader } from '@/lib/auth/guards'
@@ -10,6 +11,7 @@ import { describeMailConnection } from '@/lib/email/transport'
 import { readUnattendedAlert } from '@/lib/health/report'
 import { describeAreas } from '@/lib/health/rules'
 import { countPendingAccessRequests } from '@/lib/access-requests/store'
+import { countSubmittedEmailReviewProposals } from '@/lib/email-review/data'
 
 // The mail connection is read live on every load; a cached "verified" panel is
 // worse than no panel.
@@ -44,14 +46,18 @@ export default async function AdminHomePage() {
       : null
   const pendingAccessRequests =
     admin.role === 'VIEWER' ? null : await countPendingAccessRequests()
+  const submittedProposals =
+    admin.role === 'OWNER' ? await countSubmittedEmailReviewProposals() : null
 
   return (
     <>
-      <SectionHeading eyebrow="Overview" title={`Good to see you, ${firstName}`}>
-        The invitation workflow — recipients, review, sending and the investor timeline —
-        arrives on this screen as it is built. What is here now is the configuration the
-        rest of it depends on.
-      </SectionHeading>
+      <GuidedStart
+        role={admin.role}
+        firstName={firstName}
+        onboarding={onboarding}
+        pendingAccessRequests={pendingAccessRequests}
+        submittedProposals={submittedProposals}
+      />
 
       {/*
         Only when something needs a person.
@@ -77,7 +83,29 @@ export default async function AdminHomePage() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <details className="group mt-8 rounded-sm border hairline bg-bg2/35">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm font-semibold text-silver2 marker:content-none sm:px-5">
+          <span>
+            System and configuration details
+            <span className="mt-1 block text-xs font-normal text-dim">
+              Service mode, connections, health and setup facts.
+            </span>
+          </span>
+          <span
+            aria-hidden="true"
+            className="text-xs text-orange transition-transform group-open:rotate-180"
+          >
+            ▼
+          </span>
+        </summary>
+
+        <div className="border-t hairline p-4 sm:p-5">
+          <SectionHeading eyebrow="Details" title="How the service is configured">
+            These facts support the guided work above. Open them when you need to
+            diagnose a connection, setting or system check.
+          </SectionHeading>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {pendingAccessRequests !== null ? (
           <Card
             title="Access requests"
@@ -130,7 +158,7 @@ export default async function AdminHomePage() {
                 href="/admin/onboarding"
                 className="text-sm font-semibold text-orange"
               >
-                Change the sending account
+                Review the connection step
               </Link>
             </p>
           ) : null}
@@ -197,7 +225,9 @@ export default async function AdminHomePage() {
             </p>
           </Card>
         ) : null}
-      </div>
+          </div>
+        </div>
+      </details>
     </>
   )
 }

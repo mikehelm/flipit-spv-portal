@@ -24,7 +24,7 @@ interface Menu {
 
 const OVERVIEW: NavItem = {
   href: '/admin',
-  label: 'Overview',
+  label: 'Start',
   roles: ['OWNER', 'OPERATOR', 'VIEWER'],
 }
 
@@ -201,7 +201,7 @@ export function AdminNav({
                 : 'hairline bg-bg2 text-dim hover:border-orange/40 hover:text-ftext'
             }`}
           >
-            Overview
+            {OVERVIEW.label}
           </Link>
         </li>
 
