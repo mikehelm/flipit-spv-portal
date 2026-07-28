@@ -195,7 +195,18 @@ export async function removeVideoAction(
   const video = videoId ? await videoById(videoId) : await currentVideo()
   if (!video) return actionError('There is no video to remove.')
 
-  await deleteVideo(video)
+  try {
+    await deleteVideo(video)
+  } catch {
+    // Bytes first, and the row only if they went. Same rule as the image
+    // library and the documents panel; the store's own error names an errno
+    // and goes to the server log rather than to this screen.
+    return actionError(
+      'The stored file could not be deleted, so the video has been kept rather than left ' +
+        'in the store with nothing pointing at it. The server log says what the store ' +
+        'refused over. Try again once that is fixed.',
+    )
+  }
 
   await audit({
     actor: { kind: 'user', id: operator.id, label: operator.email },

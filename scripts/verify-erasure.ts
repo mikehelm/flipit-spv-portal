@@ -29,7 +29,7 @@
  */
 
 import 'dotenv/config'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { and, eq, inArray, like, sql } from 'drizzle-orm'
@@ -853,6 +853,78 @@ async function main(): Promise<void> {
 
     const daveBlocked = await previewErasure(dave.account.id)
     check('the preview says nothing blocks it once the store is back', daveBlocked?.blockedBy === null)
+
+    // ---- a file on the disk that will not delete --------------------------
+    /*
+     * **The refusal above is the store being absent. This is the store being
+     * present and saying no**, on a filesystem — which until now could not
+     * happen, because `remove()` caught every error and returned. A read-only
+     * mount, a permission the process does not have, a directory where a file
+     * should be: all three were swallowed, and the erasure counted the object
+     * as destroyed and told the owner it could not be recovered.
+     *
+     * Producing the fault takes a directory where the object should be. `rm`
+     * refuses that with ERR_FS_EISDIR for root and for anybody else, which is
+     * what makes it the one usable fault here — this runs as root often enough
+     * that `chmod` proves nothing.
+     */
+    const frank = await seedInvestor('frank', round!.id)
+    // Two documents, and the blocked one has to be second in destruction
+    // order — the loop is ordered by key now — so that exactly one object is
+    // destroyed before the refusal.
+    const frankKeys = [newStorageKey('doc'), newStorageKey('doc')].sort()
+    const frankGoes = frankKeys[0]!
+    const frankBlocked = frankKeys[1]!
+
+    await store!.put(frankGoes, bytes, 'application/pdf')
+    for (const [index, frankKey] of frankKeys.entries()) {
+      await db.insert(documentPackages).values({
+        offerId: frank.offer.id,
+        title: `Subscription agreement ${index} — frank Person`,
+        storageKey: frankKey,
+        contentType: 'application/pdf',
+        sizeBytes: bytes.byteLength,
+      })
+    }
+    // A directory with something in it, where the second object should be.
+    await mkdir(join(storeDirectory, frankBlocked), { recursive: true })
+    await writeFile(join(storeDirectory, frankBlocked, 'in-the-way'), 'x')
+
+    const frankResult = await eraseAccount({ accountId: frank.account.id, actor: owner })
+    check('a file the disk will not delete stops the erasure', !frankResult.ok)
+    check(
+      'and it is reported as partial, because the first one really did go',
+      !frankResult.ok && frankResult.reason === 'OBJECTS_PARTIALLY_DESTROYED',
+      !frankResult.ok ? frankResult.reason : 'it succeeded',
+    )
+    check(
+      'the file that could be destroyed is gone',
+      (await store!.stat(frankGoes)) === null,
+    )
+    check(
+      'and the owner is not told that nothing was changed',
+      !frankResult.ok && !/Nothing was changed/i.test(frankResult.message),
+      !frankResult.ok ? frankResult.message : '',
+    )
+    const frankAccount = await db.query.investorAccounts.findFirst({
+      where: eq(investorAccounts.id, frank.account.id),
+    })
+    check('the record still describes the investor', frankAccount?.name === 'frank Person')
+
+    const frankUnfinished = (await readUnfinishedErasures()).find(
+      (row) => row.accountId === frank.account.id,
+    )
+    check('and it is on the health report as unfinished', frankUnfinished?.stage === 'INCOMPLETE')
+    check('with one file counted as destroyed', frankUnfinished?.objectsDestroyed === 1)
+
+    // Clear the obstruction and finish the job, which is the documented remedy.
+    await rm(join(storeDirectory, frankBlocked), { recursive: true, force: true })
+    const frankRetry = await eraseAccount({ accountId: frank.account.id, actor: owner })
+    check('with the obstruction cleared, running it again succeeds', frankRetry.ok)
+    check(
+      'and the finding clears',
+      !(await readUnfinishedErasures()).some((row) => row.accountId === frank.account.id),
+    )
   } finally {
     if (previousStore === undefined) delete process.env.MEDIA_STORE
     else process.env.MEDIA_STORE = previousStore

@@ -84,7 +84,31 @@ export async function POST(request: Request) {
   // A replacement takes the previous one down with it. See `video-store.ts`
   // for why, and the screen says so before he presses anything.
   const existing = await currentVideo()
-  if (existing) await deleteVideo(existing)
+  if (existing) {
+    try {
+      await deleteVideo(existing)
+    } catch {
+      // The new bytes are already in the store by this point, and this refuses
+      // before the row that would name them is written — so the upload is
+      // abandoned rather than half accepted. What is left behind is an object
+      // no record points at, which `pnpm media:check` lists as an orphan and a
+      // person can delete. The alternative is two videos in the store, a row
+      // naming the new one, and the old one unreachable for ever.
+      await audit({
+        actor: { kind: 'user', id: admin.id, label: admin.email },
+        entityType: 'operator_video',
+        entityId: existing.id,
+        action: 'video.refused',
+        metadata: { reason: 'PREVIOUS_NOT_DELETED' },
+      })
+      return json(
+        500,
+        'The video already there could not be deleted from the store, so this one has not ' +
+          'replaced it and nothing has changed on the portal. The server log says what the ' +
+          'store refused over.',
+      )
+    }
+  }
 
   const [created] = await db
     .insert(operatorVideos)

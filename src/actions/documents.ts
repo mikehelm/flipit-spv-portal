@@ -433,7 +433,21 @@ export async function removeDocumentAction(
   }
 
   const store = mediaStore()
-  if (store) await store.remove(document.storageKey)
+  if (store) {
+    try {
+      await store.remove(document.storageKey)
+    } catch {
+      // Bytes first, and the row only if they went. A document row deleted over
+      // a PDF that is still in the store is an investor's subscription
+      // agreement sitting somewhere with nothing in this application able to
+      // find it again, and nothing that would ever delete it.
+      return actionError(
+        'The stored file could not be deleted, so the document has been kept rather than ' +
+          'removed from the record while the file stays in the store. The server log says ' +
+          'what the store refused over. Try again once that is fixed.',
+      )
+    }
+  }
   await db.delete(documentPackages).where(eq(documentPackages.id, documentId))
 
   await audit({

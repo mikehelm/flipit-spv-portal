@@ -336,8 +336,15 @@ class FilesystemMediaStore implements MediaStore {
 
     try {
       return { sizeBytes: (await stat(file)).size }
-    } catch {
-      return null
+    } catch (error) {
+      // Not there is null. A refusal is not null: `reconcile` has a bucket
+      // called `unreadable` for exactly this, kept distinct from `missing`, and
+      // a blanket swallow here routed every refusal into "the record survived
+      // and the object did not" — which reads as *the file is gone* about a
+      // file that is present and unreadable. Two problems, two remedies, and
+      // the report was only ever told one of them.
+      if (isMissing(error)) return null
+      throw storageFailure('read', error)
     }
   }
 
@@ -393,10 +400,53 @@ class FilesystemMediaStore implements MediaStore {
 
     try {
       await rm(file)
-    } catch {
+    } catch (error) {
       // Removing something that is not there is the state we wanted.
+      if (isMissing(error)) return
+      // Anything else is a failure to destroy, and it has to be said.
+      //
+      // **This catch used to have no condition on it.** A permission error, a
+      // read-only mount, a directory in the way — every one was swallowed, and
+      // the caller was told the bytes had gone. On an erasure that meant the
+      // owner read *"1 stored file was destroyed and cannot be recovered"* over
+      // a file still sitting on the disk, about an investor who had asked to be
+      // erased. It also made a promise written in `removeMediaAction` false:
+      // *"The bytes are removed first. If that fails the row stays."* Nothing
+      // ever failed, so the row always went.
+      //
+      // The object store has always distinguished absence from refusal —
+      // `deleteObject` is careful about exactly this — so the two
+      // implementations of one interface disagreed, and the default was the
+      // wrong one.
+      throw storageFailure('destroy', error)
     }
   }
+}
+
+/** Not there, as the filesystem says it. The only failure that is an answer. */
+function isMissing(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT'
+}
+
+/**
+ * A filesystem failure with the path taken out of it.
+ *
+ * `rm` and `stat` both put the full path in `message`, and the last segment of
+ * that path is the storage key — which is a capability: the image route serves
+ * an object to anyone holding one, with no session. These messages reach `pnpm
+ * media:check`'s printed output and the `unreadable` list in its report, and
+ * from there a log file.
+ *
+ * The errno code is kept, because it is the whole diagnosis — `EACCES`,
+ * `EROFS` and `ERR_FS_EISDIR` each name a different thing to go and fix — and
+ * it says nothing about which file it was.
+ */
+function storageFailure(verb: 'read' | 'destroy', error: unknown): Error {
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  return new Error(
+    `The store could not ${verb} that file${code ? ` (${code})` : ''}. ` +
+      'The path is deliberately not quoted here.',
+  )
 }
 
 /**

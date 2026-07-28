@@ -11105,3 +11105,193 @@ untouched.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The disk that agreed to everything
+
+The last entry named this at the top of its own Uncertain list and called it the
+largest open thing in the repository that somebody could fix. It was nine lines
+of code:
+
+    async remove(key: string): Promise<void> {
+      const file = this.resolve(key)
+      try {
+        await rm(file)
+      } catch {
+        // Removing something that is not there is the state we wanted.
+      }
+    }
+
+The comment is correct about `ENOENT` and was being applied to `EACCES`,
+`EPERM`, `EROFS` and `ERR_FS_EISDIR` as well. Every one of them returned
+quietly, and every caller counted the object as destroyed.
+
+### Who was told what
+
+`eraseAccount` counts a `remove()` that returns as an object destroyed and
+reports *"1 stored file was destroyed and cannot be recovered"* on the strength
+of it, about a person who has asked to be erased. On a filesystem deployment
+that sentence could not be checked, because the store had no way to disagree.
+
+And `removeMediaAction` carries this in its own header comment:
+
+> The bytes are removed first. If that fails the row stays, and the operator
+> sees a failure rather than a library entry pointing at nothing.
+
+Nothing ever failed, so the row always went. The promise was written down,
+believed, and unreachable.
+
+**The object store has always been careful about exactly this.**
+`deleteObject` checks that a 404 really is an absence — `isAbsence`, then
+`refuse` — before it accepts one, with a comment saying *"Being told the bucket
+does not exist is not"*. So the two implementations of one interface disagreed
+about whether a failed delete is a success, and the default one, the one every
+local deployment uses, was the wrong one.
+
+### What was built
+
+- ***`remove()` swallows `ENOENT` and rethrows everything else.*** `ENOENT`
+  still has to be silent: it is what makes a half-finished erasure re-runnable,
+  and there is a test saying so.
+- ***`stat()` likewise.*** `reconcile` keeps `missing` and `unreadable` apart on
+  purpose — *the object is gone* against *the store would not say* — and a
+  blanket swallow routed every refusal into `missing`. There is a test that
+  drives `reconcile` over an unreadable object and finds it in the right bucket.
+- ***The path is taken out of the error.*** `rm` and `stat` both put the full
+  path in `message`, and its last segment is the storage key, which is a
+  capability: the image route serves an object to anyone holding one, with no
+  session. These messages reach `media:check`'s output and its `unreadable`
+  list, and from there a log file. The errno code survives, because `EACCES` and
+  `EROFS` and `ERR_FS_EISDIR` are three different things to go and fix, and it
+  says nothing about which file it was.
+- ***Four call sites now handle a refusal.*** The image library and the
+  documents panel keep the row and say so, which is what `removeMediaAction`
+  already claimed to do. `removeVideoAction` does the same. The video upload
+  route refuses the replacement rather than writing a row for the new object
+  while the old one is still in the store — the new bytes are already stored at
+  that point, so what it leaves behind is an orphan `media:check` will list,
+  which is the better of the two residual states and is recorded here as a choice.
+
+### The demonstration
+
+`verify:erasure` grew a filesystem section to match the object-store one: an
+investor with two documents, a directory placed where the second object should
+be, and the erasure stopping with exactly one destroyed. Everything the previous
+entry built then fires on a disk for the first time — the partial refusal, the
+two audit rows, the health finding — and clearing the obstruction and running it
+again both succeeds and clears the finding. **160 checks**, up from 151.
+
+**Producing a real filesystem failure is the awkward part.** These run as root
+often enough that `chmod` proves nothing — root ignores it. A directory where
+`rm` expects a file fails for everybody (`ERR_FS_EISDIR`), and a symlink loop
+fails a `stat` for everybody (`ELOOP`). Neither is a likely production fault;
+both take exactly the branch a production fault takes, which is what is under
+test, and the test says so rather than implying otherwise.
+
+### Proved by breaking it
+
+- ***The condition removed from the catch, so `remove()` swallows again.*** Four
+  unit tests failed and `verify:erasure` went from 160 passed to 153 passed and
+  7 failed — including *"a file the disk will not delete stops the erasure"*.
+
+**Decisions.**
+
+- ***`ENOENT` stays silent, and only `ENOENT`.*** Anything wider is the defect
+  being fixed. Anything narrower — treating a missing file as a failure — breaks
+  the retry that makes a partial erasure recoverable.
+- ***The errno code is in the message and the path is not.*** A message with
+  neither would be untriageable; one with the path leaks a capability into a log.
+- ***`stat()` throwing is safe because `reconcile` is its only application
+  caller.*** Every other reader goes through `openStream`, which was left alone:
+  it decides existence before a stream exists, and a route that throws after the
+  status line has gone cannot say 404 any more.
+- ***The video upload route leaves an orphan rather than a wrong row.*** The new
+  bytes are stored before the old row is deleted, so a refusal there has to
+  choose between an object nothing points at and a row pointing at the wrong
+  object. The orphan is listed by `media:check` and a person can delete it; the
+  wrong row makes the old video unreachable for ever.
+- ***`get()`, `getRange()` and `openStream()` were looked at and left.*** They
+  swallow too, and they fail towards 404 — which is over-reporting rather than
+  false reassurance, and changing them turns a missing file into a 500 on a
+  route an investor is looking at. Recorded here rather than left on the
+  Uncertain list as though it were outstanding.
+
+**Deviations.** None.
+
+**Checklist.** **8**: the new error messages carry an errno and no path, and
+there is a test for each of the two. **5** untouched — nothing here reaches an
+investor-facing surface except by refusing an admin action. 1–4, 6, 7 and 9–12
+untouched.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2693**) are green.
+`pnpm verify:erasure` is **160**, `pnpm verify:media` **54**,
+`pnpm verify:object-store` **52**, `pnpm verify:documents` **48**,
+`pnpm verify:erasure-bytes` **24**, `pnpm verify:account-access` **81**.
+
+**Uncertain.**
+
+- ***Three verification scripts cannot launch a browser on a machine where two
+  others can.*** `verify:account-access` and `verify:erasure-bytes` resolve
+  Chromium through a fallback chain — try the default, then a list of candidate
+  paths — and both ran here. `verify:uploads`, `verify:viewport` and
+  `verify:recorder` call `chromium.launch()` bare and die with *"Executable
+  doesn't exist at .../chromium_headless_shell-1234"* when the installed build
+  is numbered differently. `verify:all` has a fourth copy of the launch. **The
+  answer already exists in this repository twice and is not shared**, so three
+  of the twenty-three commands are unrunnable here and nothing says so. This is
+  the obvious next item and it is a small one.
+- ***A read-only mount and a real permission denial have not been driven.*** The
+  branch has, twice, through a directory and a symlink loop. The errno differs;
+  the code path does not.
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved*** and
+  the finding it produces says the process did not survive, which is not what
+  happened.
+- ***`bucketRetentionFindings` is not in `unattendedFindings`.*** A versioned
+  bucket shows on the health page and never on the overview banner, while
+  `mediaProblemFindings` shows on both. Still looks like an oversight.
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The partial-state report exists now; nothing has read it on a screen.*** The
+  finding is proved through `erasureFindings` and `readUnfinishedErasures`, not
+  by opening `/admin/health` in a browser with a half-erased investor in the
+  database.
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***`DEPLOYMENT.md` §12.5 describes the old refusal*** and says nothing about
+  the two audit rows, the finding, or the sentence the owner now reads.
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is not to build it.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

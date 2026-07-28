@@ -186,7 +186,24 @@ export async function removeMediaAction(
   if (!asset) return actionError('That image no longer exists.')
 
   const store = mediaStore()
-  if (store) await store.remove(asset.storageKey)
+  if (store) {
+    try {
+      await store.remove(asset.storageKey)
+    } catch {
+      // The promise in this function's own comment, kept. Until the filesystem
+      // store stopped swallowing its own failures this branch was unreachable
+      // there, so the row always went whatever happened to the bytes.
+      //
+      // No detail in the message: the store's error names an errno, the server
+      // log has it, and a library screen is not where a filesystem path or a
+      // storage key belongs.
+      return actionError(
+        'The stored file could not be deleted, so the image has been kept rather than left as ' +
+          'a library entry pointing at nothing. The server log says what the store refused ' +
+          'over. Try again once that is fixed.',
+      )
+    }
+  }
 
   await db.delete(mediaAssets).where(eq(mediaAssets.id, assetId))
 

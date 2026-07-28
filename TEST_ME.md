@@ -286,11 +286,27 @@ Three things are different now.
 - **It is written down.** An erasure now writes a line to the audit log **before** it destroys anything, and a second line saying how it ended. You will see `investor_account.erase_began` followed by either `investor_account.erased` or `investor_account.erase_incomplete` — and the incomplete one records how many files went and how many are left.
 - **The health report keeps telling you.** A half-finished erasure appears on **Admin → System health**, and on the banner at the top of the overview, as a fault: *"1 erasure stopped part way through and destroyed files the record still names."* It says which account, what to do, and it clears itself the moment you run the erasure again. There is a check for that too — a rule that keeps complaining after you have done what it asked is one you learn to ignore.
 
+### And the reason none of that could happen on a disk
+
+Everything above describes what happens when the storage refuses to delete a file. On a cloud bucket it could happen. **On a local disk it could not, because the application was not listening.**
+
+The code that deletes a file from disk was one instruction wrapped in "if that fails, carry on" — written for the one case where carrying on is right: the file was already gone, which is the state you wanted anyway. But it carried on for *every* failure. A disk mounted read-only, a permission the application does not have, a folder where a file should be: each of them came back silently, and the application counted the file as destroyed.
+
+So on a disk-backed deployment, an erasure would have told the owner *"1 stored file was destroyed and cannot be recovered"* about a file still sitting there. And the image library made a promise in writing — *"the bytes are removed first; if that fails the row stays"* — that could never come true, because nothing ever failed.
+
+It listens now. *Not there* is still fine and still silent; anything else stops what it was doing and says which kind of failure it was. Three screens changed with it:
+
+- **Deleting an image** that will not delete keeps the library entry and says so, rather than removing the entry and leaving the file behind where nothing will ever find or delete it.
+- **Deleting a document** does the same. That one matters more: a document row deleted over a PDF that is still stored is an investor's subscription agreement sitting somewhere with nothing in the application able to reach it again.
+- **Replacing David's video** refuses if the old one cannot be deleted, rather than replacing the record and leaving two videos in storage.
+
+And `pnpm media:check` now tells two problems apart that it used to merge. *Missing* means the record is there and the file is not. *Unreadable* means the file may well be there and the storage would not answer — a different problem with a different fix. Until now every refusal was filed as "missing", which reads as *the file is gone* about a file that is present.
+
 **The other half of this is the one nobody can press a button to cause.** If the application is restarted, killed or redeployed in the middle of an erasure, there is no message at all, because nothing is there to write one. That is what the *first* line is for: an erasure that recorded a beginning and no ending is now itself a fault on the health report, saying in as many words that the process did not survive the attempt and that the record may be in any state — including, and this is the one that matters, erased in the database with the investor still signed in, because sessions are revoked after the record is written.
 
 **One more thing changed with it.** The files were being deleted in whatever order the database happened to return them, so an erasure that stopped half way destroyed a different set each time and the failure could not be reproduced. They are deleted in a fixed order now.
 
-You can watch the whole sequence: `pnpm verify:erasure` is **151 checks** against a real database and a real storage service — it locks a file, watches exactly one of three get destroyed, reads both audit rows, confirms the health report raises it, unlocks the file, runs the erasure again and confirms the fault clears.
+You can watch the whole sequence: `pnpm verify:erasure` is **160 checks** against a real database and a real storage service — it locks a file, watches exactly one of three get destroyed, reads both audit rows, confirms the health report raises it, unlocks the file, runs the erasure again and confirms the fault clears.
 
 **And the one thing none of that could see, which the application now asks about directly.** If the storage bucket has *versioning* switched on — a feature Amazon, Cloudflare and Backblaze all offer, and which some setup templates switch on for you — then deleting a file writes a note saying "deleted" and quietly keeps the file. The storage tells the application the file is gone. Every check described above passes. And every file is still sitting there, recoverable by anyone with access to the storage console: an investor who asked to be erased would not have been.
 
