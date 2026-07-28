@@ -1435,7 +1435,27 @@ The effect is not subtle. Those three commands run **704 checks** between them �
   camera     a synthetic camera opens
 ```
 
+**And with that fixed, `pnpm verify:all` was run to the end for the first time on this machine:**
+
+```
+  25 passed, 0 failed, 0 skipped — 5 minutes
+```
+
+Zero skipped is the number that matters — the three scripts above are in that list.
+
 **One thing about running these yourself.** `pnpm verify:viewport` needs somewhere to put a file, and will stop with *"a media store is configured for this run — set MEDIA_STORE in .env"* if you have not set one. That is the script being honest rather than measuring an empty library and calling it a pass — set `MEDIA_STORE="filesystem"` in `.env` and it runs.
+
+---
+
+## A warning that was on the wrong page
+
+Every admin screen has a banner at the top when something needs a person. It is fed by a short list of checks — deliberately short, because it runs on every page load.
+
+**A storage bucket that keeps what it is told to delete was not on that list.** It appeared only on **Admin → System health**, which you have to go and open. Meanwhile a file of the wrong size *did* raise the banner.
+
+That is the wrong way round. The versioning problem is the one that makes an erasure a lie: the application deletes an investor's signed agreement, the bucket writes a note saying "deleted" and keeps the file, and every check in the application passes. It is the most serious thing this report can find and it was the quietest.
+
+It is on the banner now, and there is a test that walks five different storage states and insists that anything serious enough for the health page is also on the banner — so the next check added to one cannot quietly miss the other.
 
 ---
 

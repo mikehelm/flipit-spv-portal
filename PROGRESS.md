@@ -11409,11 +11409,7 @@ verification script starts.
 
 **Uncertain.**
 
-- ***`verify:all` has not been seen through to its end here.*** It was started
-  and its preflight and first scripts watched; twenty-three scripts including
-  two servers and a `pg_restore` is a long run and the tail of it is unread.
-  **This is the first thing the next session should do**, and it is a command
-  rather than a build.
+- ***`verify:all` was seen through and is recorded in the entry below.***
 - ***The fallback list is four paths and a guess about where a Chromium lives.***
   It covers this sandbox and the ordinary distributions; a machine that keeps one
   elsewhere still needs `CHROMIUM_PATH`, which is what it is for.
@@ -11445,6 +11441,127 @@ verification script starts.
 - ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
 - ***`DEPLOYMENT.md` §12.5 describes the old refusal*** and says nothing about
   the two audit rows, the finding, or the sentence the owner now reads.
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is not to build it.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The banner that left out the worst thing the report can find
+
+`storageFindings` assembles two rules and says so above the line that does it:
+
+    // First, unconditionally, because the overview banner emits exactly this
+    // and the banner must never say something the page does not.
+
+    const problems = [...bucketRetentionFindings(facts), ...mediaProblemFindings(facts)]
+
+The banner is `unattendedFindings`, and it carried one of the two.
+
+So a bucket with versioning switched on — a delete that writes a marker and
+keeps the object, which makes *every* erasure in this application a lie and is
+the single most serious thing this report can find — appeared only on
+`/admin/health`, a page somebody has to go and open. A file of the wrong size
+raised the banner on the page they land on first.
+
+It is not a cost question: `bucketRetentionFindings` reads `lastMediaCheck`,
+which is already in the cheap fact set, and asks the store nothing. It was an
+omission, and a comment two lines away asserted it had not happened.
+
+### What was built
+
+- ***`bucketRetentionFindings` added to `unattendedFindings`.***
+- ***The comment corrected*** rather than left to be read as true.
+- ***A test that enforces the comment instead of restating it.*** Five media
+  states — versioning `ENABLED`, `SUSPENDED`, `UNKNOWN`, files missing, and
+  copies kept behind delete markers — and for each one every `WRONG` finding on
+  the page must appear on the banner. A third storage rule added to one and not
+  the other now fails the suite. The opposite direction is checked too: a clean
+  deployment still raises nothing, because a banner that fires on a healthy
+  system is one nobody reads by the second week.
+
+### And `verify:all` finished
+
+Started at the end of the last package and read to the end:
+
+    25 passed, 0 failed, 0 skipped — 5 minutes
+
+**Zero skipped is the number that matters.** `viewport` (542), `recorder` (107)
+and `uploads` (55) are in that list, and before the launcher was shared this
+command reported the browser unavailable and skipped all three. Every
+verification in the repository now runs from one command on this machine.
+
+**Decisions.**
+
+- ***Only `WRONG` findings are required to match.*** The banner counts what needs
+  a person; an `ATTENTION` finding is deliberately below that line, and
+  requiring parity for those would put "the store will not say whether it keeps
+  what it is told to delete" on the front page of every deployment whose
+  provider does not implement the call.
+
+**Deviations.** None.
+
+**Checklist.** None of the twelve is touched. The finding's wording is unchanged
+and was already covered by the no-address and no-amount tests.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2712**) are green.
+`pnpm verify:all` is **25 passed, 0 failed, 0 skipped**.
+
+**Uncertain.**
+
+- ***The partial-erasure findings have not been read on a screen.*** They are
+  proved through the rule and the reader, not by opening `/admin/health` or the
+  overview banner with a half-erased investor in the database. `verify:viewport`
+  runs now, and it already drives both surfaces, so this is cheap and it is the
+  obvious next item.
+- ***`erasureFindings` is on the banner and no test says the banner and the page
+  agree about it*** the way the storage one now does. The same shape of omission
+  is possible one rule along.
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.*** A shell picked from the candidate list would launch, pass
+  most things and fail the recorder.
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved*** and
+  the finding says the process did not survive, which is not what happened.
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***`DEPLOYMENT.md` §12.5 describes the old refusal*** and says nothing about
+  the two audit rows, the finding, or the sentence the owner now reads. **This is
+  the largest documentation gap left by this session's three packages.**
 - *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
   eyes and nothing else will do.*
 - *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*

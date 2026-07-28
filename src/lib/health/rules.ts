@@ -1051,6 +1051,13 @@ export function storageFindings(facts: HealthFacts): Finding[] {
   // the banner must never say something the page does not. The configuration
   // branches below are additions to it, not alternatives — a store switched off
   // after a check found two files missing does not make those files found.
+  //
+  // That claim was false for a year: `unattendedFindings` carried
+  // `mediaProblemFindings` and not `bucketRetentionFindings`, so a bucket
+  // keeping every file it was told to destroy reached the page and never the
+  // banner. It carries both now, and there is a test that walks five media
+  // states asserting every WRONG finding here is also on the banner — the
+  // comment is enforced rather than restated.
   const problems = [...bucketRetentionFindings(facts), ...mediaProblemFindings(facts)]
 
   if (!storage.configured) {
@@ -1164,6 +1171,18 @@ export function unattendedFindings(facts: UnattendedFacts): Finding[] {
     ...schedulerFindings(facts),
     ...stuckClaimFindings(facts),
     ...erasureFindings(facts),
+    // Both halves of the storage question, and `bucketRetentionFindings` was
+    // missing from this list. `storageFindings` says in its own comment that
+    // "the overview banner emits exactly this and the banner must never say
+    // something the page does not" — and the banner was emitting one of the two
+    // rules that comment covers. The effect was that a bucket keeping every
+    // file it was told to destroy, which is the most serious thing this report
+    // can find, appeared only on a page somebody had to go and open, while a
+    // file of the wrong size raised the banner.
+    //
+    // It costs nothing to include: it reads `lastMediaCheck`, which is already
+    // in the cheap fact set, and asks the store nothing.
+    ...bucketRetentionFindings(facts),
     ...mediaProblemFindings(facts),
   ]
 }

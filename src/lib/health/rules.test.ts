@@ -1199,3 +1199,70 @@ describe('copies the store kept behind delete markers', () => {
     expect(findings.some((finding) => finding.headline.includes('still holding'))).toBe(true)
   })
 })
+
+describe('what the overview banner is allowed to leave out', () => {
+  /*
+   * `storageFindings` says, in a comment above the line that assembles them,
+   * that "the overview banner emits exactly this and the banner must never say
+   * something the page does not". It covers two rules and the banner was
+   * carrying one of them: a bucket keeping every file it was told to destroy —
+   * the most serious thing this report can find — appeared only on a page
+   * somebody had to go and open, while a file of the wrong size raised the
+   * banner. Nothing said so, because a rule missing from a list looks exactly
+   * like a rule that was never written.
+   */
+  it('a bucket that keeps what it is told to delete reaches the banner', () => {
+    const facts = withMediaCheck({ versioning: 'ENABLED' })
+    const findings = unattendedFindings(facts).filter((row) => row.severity === 'WRONG')
+    expect(findings.map((row) => row.headline)).toContain(
+      'The bucket keeps what it is told to delete.',
+    )
+  })
+
+  it('and so do the copies it kept while versioning was on', () => {
+    const facts = withMediaCheck({
+      versioning: 'DISABLED',
+      hiddenVersions: { nonCurrent: 4, deleteMarkers: 1, atLeast: false },
+    })
+    expect(unattendedFindings(facts).some((row) => row.area === 'Stored files')).toBe(true)
+  })
+
+  it('every WRONG storage finding on the page is on the banner too', () => {
+    /*
+     * The rule the comment states, enforced rather than restated. A third
+     * storage rule added to the page and not to the banner now fails here.
+     *
+     * Only `WRONG`: the banner counts what needs a person, and an `ATTENTION`
+     * finding is deliberately below that line.
+     */
+    const variations: HealthFacts[] = [
+      withMediaCheck({ versioning: 'ENABLED' }),
+      withMediaCheck({ versioning: 'SUSPENDED' }),
+      withMediaCheck({ versioning: 'UNKNOWN' }),
+      withMediaCheck({ missing: 2, problems: 2 }),
+      withMediaCheck({
+        versioning: 'DISABLED',
+        hiddenVersions: { nonCurrent: 9, deleteMarkers: 0, atLeast: true },
+      }),
+    ]
+
+    for (const facts of variations) {
+      const onThePage = storageFindings(facts)
+        .filter((row) => row.severity === 'WRONG')
+        .map((row) => row.headline)
+      const onTheBanner = unattendedFindings(facts)
+        .filter((row) => row.severity === 'WRONG')
+        .map((row) => row.headline)
+
+      for (const headline of onThePage) {
+        expect(onTheBanner, headline).toContain(headline)
+      }
+    }
+  })
+
+  it('and the banner still says nothing about a healthy store', () => {
+    // The other direction. A banner that fires on a clean deployment is one
+    // nobody reads by the second week.
+    expect(unattendedFindings(healthy()).filter((row) => row.severity === 'WRONG')).toEqual([])
+  })
+})
