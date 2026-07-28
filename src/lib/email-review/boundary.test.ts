@@ -129,4 +129,25 @@ describe('David’s private email-review boundary', () => {
     expect(metadata).not.toContain('question')
     expect(metadata).not.toContain('answer')
   })
+
+  it('caps viewer questions before loading or calling OpenAI without storing text', () => {
+    const action = read('src/actions/email-review.ts')
+    const reserveAt = action.indexOf('await reserveViewerQuestionAttempt(admin)')
+    const keyAt = action.indexOf('const configured = await loadAiKey()', reserveAt)
+    const providerAt = action.indexOf('await answerEmailReviewQuestion(', reserveAt)
+    const attemptAudit = action.slice(
+      action.indexOf("action: 'email_review.question_attempted'"),
+      action.indexOf('return true', action.indexOf("action: 'email_review.question_attempted'")),
+    )
+
+    expect(action).toContain("if (admin.role !== 'VIEWER') return true")
+    expect(action).toContain('VIEWER_EMAIL_REVIEW_LIMIT')
+    expect(action).toContain('pg_advisory_xact_lock')
+    expect(action).toContain('return db.transaction(async (tx)')
+    expect(reserveAt).toBeGreaterThan(-1)
+    expect(reserveAt).toBeLessThan(keyAt)
+    expect(reserveAt).toBeLessThan(providerAt)
+    expect(attemptAudit).not.toContain('question:')
+    expect(attemptAudit).not.toContain('answer:')
+  })
 })

@@ -1,12 +1,13 @@
 'use server'
 
-import { and, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq, gte, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { actionError, actionOk, type ActionState } from '@/components/admin/action-state'
 import { db } from '@/db'
 import {
   aiUsageEvents,
+  auditEvents,
   emailReviewProposals,
   emailTemplates,
 } from '@/db/schema'
@@ -25,6 +26,11 @@ import {
   MAX_EMAIL_REVIEW_QUESTION_LENGTH,
 } from '@/lib/email-review/model'
 import { buildPairedEmailDiff } from '@/lib/email-review/segments'
+import {
+  canAskViewerEmailReviewQuestion,
+  VIEWER_EMAIL_REVIEW_LIMIT,
+  VIEWER_EMAIL_REVIEW_WINDOW_MS,
+} from '@/lib/email-review/viewer-limit'
 import {
   applySectionReplacement,
   findEmailReviewSection,
@@ -76,6 +82,53 @@ async function recordUsage(input: {
   })
 }
 
+async function reserveViewerQuestionAttempt(admin: {
+  id: string
+  email: string
+  role: 'OWNER' | 'OPERATOR' | 'VIEWER'
+}): Promise<boolean> {
+  if (admin.role !== 'VIEWER') return true
+
+  const windowStart = new Date(Date.now() - VIEWER_EMAIL_REVIEW_WINDOW_MS)
+  return db.transaction(async (tx) => {
+    // Serialize this viewer's count-and-record operation. Without the lock,
+    // simultaneous questions could all observe attempt nine and pass together.
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`email-review-viewer:${admin.id}`}, 0))`,
+    )
+    const [row] = await tx
+      .select({ value: count() })
+      .from(auditEvents)
+      .where(
+        and(
+          eq(auditEvents.actorUserId, admin.id),
+          eq(auditEvents.action, 'email_review.question_attempted'),
+          gte(auditEvents.createdAt, windowStart),
+        ),
+      )
+    const recentAttempts = Number(row?.value ?? 0)
+    if (!canAskViewerEmailReviewQuestion(admin.role, recentAttempts)) return false
+
+    // This is deliberately an inline audit insert so the advisory lock and
+    // reservation share one transaction. Every field is fixed metadata; the
+    // submitted question and provider answer are not available to this block.
+    await tx.insert(auditEvents).values({
+      actorUserId: admin.id,
+      actorAccountId: null,
+      actorLabel: admin.email,
+      entityType: 'email_review',
+      entityId: 'viewer-question-window',
+      action: 'email_review.question_attempted',
+      metadata: {
+        rollingHours: VIEWER_EMAIL_REVIEW_WINDOW_MS / (60 * 60 * 1_000),
+        attemptNumber: recentAttempts + 1,
+        limit: VIEWER_EMAIL_REVIEW_LIMIT,
+      },
+    })
+    return true
+  })
+}
+
 export async function askEmailReviewQuestionAction(
   _previous: EmailReviewAiState,
   formData: FormData,
@@ -116,6 +169,14 @@ export async function askEmailReviewQuestionAction(
     : undefined
   if (changeId && !selection) {
     return { status: 'error', message: 'Choose a visible change and try again.' }
+  }
+
+  if (!(await reserveViewerQuestionAttempt(admin))) {
+    return {
+      status: 'error',
+      message:
+        'Graham’s AI question limit has been reached for the last 24 hours. The recorded evidence and both email views remain available without AI.',
+    }
   }
 
   const configured = await loadAiKey()

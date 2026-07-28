@@ -85,4 +85,19 @@ Phase 3 commit: `541d8f0`
   approval, compliance or send readiness.
 - Focused lint, 26 focused tests, typecheck and diff validation passed.
 
-Phase 4 commit: pending
+Phase 4 commit: `c407947`
+
+## Phase 5 — AI readiness and viewer limit
+
+- AI readiness used one synthetic, non-sensitive changed clause.
+- Configured model `gpt-5.6-sol` returned a readable selection-scoped answer:
+  321 input tokens, 107 output tokens.
+- No API key or answer text was printed or recorded in this receipt.
+- Viewer questions are capped at 10 attempts per rolling 24 hours. Reservation
+  happens atomically before key/provider work; failed attempts count.
+- Attempt metadata contains fixed counts only. Question and answer text remain
+  absent.
+- Owner and operator behavior is unchanged.
+- Focused lint, 18 focused tests, typecheck and diff validation passed.
+
+Phase 5 AI-cap commit: pending
