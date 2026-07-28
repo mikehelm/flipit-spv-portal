@@ -27,18 +27,18 @@ export const metadata: Metadata = {
     description: shareDescription,
     images: [
       {
-        url: '/opengraph-image.png',
-        width: 1200,
-        height: 630,
+        url: '/icon.png',
+        width: 512,
+        height: 512,
         alt: 'Private document review workspace',
       },
     ],
   },
   twitter: {
-    card: 'summary_large_image',
+    card: 'summary',
     title: shareTitle,
     description: shareDescription,
-    images: ['/opengraph-image.png'],
+    images: ['/icon.png'],
   },
   // Every route is noindex. The verification page (WP14) opts back in
   // deliberately and is the only exception. BUILD_SPEC §15, §15.1.

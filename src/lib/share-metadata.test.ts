@@ -29,11 +29,12 @@ describe('private-link sharing metadata', () => {
     })
   })
 
-  it('publishes large-card metadata and preserves noindex', () => {
+  it('publishes the exact square icon for link previews and preserves noindex', () => {
     const layout = readFileSync('src/app/layout.tsx', 'utf8')
 
-    expect(layout).toContain("card: 'summary_large_image'")
-    expect(layout).toContain("url: '/opengraph-image.png'")
+    expect(layout).toContain("card: 'summary'")
+    expect(layout).toContain("url: '/icon.png'")
+    expect(layout).toContain("images: ['/icon.png']")
     expect(layout).toContain('robots: { index: false, follow: false, nocache: true }')
   })
 })

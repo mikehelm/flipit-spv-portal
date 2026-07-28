@@ -7688,3 +7688,33 @@ explicit fill.
 
 - Messaging applications cache link previews. A previously pasted URL may
   retain its older preview until that application's cache refreshes.
+
+## 2026-07-28 — Exact square WhatsApp preview
+
+**Built.**
+
+- Social metadata now points to the exact square curled-document icon Mike
+  selected instead of asking WhatsApp to crop the separate landscape artwork.
+- Twitter-style metadata uses the corresponding square summary treatment.
+
+**Decisions.**
+
+- The landscape artwork remains available as a project asset, but the square
+  icon is the canonical pasted-link preview.
+
+**Deviations.**
+
+- None.
+
+**Checklist.**
+
+1. *Does rendered Open Graph metadata identify `/icon.png` at 512×512?* Yes.
+2. *Does the corresponding summary metadata use the same asset?* Yes.
+3. *Focused verification?* TypeScript, focused ESLint and all three metadata
+   checks passed.
+
+**Uncertain.**
+
+- A messaging service may keep the preview cached for an already pasted URL.
+  Adding a harmless query parameter makes the next paste a fresh URL without
+  changing the setup token.
