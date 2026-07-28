@@ -8,6 +8,7 @@ import {
   type TrackedFile,
 } from './reconcile'
 import type { MediaStore, StoredObjectSummary, StoredStream } from './store'
+import type { BucketVersioning } from './s3'
 
 /**
  * The comparing that `pnpm media:check` does, without a database and without a
@@ -41,6 +42,8 @@ class FakeStore implements MediaStore {
       objects?: StoredObjectSummary[]
       listThrows?: string
       truncated?: boolean
+      /** What this store says about keeping what it is told to delete. */
+      versioningStatus?: BucketVersioning
     } = {},
   ) {}
 
@@ -66,6 +69,10 @@ class FakeStore implements MediaStore {
 
   async remove(): Promise<void> {
     throw new Error('a reconciliation deletes nothing')
+  }
+
+  async versioning(): Promise<BucketVersioning> {
+    return this.options.versioningStatus ?? 'DISABLED'
   }
 
   async stat(key: string): Promise<{ sizeBytes: number } | null> {
@@ -273,6 +280,7 @@ describe('what gets written down for the health report to read', () => {
       orphans: 1,
       listed: true,
       truncated: false,
+      versioning: 'DISABLED',
       problems: 2,
     })
   })
@@ -292,5 +300,81 @@ describe('what gets written down for the health report to read', () => {
     // files this deployment cannot read.
     expect(recordOfUnconfigured(3)).toMatchObject({ storeConfigured: false, problems: 3 })
     expect(recordOfUnconfigured(0)).toMatchObject({ storeConfigured: false, problems: 0 })
+  })
+})
+
+/**
+ * A bucket that keeps what it is told to delete.
+ *
+ * This is the only fact in a reconciliation that is not a comparison between
+ * the rows and the store, and it is here because it is the only way to learn
+ * it. A versioned bucket answers `stat`, `list` and `get` exactly as an
+ * unversioned one does and accepts every `DELETE`; the difference is that the
+ * object is still there afterwards. So every other check in this repository
+ * passes over a store where an investor erasure destroys nothing at all.
+ */
+describe('whether the store keeps what it is told to delete', () => {
+  it('is asked, and reported, on a clean run', async () => {
+    const result = await reconcile(new FakeStore({}, {}), [])
+    expect(result.versioning).toBe('DISABLED')
+    expect(result.problems).toBe(0)
+  })
+
+  it('counts as a problem when versioning is on', async () => {
+    const result = await reconcile(new FakeStore({}, { versioningStatus: 'ENABLED' }), [])
+    expect(result.versioning).toBe('ENABLED')
+    // Nothing else is wrong: no rows, no objects, nothing missing. The bucket
+    // alone is the problem, which is the case that would otherwise read clean.
+    expect(result.problems).toBe(1)
+  })
+
+  it('and when it is suspended, because the old versions are still there', async () => {
+    const result = await reconcile(new FakeStore({}, { versioningStatus: 'SUSPENDED' }), [])
+    expect(result.problems).toBe(1)
+  })
+
+  it('but not when the store will not say', async () => {
+    // A provider that does not implement the question would otherwise fail this
+    // command for ever with nothing anybody could do about it. It is reported
+    // loudly and it is not counted.
+    const result = await reconcile(new FakeStore({}, { versioningStatus: 'UNKNOWN' }), [])
+    expect(result.versioning).toBe('UNKNOWN')
+    expect(result.problems).toBe(0)
+  })
+
+  it('survives the schema the health report parses the record with', async () => {
+    const result = await reconcile(new FakeStore({}, { versioningStatus: 'ENABLED' }), [])
+    const parsed = mediaCheckRecordSchema.safeParse(recordOf(result))
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.versioning).toBe('ENABLED')
+  })
+
+  it('and a record from before the question existed still parses', () => {
+    /*
+     * The reason the field is optional. `report.ts` treats a row that fails
+     * this schema as no row at all, so a required field would silently drop the
+     * media finding from the health report for every run written before this
+     * was added — a new check making an existing one disappear.
+     */
+    const old = {
+      storeConfigured: true,
+      checked: 3,
+      missing: 0,
+      wrongSize: 0,
+      unreadable: 0,
+      orphans: 0,
+      listed: true,
+      truncated: false,
+      problems: 0,
+    }
+    const parsed = mediaCheckRecordSchema.safeParse(old)
+    expect(parsed.success).toBe(true)
+    // Absent, not `DISABLED`. There is no evidence either way and the report
+    // must not manufacture some.
+    expect(parsed.success && parsed.data.versioning).toBeUndefined()
+  })
+
+  it('reports no store as not known, rather than as permanent', () => {
+    expect(recordOfUnconfigured(2).versioning).toBe('UNKNOWN')
   })
 })

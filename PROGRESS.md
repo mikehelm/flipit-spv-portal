@@ -10521,3 +10521,206 @@ a log line.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## Ask the bucket whether its deletes are deletes
+
+The largest thing the last entry left open, and it was written into that entry
+as a runbook line because at the time there was nothing else to do with it:
+
+> ***A versioned bucket is now written down and still undetectable.*** It might
+> not have to be… **This is the largest thing this entry leaves open.**
+
+**Built.** It did not have to be. **26 new tests** (2598 → **2624**),
+`verify:object-store` **46** (up from 39), and a real capability on the store
+seam. This is the first entry in several that changes application code.
+
+### The failure
+
+With versioning on, an S3 `DELETE` writes a marker and keeps the object.
+Everything that *uses* the store behaves identically to an unversioned one: the
+delete returns 204, `get` returns null, `stat` returns null, the object is in no
+listing. So `pnpm media:check` reconciles clean, `pnpm verify:erasure` is green,
+`pnpm verify:erasure-bytes` — which asks the store itself for a listing — is
+green, and the erasure screen prints *"7 stored files destroyed outright"* and
+writes it to the audit log.
+
+**All of that is true and the documents are still in the bucket**, behind a
+marker, recoverable from a console by anybody with access. An investor who asked
+to be erased has not been, and there is no observation from inside this
+application that differs.
+
+Which is the whole argument for the shape of the fix: **it cannot be tested, so
+it is asked.**
+
+### What was built
+
+- **`S3ObjectClient.bucketVersioning()`** — `GET /bucket?versioning`, the second
+  request in that file about the bucket rather than an object in it and the
+  second to carry a query. **It never throws.** Every other call there refuses
+  loudly because a caller that asked for bytes has to know; this one is a
+  question a reporting job asks on behalf of a person, and a probe that turns a
+  media report into a stack trace has made the report worse.
+- **`MediaStore.versioning()`** on the seam, because the honest answer differs
+  between the implementations and neither is derivable from outside. The
+  filesystem store answers `DISABLED`: `rm` unlinks.
+- **Four answers, and `UNKNOWN` is not one of the safe ones.** `SUSPENDED` is
+  deliberately not folded into `DISABLED` — suspending stops *new* versions and
+  keeps every one already written, which is where the documents deleted while it
+  was on are. `UNKNOWN` is what a store that will not say gives, and it is
+  reported as "not known", never as "fine".
+- **`pnpm media:check` asks on every run and prints one of three lines**,
+  including on the clean run. A line that only appears when something is wrong
+  cannot be told apart from a line nobody wrote.
+- **A health finding.** `ENABLED`/`SUSPENDED` are **WRONG**; `UNKNOWN` is
+  **ATTENTION**; a run from before the question existed says nothing at all.
+- **`ENABLED` and `SUSPENDED` count as problems**, so `media:check` exits
+  non-zero and keeps doing so until somebody fixes the bucket. **`UNKNOWN` does
+  not**, because a provider that cannot answer would otherwise fail a scheduled
+  command for ever with nothing anybody could do about it.
+
+### The demonstration, which is worth more than the assertions
+
+`FakeS3` now *behaves* like a versioned bucket rather than merely reporting that
+it is one: with versioning enabled a `DELETE` moves the object into
+`nonCurrent`, so it stops answering `GET`, `HEAD` and listings and the bytes
+stay. `verify:object-store` then does the thing:
+
+    ok    the delete is accepted, exactly as it would be on any other bucket
+    ok    and a stat says it is gone
+    ok    and it is in no listing
+    ok    — and the bytes are still in the bucket, which is the whole point
+    ok    so the only thing that could have found this is asking the bucket
+
+That is the danger reproduced rather than described, and it is the reason the
+question is on the seam instead of in a paragraph of DEPLOYMENT.md.
+
+### Two faults found while building it
+
+**A required field would have deleted an existing finding.** The obvious way to
+record this is a new required key on `mediaCheckRecordSchema`. That schema parses
+audit rows written by every earlier version of the command, and `report.ts`
+treats a row that fails it as **no row at all** — so a required field would have
+silently dropped the whole media finding from the health report for every
+deployment until its next scheduled run. A new check making an existing one
+disappear. The field is optional, absent means *"a run from before anybody
+asked"*, and that is reported as nothing rather than as `DISABLED`. There is a
+test that a record written yesterday still parses.
+
+**A check that passed for the wrong reason, caught by breaking it.** With
+`bucketVersioning()` deliberately broken to answer `DISABLED` on a refusal, the
+unit test failed and `verify:object-store` **stayed green at 45**. The script's
+"will not answer" case was modelled as a 501, which the client retries and then
+raises — so it left through the `catch`, not through the `!response.ok` branch
+the break was in. The fake now refuses two ways, 403 `AccessDenied` (a key pair
+scoped to objects, the commonest real case, not retried) and 501
+`NotImplemented`, and both are checked. Under the same break the script now
+fails.
+
+Also broken on purpose: **a versioned bucket no longer counted as a problem** —
+two reconciliation tests failed, including the one where *nothing else at all is
+wrong*, which is the case that would otherwise read as clean.
+
+**Decisions.**
+
+- ***Asked in `media:check`, not in the health endpoint.*** The endpoint is
+  polled by an uptime monitor; a bucket round trip per poll is a cost for a fact
+  that changes when somebody clicks something in a console. The scheduled job
+  asks and writes it down, and the health report reads what was written. No
+  request to this application makes a request to a bucket.
+- ***`UNKNOWN` is loud and is not counted.*** Two different things: it must not
+  be mistaken for safe, and it must not fail a cron for ever on a provider
+  nobody can change.
+- ***A versioned bucket does not block an erasure.*** It was considered, and it
+  is the more conservative option in one direction only. The gate would rest on
+  a probe that answers `UNKNOWN` on providers whose API differs, and the failure
+  mode of getting that wrong is *an investor cannot be erased at all* — a worse
+  answer to a data-protection request than an erasure that needs a bucket
+  setting checked. It is reported at **WRONG** in three places instead. **This
+  is a judgement, and it is the one to revisit first if anybody disagrees.**
+- ***The filesystem store answers `DISABLED`, not `UNKNOWN`.*** A disk that is
+  snapshotted underneath does hold copies of a destroyed document — but that is
+  a property of the machine, nothing here can see it, and `UNKNOWN` would put a
+  warning on every filesystem deployment that no deployment could ever clear. It
+  is a line in DEPLOYMENT.md instead.
+- ***An unrecognised `<Status>` is `UNKNOWN`.*** A status nobody here has heard
+  of is not evidence of safety.
+
+**Deviations.** None.
+
+**Checklist.** **8** is the one to look at: the probe is a signed request, and
+the failure path returns `UNKNOWN` with **no detail at all** — deliberately, an
+error from a signed request can carry the endpoint and the key id. The existing
+`verify:object-store` sweep over the audit log for the secret, the access key id,
+a storage key and the endpoint still passes. **5** is the reason the feature
+exists: a bucket that keeps deleted documents is one investor's records outliving
+their erasure. 1–4, 6, 7 and 9–12 are untouched — no money, no send path, no
+gate, no token.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2624**) are green.
+`pnpm verify:object-store` is **46**, `pnpm verify:erasure` is **136**,
+`pnpm verify:erasure-bytes` is **24** and `pnpm verify:account-access` is **81**.
+
+**Uncertain.**
+
+- ***The bucket is still a fake, and now the fake models versioning too.*** A
+  real AWS, R2 or B2 bucket has answered none of this. `GetBucketVersioning` is
+  in every one of their documented APIs; whether each returns exactly the body
+  parsed here is untested against a real endpoint. **The failure available is
+  `UNKNOWN` on a bucket that would have said `DISABLED` — noisy, not unsafe** —
+  and the parser was deliberately written so that anything unrecognised lands
+  there rather than on a false all-clear.
+- ***Nothing checks an object lock or a retention policy***, which have the same
+  effect and different APIs (`GetObjectLockConfiguration`). Only versioning is
+  asked about; the rest is a sentence in the runbook. That is the obvious next
+  item and it is a small one.
+- ***Nothing asks whether non-current versions are actually there.***
+  `ListObjectVersions` would say — a bucket with versioning newly switched off
+  can still be full of copies of everything ever deleted. The report currently
+  says "turn it off"; it cannot say "and here is what is still in there".
+- ***The health finding is derived from the last `media:check`, so a bucket
+  switched to versioned this morning is invisible until the next scheduled
+  run.*** The cron in DEPLOYMENT §8 is weekly.
+- ***`recordOfUnconfigured` reports `UNKNOWN`***, and the health rule ignores it
+  because `storeConfigured` is false. Correct, and it means a deployment with no
+  store says nothing about retention at all rather than saying "permanent".
+- ***One erasure, one neighbour, thirty-four objects*** — unchanged, and
+  `list(1000)` truncating is still unmeasured.
+- ***Nothing crashes the process mid-`remove()` loop.***
+- ***The partial state has no report.*** `media:check` finds the rows a
+  half-finished erasure leaves, and nothing tells anybody to run it.
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is not to build it.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

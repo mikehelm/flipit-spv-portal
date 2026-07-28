@@ -8,6 +8,7 @@ import {
   RUN_OVERDUE_HOURS,
   backupFindings,
   storageFindings,
+  bucketRetentionFindings,
   buildFindings,
   contactFindings,
   flagFindings,
@@ -69,6 +70,7 @@ function healthy(overrides: Partial<HealthFacts> = {}): HealthFacts {
       orphans: 0,
       listed: true,
       truncated: false,
+      versioning: 'DISABLED' as const,
       problems: 0,
     },
     lastBackupAt: hoursAgo(20),
@@ -932,5 +934,73 @@ describe('the health modules obey the standing rules', () => {
     expect(wrongAt).toBeGreaterThan(-1)
     expect(exitAt).toBeGreaterThan(wrongAt)
     expect(exitAt).toBeLessThan(attentionAt)
+  })
+})
+
+/**
+ * A bucket that keeps what it is told to delete.
+ *
+ * The finding exists because this is the one failure an erasure cannot see from
+ * inside: on a versioned bucket the delete succeeds, the store reports the
+ * object as gone, `media:check` reconciles cleanly, and the signed subscription
+ * agreement an investor asked to have destroyed is still there.
+ */
+describe('whether the store keeps what it is told to delete', () => {
+  it('says nothing when deletes are permanent', () => {
+    expect(bucketRetentionFindings(withMediaCheck({ versioning: 'DISABLED' }))).toEqual([])
+  })
+
+  it('says nothing when the run predates the question', () => {
+    // Absent is not DISABLED and it is not a warning either. There is no
+    // evidence, and a finding manufactured from an absent field would appear on
+    // every deployment until its next scheduled run.
+    expect(bucketRetentionFindings(withMediaCheck({ versioning: undefined }))).toEqual([])
+  })
+
+  it('says nothing when there was no store to ask', () => {
+    expect(
+      bucketRetentionFindings(withMediaCheck({ storeConfigured: false, versioning: 'UNKNOWN' })),
+    ).toEqual([])
+  })
+
+  it('is WRONG when versioning is on', () => {
+    const findings = bucketRetentionFindings(withMediaCheck({ versioning: 'ENABLED' }))
+    expect(findings).toHaveLength(1)
+    expect(findings[0]!.severity).toBe('WRONG')
+    expect(findings[0]!.headline).toContain('keeps what it is told to delete')
+    expect(findings[0]!.remedy).toContain('Turn versioning off')
+  })
+
+  it('and WRONG when it is suspended, because the old copies remain', () => {
+    const findings = bucketRetentionFindings(withMediaCheck({ versioning: 'SUSPENDED' }))
+    expect(findings).toHaveLength(1)
+    expect(findings[0]!.severity).toBe('WRONG')
+    expect(findings[0]!.detail).toContain('still in the bucket')
+  })
+
+  it('is ATTENTION, not silence, when the store will not say', () => {
+    const findings = bucketRetentionFindings(withMediaCheck({ versioning: 'UNKNOWN' }))
+    expect(findings).toHaveLength(1)
+    expect(findings[0]!.severity).toBe('ATTENTION')
+    expect(findings[0]!.headline).toContain('will not say')
+  })
+
+  it('reaches the storage findings, so the report and the banner both carry it', () => {
+    // The rule is only worth anything if something surfaces it. This is the
+    // path from the recorded fact to the page somebody reads.
+    const findings = storageFindings(withMediaCheck({ versioning: 'ENABLED' }))
+    expect(findings.some((finding) => finding.headline.includes('told to delete'))).toBe(true)
+  })
+
+  it('and it survives a store that was switched off after the run', () => {
+    // A store turned off does not un-keep the copies a versioned bucket made.
+    // This is the same argument the problem findings make and it is checked for
+    // the same reason.
+    const facts = withMediaCheck({ versioning: 'ENABLED' })
+    const findings = storageFindings({
+      ...facts,
+      storage: { configured: false, recordsNamingAFile: 2 },
+    })
+    expect(findings.some((finding) => finding.headline.includes('told to delete'))).toBe(true)
   })
 })

@@ -29,7 +29,7 @@ import { Readable } from 'node:stream'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { env } from '@/lib/env'
-import { S3ObjectClient } from './s3'
+import { S3ObjectClient, type BucketVersioning } from './s3'
 
 export interface StoredObject {
   bytes: Uint8Array
@@ -147,6 +147,20 @@ export interface MediaStore {
    */
   list(limit: number): Promise<{ objects: StoredObjectSummary[]; truncated: boolean }>
   remove(key: string): Promise<void>
+  /**
+   * Whether this store keeps what `remove` is told to destroy.
+   *
+   * On the seam rather than in the reporting script, because the honest answer
+   * differs between the two implementations and neither is derivable from
+   * outside. **It is the one property of a store that no amount of putting,
+   * getting and deleting can discover**: a versioned bucket answers every one
+   * of those exactly as an unversioned one does, which is why an erasure cannot
+   * see it and why this had to be asked rather than tested.
+   *
+   * Never throws. `UNKNOWN` is a first-class answer and is what a store that
+   * will not say gives — see the note on the type in `s3.ts`.
+   */
+  versioning(): Promise<BucketVersioning>
 }
 
 /**
@@ -181,6 +195,20 @@ class FilesystemMediaStore implements MediaStore {
 
   describe(): string {
     return `Local filesystem at ${this.root}`
+  }
+
+  /**
+   * `rm` unlinks. There is no version to keep and nothing to configure wrong.
+   *
+   * This is about the store's own semantics and nothing else. A filesystem that
+   * is snapshotted underneath, or backed up hourly, still holds a copy of a
+   * destroyed document — but that is a property of the machine rather than of
+   * this store, nothing here can see it, and answering `UNKNOWN` to describe it
+   * would put a warning on every filesystem deployment that no deployment could
+   * ever clear. It is a line in DEPLOYMENT.md instead.
+   */
+  async versioning(): Promise<BucketVersioning> {
+    return 'DISABLED'
   }
 
   private resolve(key: string): string {
@@ -370,6 +398,10 @@ class ObjectMediaStore implements MediaStore {
 
   describe(): string {
     return `Object store at ${this.client.describe()}`
+  }
+
+  async versioning(): Promise<BucketVersioning> {
+    return this.client.bucketVersioning()
   }
 
   private checked(key: string): string {

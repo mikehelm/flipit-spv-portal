@@ -25,7 +25,7 @@ import { resetEnvCache } from '@/lib/env'
 import { jpegWithMetadata } from '@/lib/media/fixtures'
 import { ingest } from '@/lib/media/ingest'
 import { S3ObjectClient } from '@/lib/media/s3'
-import { mediaStore, resetMediaStoreCache } from '@/lib/media/store'
+import { mediaStore, newStorageKey, resetMediaStoreCache } from '@/lib/media/store'
 import { FakeS3, FAKE_S3_ACCESS_KEY_ID, FAKE_S3_BUCKET, FAKE_S3_REGION, FAKE_S3_SECRET } from '@/test/fake-s3'
 
 const PREFIX = 'object-store-verify'
@@ -253,6 +253,81 @@ async function main(): Promise<void> {
   check('no audit entry contains the access key id', !serialised.includes(FAKE_S3_ACCESS_KEY_ID))
   check('no audit entry contains a storage key', !serialised.includes(result.storageKey))
   check('no audit entry contains the endpoint', !serialised.includes(fake.endpoint))
+
+  // --- Whether the bucket keeps what it is told to delete ------------------
+  console.log('\nDELETE against a versioned bucket, which is a delete that is not one')
+
+  /*
+   * **The one property of a store that cannot be discovered by using it.**
+   *
+   * Everything above this line establishes that the client puts, gets, ranges,
+   * lists, pages and deletes correctly. None of it can tell a versioned bucket
+   * from an unversioned one, because there is nothing to tell: with versioning
+   * on, a `DELETE` returns the same 204, the object stops answering `GET`,
+   * `HEAD` and listings, and the bytes stay in the bucket behind a marker.
+   *
+   * That matters here more than it would in most applications, because this one
+   * has an action whose entire promise is that bytes are destroyed. An investor
+   * erasure prints *"stored files destroyed outright"* on the screen and writes
+   * it into the audit log. On a versioned bucket that sentence is false and
+   * nothing in the application can see it — so the answer is to ask the bucket,
+   * and this is the check that the asking works and that it matters.
+   */
+  const store2 = mediaStore()!
+  check('an unversioned bucket reports its deletes as permanent', (await store2.versioning()) === 'DISABLED')
+
+  /*
+   * Two refusals, because they leave the client by two different doors: a 403
+   * is a response that is not ok, and a 501 is retried and then raised. Both
+   * have to arrive at `UNKNOWN`, and a check that only exercised one of them
+   * would pass over a client that called the other one safe.
+   */
+  fake.versioningApi = 'REFUSED'
+  check(
+    'a bucket that refuses the question reads as not known, never as permanent',
+    (await store2.versioning()) === 'UNKNOWN',
+  )
+  fake.versioningApi = 'ABSENT'
+  check(
+    'and a provider that does not implement it reads the same way',
+    (await store2.versioning()) === 'UNKNOWN',
+  )
+  fake.versioningApi = 'PRESENT'
+
+  fake.versioning = 'Enabled'
+  check('and a versioned bucket says so', (await store2.versioning()) === 'ENABLED')
+
+  /*
+   * The demonstration, which is worth more than the assertion above it.
+   */
+  const doomedKey = newStorageKey('doc')
+  const doomedBytes = new TextEncoder().encode('%PDF-1.4 a signed subscription agreement')
+  await store2.put(doomedKey, doomedBytes, 'application/pdf')
+  check('an object is stored', (await store2.stat(doomedKey)) !== null)
+
+  await store2.remove(doomedKey)
+
+  check(
+    'the delete is accepted, exactly as it would be on any other bucket',
+    (await store2.get(doomedKey)) === null,
+  )
+  check('and a stat says it is gone', (await store2.stat(doomedKey)) === null)
+  check(
+    'and it is in no listing',
+    !(await store2.list(1000)).objects.some((object) => object.key === doomedKey),
+  )
+  check(
+    '— and the bytes are still in the bucket, which is the whole point',
+    fake.nonCurrent.get(doomedKey)?.bytes.equals(Buffer.from(doomedBytes)) === true,
+    'the fake bucket no longer holds the non-current version',
+  )
+  check(
+    'so the only thing that could have found this is asking the bucket',
+    (await store2.versioning()) === 'ENABLED',
+  )
+
+  fake.versioning = 'DISABLED'
+  fake.nonCurrent.clear()
 
   await cleanup()
   const leftovers = await db.select().from(mediaAssets).where(like(mediaAssets.name, `${PREFIX}%`))

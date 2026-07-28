@@ -401,6 +401,47 @@ export function parseListResult(xml: string): {
   }
 }
 
+/**
+ * Whether a bucket keeps what it is told to delete.
+ *
+ * This exists because of the one failure an erasure cannot see from inside.
+ * With versioning on, a `DELETE` writes a marker and keeps the object: the
+ * store then answers every subsequent question the way an empty store answers,
+ * `pnpm media:check` is clean and `pnpm verify:erasure` is green — because the
+ * application asked for a delete and was told it happened. What has actually
+ * happened is that an investor who asked to be erased still has a signed
+ * subscription agreement in object storage, recoverable from a console.
+ *
+ * `SUSPENDED` is not safe and is deliberately not folded into `DISABLED`.
+ * Suspending stops *new* versions being written; every non-current version
+ * already there stays exactly where it is, and that is where the documents
+ * deleted while it was enabled are.
+ *
+ * `UNKNOWN` is not safe either. It is the answer whenever the store will not
+ * say — the call is refused, the provider does not implement it, or the body
+ * does not parse — and it must be reported as "not known", never as "fine".
+ */
+export type BucketVersioning = 'ENABLED' | 'SUSPENDED' | 'DISABLED' | 'UNKNOWN'
+
+/**
+ * A `VersioningConfiguration`, read with a pattern rather than an XML parser —
+ * the same argument as `parseListResult` above.
+ *
+ * An empty `<VersioningConfiguration/>` is what a bucket that has never had
+ * versioning turned on answers, and it is the only shape that means `DISABLED`.
+ * A `<Status>` this does not recognise is `UNKNOWN` rather than assumed
+ * harmless: a status nobody here has heard of is not evidence of safety.
+ */
+export function parseVersioningStatus(xml: string): BucketVersioning {
+  if (!/<VersioningConfiguration[\s>/]/.test(xml)) return 'UNKNOWN'
+
+  const status = /<Status>\s*([A-Za-z]+)\s*<\/Status>/.exec(xml)?.[1]
+  if (status === undefined) return 'DISABLED'
+  if (status === 'Enabled') return 'ENABLED'
+  if (status === 'Suspended') return 'SUSPENDED'
+  return 'UNKNOWN'
+}
+
 const ATTEMPTS = 3
 const BACKOFF_MS = [100, 400]
 const TIMEOUT_MS = 30_000
@@ -785,6 +826,37 @@ export class S3ObjectClient {
       if (!page.nextToken) return { objects, truncated: false }
 
       token = page.nextToken
+    }
+  }
+
+  /**
+   * Ask the bucket whether it keeps what it is told to delete.
+   *
+   * `GET /bucket?versioning` — the second request in this file about the bucket
+   * rather than an object in it, and the second to carry a query.
+   *
+   * **It never throws, and that is the decision.** Every other call here
+   * refuses loudly, because a caller that asked for bytes and did not get them
+   * has to know. This one is a question asked by a reporting job on behalf of a
+   * person, and a probe that turns a media report into a stack trace has made
+   * the report worse. A provider that does not implement `GetBucketVersioning`,
+   * or a key pair scoped to objects and not to bucket configuration, is an
+   * ordinary state and the answer to it is `UNKNOWN` — which is reported as not
+   * known, and is never reported as safe.
+   */
+  async bucketVersioning(): Promise<BucketVersioning> {
+    try {
+      const response = await this.send('GET', { query: { versioning: '' } })
+      if (!response.ok) {
+        await response.arrayBuffer().catch(() => undefined)
+        return 'UNKNOWN'
+      }
+      return parseVersioningStatus(await response.text())
+    } catch {
+      // Deliberately no detail. The failure is reported as `UNKNOWN` where a
+      // person will read it, and an error from a signed request can carry the
+      // endpoint and the key id.
+      return 'UNKNOWN'
     }
   }
 

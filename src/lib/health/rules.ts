@@ -26,6 +26,8 @@
  * happening. This tells them, in a sentence each, and stops.
  */
 
+import type { BucketVersioning } from '@/lib/media/s3'
+
 export type Severity = 'OK' | 'ATTENTION' | 'WRONG'
 
 export interface Finding {
@@ -100,6 +102,13 @@ export interface MediaCheckSummary {
   /** Whether the store could be listed at all on that run. */
   listed: boolean
   truncated: boolean
+  /**
+   * What the store said about keeping what it is told to delete.
+   *
+   * Undefined on a row written before the command asked. Undefined is not
+   * `DISABLED` and must not be reported as one.
+   */
+  versioning?: BucketVersioning
   /** Everything wrong on that run, counted once. */
   problems: number
 }
@@ -774,6 +783,80 @@ export function backupFindings(facts: HealthFacts): Finding[] {
  * Shared between the full report and the overview banner, so the two can never
  * describe the same fact differently. One query either side.
  */
+/**
+ * A bucket that keeps what it is told to delete.
+ *
+ * **Separate from the problem findings below, because it is a different kind of
+ * fact.** Everything there is a disagreement between the rows and the store,
+ * found by comparing them. This one cannot be found that way at all: a
+ * versioned bucket answers `stat`, `list` and `get` exactly as an unversioned
+ * one does, and a `DELETE` against it succeeds. It has to be asked, and the
+ * asking happens in `pnpm media:check` so that no request to this endpoint
+ * costs a round trip to a bucket.
+ *
+ * What is at stake is the one action in this application that cannot be undone.
+ * With versioning on, an investor erasure reports that it destroyed a signed
+ * subscription agreement, and the agreement is still there.
+ */
+export function bucketRetentionFindings(facts: UnattendedFacts): Finding[] {
+  const last = facts.lastMediaCheck
+  if (last === null) return []
+  if (!last.storeConfigured) return []
+
+  const versioning = last.versioning
+  // A run from before the command asked. Saying nothing is right: there is no
+  // evidence either way, and inventing a warning from an absent field would put
+  // one on every deployment until the next scheduled run.
+  if (versioning === undefined) return []
+  if (versioning === 'DISABLED') return []
+
+  if (versioning === 'UNKNOWN') {
+    return [
+      {
+        area: 'Stored files',
+        severity: 'ATTENTION',
+        headline: 'The store will not say whether it keeps what it is told to delete.',
+        detail:
+          'The last media check asked the store whether versioning is on and did not get an ' +
+          'answer — the provider may not implement the question, or the key pair may be ' +
+          'scoped to objects and not to the bucket’s configuration. Both are ordinary. It is ' +
+          'reported because the answer matters: on a versioned bucket a delete keeps the ' +
+          'object, and an investor erasure would report success over a document that is still ' +
+          'there.',
+        remedy:
+          'Check in the provider’s console that versioning is off for this bucket, along with ' +
+          'any object lock or retention rule. DEPLOYMENT.md §1 says why. Nothing here can ' +
+          'confirm it for you.',
+      },
+    ]
+  }
+
+  return [
+    {
+      area: 'Stored files',
+      severity: 'WRONG',
+      headline:
+        versioning === 'ENABLED'
+          ? 'The bucket keeps what it is told to delete.'
+          : 'The bucket kept what it was told to delete, and still holds those copies.',
+      detail:
+        versioning === 'ENABLED'
+          ? 'Versioning is on. A delete writes a marker and keeps the object, so every check ' +
+            'in this application passes while every deleted file remains recoverable from the ' +
+            'provider’s console. An investor erasure destroys stored documents outright and ' +
+            'says so on the screen — on this bucket that sentence is not true.'
+          : 'Versioning is suspended, which stops new versions being written and keeps every ' +
+            'one already there. Anything deleted while it was on — including any file an ' +
+            'investor erasure destroyed — is still in the bucket.',
+      remedy:
+        'Turn versioning off for this bucket, and expire the non-current versions: a lifecycle ' +
+        'rule that removes them immediately is the usual way. Then run `pnpm media:check` ' +
+        'again. Until that is done, treat any erasure carried out against this bucket as ' +
+        'incomplete — DEPLOYMENT.md §12.',
+    },
+  ]
+}
+
 export function mediaProblemFindings(facts: UnattendedFacts): Finding[] {
   const last = facts.lastMediaCheck
   if (last === null) return []
@@ -836,7 +919,7 @@ export function storageFindings(facts: HealthFacts): Finding[] {
   // the banner must never say something the page does not. The configuration
   // branches below are additions to it, not alternatives — a store switched off
   // after a check found two files missing does not make those files found.
-  const problems = mediaProblemFindings(facts)
+  const problems = [...bucketRetentionFindings(facts), ...mediaProblemFindings(facts)]
 
   if (!storage.configured) {
     if (storage.recordsNamingAFile > 0) {

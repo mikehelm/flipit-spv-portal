@@ -41,6 +41,36 @@ export class FakeS3 {
    * caller is left half way through.
    */
   readonly refuseDeleteOf = new Set<string>()
+  /**
+   * What `GET /bucket?versioning` reports. `DISABLED` answers with an empty
+   * `VersioningConfiguration`, which is what a bucket that never had it on says.
+   */
+  versioning: 'Enabled' | 'Suspended' | 'DISABLED' = 'DISABLED'
+  /**
+   * Objects a `DELETE` hid rather than destroyed, while versioning was on.
+   *
+   * This is the whole point of modelling versioning rather than just reporting
+   * it. With it enabled a delete writes a marker: the object stops answering
+   * `GET`, `HEAD` and listings — so every check in the application sees it as
+   * gone — and the bytes stay in the bucket, recoverable from a console. A
+   * `verify:` script can then *demonstrate* that an erasure destroyed nothing,
+   * rather than asserting that it would not have.
+   */
+  readonly nonCurrent = new Map<string, { bytes: Buffer; contentType: string }>()
+  /**
+   * How the versioning question is refused, when it is.
+   *
+   * Two refusals, because they leave the client by two different doors and both
+   * have to end up at `UNKNOWN`.
+   *
+   *   - `REFUSED` — 403 `AccessDenied`, which is a key pair scoped to objects
+   *     and not to the bucket's configuration. The commonest real case, and it
+   *     is not retried: the client sees a response that is not ok.
+   *   - `ABSENT` — 501 `NotImplemented`, a provider that does not offer the
+   *     call. A 5xx is retried and then raised, so this one leaves through the
+   *     `catch`.
+   */
+  versioningApi: 'PRESENT' | 'REFUSED' | 'ABSENT' = 'PRESENT'
   /** The most keys one listing response will carry. Real S3's ceiling is 1000. */
   maxPageSize = 1000
   requests = 0
@@ -102,6 +132,13 @@ export class FakeS3 {
     const query: Record<string, string> = {}
     for (const [name, value] of new URLSearchParams(search)) query[name] = value
     const listing = method === 'GET' && query['list-type'] === '2'
+    /*
+     * `GET /bucket?versioning` — GetBucketVersioning. Addressed at the bucket
+     * and carrying a query, exactly as a listing is, so it signs the same way
+     * and is told apart from an object request in the same place.
+     */
+    const versioningQuery = method === 'GET' && 'versioning' in query
+    const bucketLevel = listing || versioningQuery
 
     const authorization = request.headers.authorization ?? ''
     const amzDate = String(request.headers['x-amz-date'] ?? '')
@@ -114,8 +151,8 @@ export class FakeS3 {
         // The signature is re-derived from the request as it arrived, query and
         // all. A client that signed a different page of a listing than it asked
         // for fails here rather than being quietly served the first page.
-        key: listing ? undefined : decodeURIComponent(key ?? ''),
-        query: listing ? query : undefined,
+        key: bucketLevel ? undefined : decodeURIComponent(key ?? ''),
+        query: bucketLevel ? query : undefined,
         body: method === 'PUT' ? new Uint8Array(body) : undefined,
         contentType: typeof contentType === 'string' ? contentType : undefined,
         amzDate,
@@ -132,6 +169,26 @@ export class FakeS3 {
 
     if (listing) {
       this.respondToListing(query, response)
+      return
+    }
+
+    if (versioningQuery) {
+      if (this.versioningApi === 'REFUSED') {
+        response.writeHead(403).end('<Error><Code>AccessDenied</Code></Error>')
+        return
+      }
+      if (this.versioningApi === 'ABSENT') {
+        response.writeHead(501).end('<Error><Code>NotImplemented</Code></Error>')
+        return
+      }
+      const status =
+        this.versioning === 'DISABLED' ? '' : `<Status>${this.versioning}</Status>`
+      response
+        .writeHead(200, { 'content-type': 'application/xml' })
+        .end(
+          '<?xml version="1.0" encoding="UTF-8"?>' +
+            `<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">${status}</VersioningConfiguration>`,
+        )
       return
     }
 
@@ -202,6 +259,10 @@ export class FakeS3 {
         response.writeHead(403).end('<Error><Code>AccessDenied</Code></Error>')
         return
       }
+      // Versioning on: the current version is hidden behind a delete marker and
+      // the bytes stay in the bucket. The response is the same 204 an
+      // unversioned bucket gives, which is exactly why no caller can tell.
+      if (this.versioning === 'Enabled' && stored) this.nonCurrent.set(key!, stored)
       this.objects.delete(key!)
       response.writeHead(204).end()
     } else {

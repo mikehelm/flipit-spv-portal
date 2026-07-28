@@ -1,4 +1,4 @@
-import { mkdtemp, readdir } from 'node:fs/promises'
+import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
@@ -7,6 +7,7 @@ import { FakeS3, FAKE_S3_ACCESS_KEY_ID, FAKE_S3_BUCKET, FAKE_S3_REGION, FAKE_S3_
 import { ingest } from './ingest'
 import { jpegWithMetadata } from './fixtures'
 import { mediaStore, resetMediaStoreCache, type MediaStore } from './store'
+import { S3ObjectClient, parseVersioningStatus } from './s3'
 
 /**
  * The object store as the application sees it, rather than as a signer.
@@ -478,5 +479,146 @@ describe('the object store is all-or-nothing, and it is checked at boot', () => 
     resetMediaStoreCache()
 
     expect(mediaStore()).toBeNull()
+  })
+})
+
+/**
+ * Asking a bucket whether it keeps what it is told to delete.
+ *
+ * The one property of a store that cannot be discovered by using it. Put, get,
+ * stat, list and delete all behave identically on a versioned bucket and an
+ * unversioned one — the difference is that on the first, the object is still
+ * there after the delete, behind a marker, recoverable from a console. An
+ * investor erasure that reports destroying a signed subscription agreement is
+ * then not true, and nothing else in this repository can see it.
+ */
+describe('whether the bucket keeps what it is told to delete', () => {
+  it('reads an empty configuration as permanent deletes', async () => {
+    const bucket = new FakeS3()
+    await bucket.start()
+    try {
+      const client = new S3ObjectClient(bucket.config())
+      expect(await client.bucketVersioning()).toBe('DISABLED')
+    } finally {
+      await bucket.stop()
+    }
+  })
+
+  it('reads Enabled', async () => {
+    const bucket = new FakeS3()
+    bucket.versioning = 'Enabled'
+    await bucket.start()
+    try {
+      const client = new S3ObjectClient(bucket.config())
+      expect(await client.bucketVersioning()).toBe('ENABLED')
+    } finally {
+      await bucket.stop()
+    }
+  })
+
+  it('reads Suspended, and does not fold it into permanent', async () => {
+    // Suspending stops new versions. Every non-current version already written
+    // stays exactly where it is, which is where the documents deleted while it
+    // was on are.
+    const bucket = new FakeS3()
+    bucket.versioning = 'Suspended'
+    await bucket.start()
+    try {
+      const client = new S3ObjectClient(bucket.config())
+      expect(await client.bucketVersioning()).toBe('SUSPENDED')
+    } finally {
+      await bucket.stop()
+    }
+  })
+
+  it('answers UNKNOWN when the provider does not implement the question', async () => {
+    const bucket = new FakeS3()
+    bucket.versioningApi = 'ABSENT'
+    await bucket.start()
+    try {
+      const client = new S3ObjectClient(bucket.config())
+      // Not a throw. This is a question a reporting job asks on behalf of a
+      // person, and a probe that turns a media report into a stack trace has
+      // made the report worse.
+      expect(await client.bucketVersioning()).toBe('UNKNOWN')
+    } finally {
+      await bucket.stop()
+    }
+  })
+
+  it('answers UNKNOWN rather than throwing when the endpoint is not there', async () => {
+    const bucket = new FakeS3()
+    await bucket.start()
+    const config = bucket.config()
+    await bucket.stop()
+    const client = new S3ObjectClient(config)
+    expect(await client.bucketVersioning()).toBe('UNKNOWN')
+  }, 20_000)
+
+  it('signs the request, so a wrong secret is refused and reads as UNKNOWN', async () => {
+    const bucket = new FakeS3()
+    await bucket.start()
+    try {
+      const client = new S3ObjectClient(bucket.config('the wrong secret entirely'))
+      expect(await client.bucketVersioning()).toBe('UNKNOWN')
+      // And the fake really did refuse it, rather than never being asked.
+      expect(bucket.requests).toBeGreaterThan(0)
+    } finally {
+      await bucket.stop()
+    }
+  })
+
+  it('the store seam reports it, and a filesystem store is permanent', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'versioning-'))
+    const before = { store: process.env.MEDIA_STORE, dir: process.env.MEDIA_DIR }
+    process.env.MEDIA_STORE = 'filesystem'
+    process.env.MEDIA_DIR = directory
+    resetEnvCache()
+    resetMediaStoreCache()
+    try {
+      expect(await mediaStore()!.versioning()).toBe('DISABLED')
+    } finally {
+      if (before.store === undefined) delete process.env.MEDIA_STORE
+      else process.env.MEDIA_STORE = before.store
+      if (before.dir === undefined) delete process.env.MEDIA_DIR
+      else process.env.MEDIA_DIR = before.dir
+      resetEnvCache()
+      resetMediaStoreCache()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('parsing a VersioningConfiguration', () => {
+  it('an empty one means versioning was never turned on', () => {
+    expect(parseVersioningStatus('<VersioningConfiguration/>')).toBe('DISABLED')
+    expect(parseVersioningStatus('<VersioningConfiguration></VersioningConfiguration>')).toBe(
+      'DISABLED',
+    )
+  })
+
+  it('reads the two statuses that exist', () => {
+    expect(
+      parseVersioningStatus('<VersioningConfiguration><Status>Enabled</Status></VersioningConfiguration>'),
+    ).toBe('ENABLED')
+    expect(
+      parseVersioningStatus(
+        '<VersioningConfiguration><Status> Suspended </Status></VersioningConfiguration>',
+      ),
+    ).toBe('SUSPENDED')
+  })
+
+  it('a status it has never heard of is UNKNOWN, not assumed harmless', () => {
+    expect(
+      parseVersioningStatus('<VersioningConfiguration><Status>Whatever</Status></VersioningConfiguration>'),
+    ).toBe('UNKNOWN')
+  })
+
+  it('and something that is not a VersioningConfiguration at all is UNKNOWN', () => {
+    // An error document, an HTML page from a proxy, an empty body. None of them
+    // is evidence that deletes are permanent.
+    expect(parseVersioningStatus('<Error><Code>AccessDenied</Code></Error>')).toBe('UNKNOWN')
+    expect(parseVersioningStatus('')).toBe('UNKNOWN')
+    expect(parseVersioningStatus('<html><body>404</body></html>')).toBe('UNKNOWN')
   })
 })

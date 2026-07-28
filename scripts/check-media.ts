@@ -87,6 +87,7 @@ async function main(): Promise<void> {
     console.log('  No record names a stored file.')
 
     printOrphans(result)
+    printRetention(result)
 
     if (result.problems === 0) {
       console.log('\n  And nothing is stored. That is a clean answer.\n')
@@ -145,6 +146,7 @@ async function main(): Promise<void> {
   }
 
   printOrphans(result)
+  printRetention(result)
 
   if (result.problems === 0) {
     console.log('\n  Nothing is stored that nothing points at, either.\n')
@@ -214,6 +216,45 @@ function printOrphans(result: Reconciliation): void {
         '\n  not see. Raise LIST_LIMIT, or find out what is putting that much in the store.',
     )
   }
+}
+
+/**
+ * The one line in this report that is not a comparison.
+ *
+ * Everything else here asks whether the rows and the store agree. This asks the
+ * store one question about itself, because it is the only way to find out: a
+ * versioned bucket answers every other question exactly as an unversioned one
+ * does, a delete against it succeeds, and an investor erasure then reports
+ * destroying a document that is still there.
+ *
+ * Printed on every run, including the clean one — a silence that only breaks
+ * when something is wrong cannot be distinguished from a silence because
+ * nobody asked.
+ */
+function printRetention(result: Reconciliation): void {
+  if (result.versioning === 'DISABLED') {
+    console.log('\n  Deletes are permanent on this store — versioning is off.')
+    return
+  }
+
+  if (result.versioning === 'UNKNOWN') {
+    console.log(
+      '\n  Whether deletes are permanent on this store is NOT KNOWN. It would not say — the' +
+        '\n  provider may not implement the question, or the key pair may be scoped to objects' +
+        '\n  and not to the bucket. Check in the provider\u2019s console that versioning is off,' +
+        '\n  along with any object lock or retention rule. See DEPLOYMENT.md \u00a71.',
+    )
+    return
+  }
+
+  console.log(
+    `\n  DELETES ARE NOT PERMANENT ON THIS STORE. Versioning is ${result.versioning.toLowerCase()}.` +
+      '\n  A delete writes a marker and keeps the object, so everything else in this report' +
+      '\n  can be clean while every deleted file remains recoverable from the console. An' +
+      '\n  investor erasure destroys stored documents and says so on the screen; on this' +
+      '\n  bucket that sentence is not true. Turn versioning off and expire the non-current' +
+      '\n  versions, then run this again. See DEPLOYMENT.md \u00a71 and \u00a712.',
+  )
 }
 
 /**

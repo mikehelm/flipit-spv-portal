@@ -25,6 +25,7 @@ import { z } from 'zod'
 import { db } from '@/db'
 import { documentPackages, mediaAssets, operatorVideos } from '@/db/schema'
 import type { MediaStore, StoredObjectSummary } from './store'
+import type { BucketVersioning } from './s3'
 
 /** One record that names a stored file. */
 export interface TrackedFile {
@@ -68,6 +69,18 @@ export interface Reconciliation {
   listingError: string | null
   /** The listing stopped at the limit, so there may be orphans it did not see. */
   truncated: boolean
+  /**
+   * Whether the store keeps what it is told to delete.
+   *
+   * The one thing in this report that is not a comparison between the rows and
+   * the store. It is here because this is the job that already asks the store
+   * questions on a schedule, and because a versioned bucket is invisible to
+   * every other question: it answers `stat`, `list` and `get` exactly as an
+   * unversioned one does. `ENABLED` and `SUSPENDED` count as problems;
+   * `UNKNOWN` does not, because a provider that does not implement the call
+   * would otherwise fail this command for ever with nothing anybody could do.
+   */
+  versioning: BucketVersioning
   /** Everything wrong, counted once. Non-zero is what makes the command exit 1. */
   problems: number
 }
@@ -188,13 +201,16 @@ export async function reconcile(
   const orphans = listed ? listed.objects.filter((object) => !known.has(object.key)) : []
   const truncated = listed?.truncated ?? false
 
+  const versioning = await store.versioning()
+
   const problems =
     missing.length +
     wrongSize.length +
     unreadable.length +
     orphans.length +
     (truncated ? 1 : 0) +
-    (listingError === null ? 0 : 1)
+    (listingError === null ? 0 : 1) +
+    (versioning === 'ENABLED' || versioning === 'SUSPENDED' ? 1 : 0)
 
   return {
     checked: rows.length,
@@ -205,6 +221,7 @@ export async function reconcile(
     listed: listed ? listed.objects.length : null,
     listingError,
     truncated,
+    versioning,
     problems,
   }
 }
@@ -235,6 +252,17 @@ export const mediaCheckRecordSchema = z.object({
   /** Whether the store could be listed at all. */
   listed: z.boolean(),
   truncated: z.boolean(),
+  /**
+   * What the store says about keeping what it is told to delete.
+   *
+   * **Optional, and that is not laziness.** This schema parses rows written by
+   * every earlier version of the command, and a required field would make every
+   * one of them fail to parse — which this module's own reader treats as *no
+   * row at all*, silently losing the media finding from the health report over
+   * a field that was added afterwards. Absent means "a run from before anybody
+   * asked", and it is reported as exactly that rather than as `DISABLED`.
+   */
+  versioning: z.enum(['ENABLED', 'SUSPENDED', 'DISABLED', 'UNKNOWN']).optional(),
   problems: z.number().int().min(0),
 })
 
@@ -251,6 +279,7 @@ export function recordOf(result: Reconciliation): MediaCheckRecord {
     orphans: result.orphans.length,
     listed: result.listingError === null,
     truncated: result.truncated,
+    versioning: result.versioning,
     problems: result.problems,
   }
 }
@@ -274,6 +303,9 @@ export function recordOfUnconfigured(recordsNamingAFile: number): MediaCheckReco
     orphans: 0,
     listed: false,
     truncated: false,
+    // No store to ask. Not `DISABLED`, which would be a claim about a store
+    // that is not there.
+    versioning: 'UNKNOWN',
     problems: recordsNamingAFile,
   }
 }

@@ -143,17 +143,31 @@ model from the one the rest of this application uses.
 else. It is never logged, never written to the database and never returned to a
 browser.
 
-**The bucket must not be versioned, and this one is easy to miss.** With
+**The bucket must not be versioned, and the application now checks.** With
 versioning on — S3, R2 and B2 all offer it and some templates turn it on by
-default — a `DELETE` writes a marker and keeps the object. Every check in this
-repository still passes: the store reports the object as absent, `media:check`
-is clean, and `pnpm verify:erasure` is green, because the application asked for
-a delete and was told it happened. What has actually happened is that an
-investor who asked to be erased still has a signed subscription agreement in
-object storage, recoverable by anyone with console access. **Turn versioning
-off, or set a lifecycle rule that expires non-current versions immediately.**
-The same applies to object locks, legal holds and any retention policy on the
-bucket: they are the one class of failure an erasure cannot see.
+default — a `DELETE` writes a marker and keeps the object. Nothing that *uses*
+the store can tell: `stat`, `list` and `get` all report the object as gone, so a
+reconciliation is clean and an erasure reports destroying a signed subscription
+agreement that is still sitting there, recoverable by anyone with console
+access.
+
+So it is asked rather than tested. `pnpm media:check` calls
+`GetBucketVersioning` on every run and prints one of three lines:
+
+| It says | What it means |
+| --- | --- |
+| `Deletes are permanent on this store` | Versioning is off. This is the state to be in. |
+| `DELETES ARE NOT PERMANENT ON THIS STORE` | Versioning is enabled or suspended. Counted as a problem, so the command exits non-zero, and raised as a **WRONG** finding in `pnpm check:health`. |
+| `…is NOT KNOWN` | The bucket would not answer — the provider may not implement the call, or the key pair may be scoped to objects and not to the bucket's configuration. **Not** treated as safe: it is an **ATTENTION** finding and it wants a human look in the console. It is not counted as a problem, because a provider that cannot answer would otherwise fail this command for ever. |
+
+**Suspended is not safe.** Suspending stops new versions being written and keeps
+every one already there — including any file an erasure destroyed while it was
+on.
+
+**Turn versioning off, and expire the non-current versions**: a lifecycle rule
+that removes them immediately is the usual way. The same applies to object
+locks, legal holds and any retention policy on the bucket. Until that is done,
+treat any erasure carried out against the bucket as incomplete.
 
 **The bucket does not travel with `pnpm backup`, and `pnpm media:check` is how
 you find out.** The backup covers the database, which holds the rows that *name*
