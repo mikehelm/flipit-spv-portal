@@ -66,10 +66,11 @@ import {
   users,
   sessions,
 } from '@/db/schema'
-import { pseudonymEmail } from '@/lib/erasure/plan'
+import { pseudonymEmail, pseudonymName } from '@/lib/erasure/plan'
 import {
   clearStoredFiles,
   ERASURE_COUNTS,
+  ERASURE_COUNTS_SECOND,
   removeErasureFixture,
   seedErasureFixture,
 } from './lib/erasure-fixture'
@@ -102,6 +103,14 @@ const OPERATOR_EMAIL = (process.env.OPERATOR_EMAILS ?? '').split(',')[0]?.trim()
  * note at the top of that file for why it is shared.
  */
 const ERASURE_PREFIX = 'AccessVerifyErasure'
+
+/**
+ * The investor next to the one being erased.
+ *
+ * Its own round, so `removeErasureFixture` finds it by the same rule and the
+ * two fixtures cannot delete each other's rows.
+ */
+const SECOND_PREFIX = 'AccessVerifySecond'
 
 let passed = 0
 let failed = 0
@@ -451,11 +460,22 @@ async function viewer(browser: Browser): Promise<void> {
  * That ordering is not a convenience. `blockedBy` is computed from the media
  * store, which is process-wide, so the only way to render both branches without
  * standing up a second server is to change the record between them.
+ *
+ * ---
+ *
+ * **There are two investors on this page, and that is the sixth thing.**
+ * `previewErasureMany` reads the whole page in a fixed number of grouped
+ * queries and rolls each result up to the account that owns it. The failure a
+ * roll-up has is *crossing* — one investor's rows totalled onto another's card
+ * — and it cannot be seen with one investor on the page, because there is
+ * nothing to cross with. Both cards are read, each against its own table of
+ * sixteen numbers, and the second is read again after the first is erased.
  */
 async function erasureScreen(browser: Browser): Promise<void> {
   console.log('\nThe erasure screen, in a browser')
 
   const { account, investorEmail, offer } = await seedErasureFixture(ERASURE_PREFIX)
+  const second = await seedErasureFixture(SECOND_PREFIX, ERASURE_COUNTS_SECOND)
 
   const context = await browser.newContext()
   const page = await context.newPage()
@@ -468,6 +488,29 @@ async function erasureScreen(browser: Browser): Promise<void> {
   check('the erasure section is on the page', text.includes('Erase their personal data'))
 
   /*
+   * **Every locator below is scoped to one card, by the name on it.**
+   *
+   * This used to be `page.locator('details', …).first()`, and it worked for as
+   * long as there was one fixture: `.first()` on a page listing every investor
+   * is whichever card the register happens to order first, which is somebody
+   * else's the moment a second fixture exists. It was already this
+   * repository's own written-down lesson — *"`[role="alert"]`.first() is
+   * somebody else's investor on a page that lists all of them"* — applied to
+   * the banner and not to the section the banner is inside.
+   *
+   * After an erasure the name on the card is the pseudonym, so the card is
+   * found by that instead. `pseudonymName` is the application's own function,
+   * so this cannot drift from what the page draws.
+   */
+  const cardNamed = (name: string) =>
+    page.locator('article').filter({ hasText: name }).filter({ hasText: 'Erase their personal' })
+  const sectionOf = (name: string) =>
+    cardNamed(name).locator('details', { hasText: 'Erase their personal data' }).first()
+
+  const section = sectionOf(`${ERASURE_PREFIX} Target`)
+  const secondSection = sectionOf(`${SECOND_PREFIX} Target`)
+
+  /*
    * The section is a `<details>` and it starts closed, so everything below has
    * to open it — and open it *again* after every submit, because a server
    * action re-renders the card and the element goes back to closed. The first
@@ -475,21 +518,30 @@ async function erasureScreen(browser: Browser): Promise<void> {
    * the summary alone; the second submitted into a collapsed form. Both are the
    * reason this helper exists rather than three inline clicks.
    */
-  const section = page.locator('details', { hasText: 'Erase their personal data' }).first()
-
-  async function openSection(expect: 'a form' | 'no form' = 'a form'): Promise<string> {
-    if (!(await section.evaluate((node) => (node as HTMLDetailsElement).open))) {
-      await section.locator('summary').click()
+  async function openOne(
+    target: ReturnType<typeof sectionOf>,
+    expect: 'a form' | 'no form',
+  ): Promise<string> {
+    if (!(await target.evaluate((node) => (node as HTMLDetailsElement).open))) {
+      await target.locator('summary').click()
     }
     if (expect === 'a form') {
-      await section.locator('form input[name="confirmation"]').waitFor({ state: 'visible' })
+      await target.locator('form input[name="confirmation"]').waitFor({ state: 'visible' })
     } else {
       // A blocked card has no form to wait for, so the wait is for the thing it
       // has instead. Waiting for nothing at all would read the card mid-render.
-      await section.locator('[role="alert"], .notice, li').first().waitFor({ state: 'visible' })
+      await target.locator('[role="alert"], .notice, li').first().waitFor({ state: 'visible' })
     }
-    return (await section.innerText()).replace(/\s+/g, ' ')
+    return (await target.innerText()).replace(/\s+/g, ' ')
   }
+
+  const openSection = (expect: 'a form' | 'no form' = 'a form') => openOne(section, expect)
+
+  /** Read one card and report which of its sixteen lines are not on it. */
+  const linesMissingFrom = (card: string, counts: typeof ERASURE_COUNTS): string[] =>
+    counts
+      .filter((row) => !card.includes(`${row.n} ${row.label}`))
+      .map((row) => `${row.n} ${row.label}`)
 
   // ---- phase one: blocked, because the record holds stored files -----------
   const blocked = await openSection('no form')
@@ -521,6 +573,37 @@ async function erasureScreen(browser: Browser): Promise<void> {
   check(
     'and the numbers really are all different, so a swapped label cannot pass',
     new Set(ERASURE_COUNTS.map((row) => row.n)).size === ERASURE_COUNTS.length,
+  )
+
+  /*
+   * ---- the second card, which is the whole point of there being two --------
+   *
+   * `previewErasureMany` counts every account on the page in a fixed number of
+   * grouped queries and rolls each group up to the account that owns it. A
+   * roll-up crediting the wrong account renders a page full of real numbers on
+   * the wrong cards — and on a form whose entire purpose is *is this the right
+   * person*, that is an argument for the wrong decision rather than a cosmetic
+   * fault.
+   *
+   * One card cannot show it. Two can, and only if their numbers differ, which
+   * is what `ERASURE_COUNTS_SECOND` is for.
+   */
+  const secondCard = await openOne(secondSection, 'no form')
+  const secondMissing = linesMissingFrom(secondCard, ERASURE_COUNTS_SECOND)
+  check(
+    'a second investor on the same page carries their own sixteen numbers',
+    secondMissing.length === 0,
+    secondMissing.join(' | '),
+  )
+  check(
+    'and the first card did not acquire any of the second investor’s totals',
+    linesMissingFrom(blocked, ERASURE_COUNTS).length === 0,
+  )
+  check(
+    'and the two tables really do differ, so a crossed total would be visible',
+    ERASURE_COUNTS.filter((row, index) => row.n !== ERASURE_COUNTS_SECOND[index]!.n).length ===
+      ERASURE_COUNTS.length - 1,
+    'every line but the register entry, which the schema pins to 1 on both',
   )
 
   /*
@@ -654,7 +737,7 @@ async function erasureScreen(browser: Browser): Promise<void> {
    * The fix is that the finished state carries the pseudonym permanently, so it
    * is checked there instead — which is a better place for it than a banner.
    */
-  const finished = page.locator('details', { hasText: 'Erase their personal data' }).first()
+  const finished = sectionOf(pseudonymName(account.id))
   const afterRight = (await finished.innerText()).replace(/\s+/g, ' ')
   check(
     'the finished card names the pseudonym, permanently rather than in a banner',
@@ -821,9 +904,7 @@ async function erasureScreen(browser: Browser): Promise<void> {
   // Reload: the section now says it has already been done, rather than offering
   // to do it again.
   await land(page, '/investors')
-  const reloadedSection = page
-    .locator('details', { hasText: 'Erase their personal data' })
-    .first()
+  const reloadedSection = sectionOf(pseudonymName(account.id))
   await reloadedSection.locator('summary').click()
   const reloaded = (await reloadedSection.innerText()).replace(/\s+/g, ' ')
   check(
@@ -832,6 +913,45 @@ async function erasureScreen(browser: Browser): Promise<void> {
       /Erased investor [0-9a-f]{12}/.test(reloaded) &&
       (await reloadedSection.locator('input[name="confirmation"]').count()) === 0,
     reloaded.slice(0, 300),
+  )
+
+  /*
+   * ---- the other investor, on the same screen, after the erasure -----------
+   *
+   * `verify:erasure` proves this against the database with a second investor
+   * present, and half of its hundred and nineteen checks are that assertion.
+   * None of them is a screen. This is the same claim made where a person would
+   * make it: the card next to the one just erased, read again, with its own
+   * sixteen numbers still on it and nothing of the erased investor in it.
+   */
+  const secondAfter = await openOne(secondSection, 'no form')
+  const stillMissing = linesMissingFrom(secondAfter, ERASURE_COUNTS_SECOND)
+  check(
+    'the other investor’s card is exactly as it was, count for count',
+    stillMissing.length === 0,
+    stillMissing.join(' | '),
+  )
+  check(
+    'and carries nothing of the erased one — not the address, the name or the pseudonym',
+    !secondAfter.includes(investorEmail) &&
+      !secondAfter.includes(`${ERASURE_PREFIX} Target`) &&
+      !secondAfter.includes(pseudonymName(account.id)),
+    secondAfter.slice(0, 300),
+  )
+  check(
+    'and is still offered the refusal rather than a form, which is its own state',
+    /no media store is configured/.test(secondAfter) &&
+      (await secondSection.locator('input[name="confirmation"]').count()) === 0,
+    secondAfter.slice(0, 300),
+  )
+
+  const secondRow = await db.query.investorAccounts.findFirst({
+    where: eq(investorAccounts.id, second.account.id),
+  })
+  check(
+    'and in the database it is neither erased nor archived',
+    secondRow?.email === second.investorEmail && secondRow?.status === 'ACTIVE',
+    `${secondRow?.email} / ${secondRow?.status}`,
   )
 
   await context.close()
@@ -943,6 +1063,7 @@ async function cleanUp(): Promise<void> {
 
 async function main(): Promise<void> {
   await removeErasureFixture(ERASURE_PREFIX)
+  await removeErasureFixture(SECOND_PREFIX)
   if (OWNER_EMAIL === '') {
     console.error('OWNER_EMAILS is empty, so there is no first run to verify.')
     process.exitCode = 1
@@ -1015,6 +1136,7 @@ async function main(): Promise<void> {
         .where(eq(users.id, operator.id))
     }
     await removeErasureFixture(ERASURE_PREFIX)
+    await removeErasureFixture(SECOND_PREFIX)
     await db
       .delete(operatorInvites)
       .where(

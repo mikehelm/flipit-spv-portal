@@ -9781,3 +9781,193 @@ both pass.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## Two cards, and every locator scoped to its own
+
+The item the last entry left at the top of the buildable list:
+
+> ***The count list is still read from one card.*** `/investors` renders every
+> account and both scripts scope to the fixture's card. Nothing checks that a
+> second account's card carries its own numbers rather than the first one's.
+
+**Built.** `scripts/lib/erasure-fixture.ts` — a second count table and a seeder
+that takes one. `scripts/verify-account-access.ts` — a second investor on the
+page, every locator in the erasure journey re-scoped, and the second card read
+again after the first is erased. No application file changed.
+
+`pnpm verify:account-access` is **75 checks**, up from 68.
+
+### The failure
+
+`previewErasureMany` counts every account on `/investors` in a fixed number of
+grouped queries and rolls each group back up to the account that owns it. That
+rewrite is in the file with its reason on it: the per-account version ran about
+eighteen counting queries per card, so forty investors meant seven hundred
+queries on a page that had been running three.
+
+The failure a roll-up has is **crossing** — one investor's rows totalled onto
+another investor's card. Every number is real, every sentence is true, and the
+page looks entirely ordinary. On this particular screen that is not a cosmetic
+fault: the count list is what a person reads to satisfy themselves they have the
+right row before typing an address into a form that cannot be undone. A card
+showing somebody else's totals is a card arguing for the wrong decision.
+
+**One card cannot show it**, because there is nothing to cross with. Every check
+written so far — the sixteen distinct numbers, the sweep, the blocked notice,
+the 375px measurement — was written against a page with exactly one fixture on
+it, and every one of them would pass over a completely crossed roll-up.
+
+### What was built
+
+`ERASURE_COUNTS_SECOND` is the first table with twenty added to every line, so
+each of the sixteen differs from its counterpart, and `seedErasureFixture` now
+takes a table. The journey seeds both, reads both cards, and checks each against
+its own sixteen.
+
+**It was checked by breaking it.** `conversationMessages` in
+`previewErasureMany` was changed to read the tally for `accounts[0]` rather than
+for the account being built, which is the crossing in its purest form. The run
+failed with
+
+    FAIL  a second investor on the same page carries their own sixteen numbers
+          — 29 conversation messages redacted
+
+naming the line and the number it had wrongly acquired. It was put back.
+
+One line cannot be caught this way and it is written into the table's own
+comment: `interest_register_entries.account_id` is unique, so that count is 1
+for everybody and a crossing of it renders 1 on both cards.
+
+### The locators, which were one fixture away from being wrong
+
+Adding a second investor made a latent problem live. The journey's section
+locator was
+
+    page.locator('details', { hasText: 'Erase their personal data' }).first()
+
+`.first()` on a page listing every investor is whichever card the register
+happens to order first — which is somebody else's the moment there are two
+fixtures. This repository had already written that lesson down, two entries ago,
+about the banner:
+
+> ***Every locator is scoped to the card.*** `page.locator('[role="alert"]')
+> `.first()` is somebody else's investor on a page that lists all of them.
+
+It was applied to the banner and not to the section the banner is inside. Every
+locator in the journey is now scoped through `sectionOf(name)`, which filters
+the `<article>` by the name on it first.
+
+After an erasure the name on the card *is* the pseudonym, so the two post-erasure
+locators find the card by `pseudonymName(account.id)` — the application's own
+function, so the check cannot drift from what the page draws. That is a stronger
+assertion than the one it replaces: previously the finished card was found by
+being first and then asked whether it named a pseudonym; now it is found *by*
+the pseudonym, so being unable to find it is itself the failure.
+
+### And the second investor after the erasure
+
+`verify:erasure` proves the other investor is untouched against the database,
+and half of its hundred and nineteen checks are that assertion. None of them is
+a screen. The card next to the erased one is now read again: its own sixteen
+numbers, none of the erased investor's name, address or pseudonym anywhere in
+it, still in its own blocked state rather than having acquired the other card's,
+and the database row still `ACTIVE` under its own address.
+
+**Decisions.**
+
+- ***The second table is derived from the first rather than typed out.*** Two
+  hand-written tables drift, and a drifted second table is a check that passes
+  because both sides were edited. `+20` on every line but the register entry
+  keeps every pair different by construction, and the script asserts that
+  fifteen of the sixteen differ so the derivation cannot silently become the
+  identity.
+- ***The certificates that carry a storage key are now derived, not fixed.***
+  `stored files` must equal the documents plus the certificates that have one,
+  and the second table moves both. It is computed from the table and throws if
+  the table asks for more stored files than there are rows to hold them — a
+  mistake in a fixture table should stop the run, not seed something that
+  quietly does not add up.
+- ***The second investor keeps its stored files and stays blocked.*** It costs
+  nothing and it means the page renders two cards in *different* states side by
+  side, which is a better test of the per-card rendering than two identical
+  ones. It also means the second card can be checked not to have acquired the
+  first card's form.
+- ***The second fixture has its own round.*** `removeErasureFixture` finds a
+  fixture by round name, so a shared round would mean either cleanup deleting
+  the other's rows.
+- ***Prettier was run over two files and immediately reverted.*** There is no
+  Prettier configuration in this repository and its defaults are not this
+  repository's style — semicolons, double quotes, an eighty-column wrap. Run
+  against a committed file it produced a hundred and thirty lines of diff on
+  code nobody had touched. The formatter here is `eslint` and the house style is
+  what is already in the files. **Nothing should run `npx prettier` on this
+  repository until somebody adds a configuration that matches it**, and that is
+  worth a line in this file because the mistake is one keystroke away and looks
+  like tidying.
+
+**Deviations.** None. No application file changed.
+
+**Checklist.** **5** is the one this bears on, and more directly than the last
+two entries did. "No investor-facing page reveals that another investor exists"
+is about the portal; the administrative mirror of it is that no administrative
+card may show one investor's figures under another investor's name, and until
+now nothing rendered two cards at once to find out. It does now. 1–4 and 6–12
+are untouched: no money is computed, no send path exists here, no gate is read
+or written, no token is issued, no log line is added.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (2597) are green.
+`pnpm verify:account-access` is **75** and `pnpm verify:viewport` is **542**, and
+both pass.
+
+**Uncertain.**
+
+- ***A crossing of the register-entry line is undetectable here***, because
+  `interest_register_entries.account_id` is unique and the count is 1 for
+  everybody. It is the one of the sixteen this cannot see.
+- ***Two cards are not forty.*** The crossing this catches is one that credits
+  the wrong account; a roll-up that is correct for two accounts and wrong at
+  some larger fan-out — a grouping that silently truncates, say — is still
+  invisible. **The batching remains proved correct and not proved fast**, and
+  now also proved correct at exactly two.
+- ***The second card is only ever read in its blocked state.*** It is never
+  unblocked, so nothing checks that two *forms* on one page carry their own
+  confirmation fields and their own hidden account ids. That is the next
+  crossing-shaped thing, and it is a real one: the form posts an `accountId`.
+- ***`verify:viewport` still measures one card.*** The 375px work is unaffected
+  by this entry and still opens exactly one section.
+- ***The blocked layout is measured only on a run with no media store.***
+- ***The bytes are still never destroyed through a browser.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all, and
+  that is still the right answer.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

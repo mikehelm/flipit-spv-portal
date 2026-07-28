@@ -86,7 +86,9 @@ import { newStorageKey } from '@/lib/media/store'
  * files and no media store configured is the one state in which the card
  * refuses to offer the form at all.
  */
-export const ERASURE_COUNTS: readonly { readonly label: string; readonly n: number }[] = [
+export type ErasureCounts = readonly { readonly label: string; readonly n: number }[]
+
+export const ERASURE_COUNTS: ErasureCounts = [
   { label: 'offers, whose figures stay', n: 5 },
   { label: 'stored files destroyed outright', n: 7 },
   { label: 'document records redacted', n: 4 },
@@ -106,6 +108,35 @@ export const ERASURE_COUNTS: readonly { readonly label: string; readonly n: numb
 ]
 
 /**
+ * A second investor, with a different number against every line but one.
+ *
+ * `previewErasureMany` reads the whole page in a fixed number of grouped
+ * queries and rolls each result back up to the account that owns it — a rewrite
+ * done for speed, because the per-account version ran about eighteen counting
+ * queries per card and `/investors` draws every investor at once. The failure a
+ * roll-up like that has is **crossing**: one investor's rows totalled onto
+ * another investor's card. Every number is then real and the page looks
+ * ordinary.
+ *
+ * On a destructive form that is not a cosmetic fault. The count list is what a
+ * person reads to satisfy themselves they have the right row before typing an
+ * address, so a card showing somebody else's totals is a card arguing for the
+ * wrong decision.
+ *
+ * One fixture cannot show a crossing — with one card there is nothing to cross
+ * with — so this is the second, and every count differs from the first so that
+ * a total landing on the wrong card lands on a visibly wrong number.
+ *
+ * **The exception is the register entry**, which is 1 on both because
+ * `interest_register_entries.account_id` is unique and neither account can hold
+ * two. A crossing of that one line renders 1 on both cards and is undetectable
+ * here. That is written down rather than papered over.
+ */
+export const ERASURE_COUNTS_SECOND: ErasureCounts = ERASURE_COUNTS.map((row) =>
+  row.label === 'register entries with their reason cleared' ? row : { ...row, n: row.n + 20 },
+)
+
+/**
  * One investor holding a different number of rows of each of sixteen kinds.
  *
  * Every number here comes from `ERASURE_COUNTS` rather than from a literal, so
@@ -115,17 +146,39 @@ export const ERASURE_COUNTS: readonly { readonly label: string; readonly n: numb
  * imports `erasureLines()`. A test that took its expected wording from the code
  * under test would pass a relabelling, which is the whole failure being hunted.
  */
-export async function seedErasureFixture(prefix: string): Promise<{
+export async function seedErasureFixture(
+  prefix: string,
+  counts: ErasureCounts = ERASURE_COUNTS,
+): Promise<{
   account: { id: string }
   investorEmail: string
   offer: { id: string }
 }> {
   const want = (label: string): number => {
-    const row = ERASURE_COUNTS.find((entry) => entry.label === label)
+    const row = counts.find((entry) => entry.label === label)
     if (!row) throw new Error(`No expected count declared for “${label}”.`)
     return row.n
   }
   const times = (n: number): number[] => Array.from({ length: n }, (_, index) => index)
+
+  /*
+   * How many certificates carry a storage key, derived rather than fixed.
+   *
+   * `stored files` has to equal the documents plus the certificates that have
+   * one, and the second count table moves both. Deriving it keeps that
+   * arithmetic true for any table rather than only for the first, and a table
+   * asking for more stored files than there are rows to hold them is a mistake
+   * in the table — so it says so here rather than seeding something that
+   * quietly does not add up.
+   */
+  const storedCertificates =
+    want('stored files destroyed outright') - want('document records redacted')
+  if (storedCertificates < 0 || storedCertificates > want('certificates blanked')) {
+    throw new Error(
+      'The count table asks for more stored files than its documents and certificates can ' +
+        'hold. See ERASURE_COUNTS.',
+    )
+  }
 
   const [round] = await db
     .insert(rounds)
@@ -269,7 +322,7 @@ export async function seedErasureFixture(prefix: string): Promise<{
     times(want('certificates blanked')).map((index) => ({
       offerId: onOffer(index),
       version: index + 1,
-      storageKey: index < CERTIFICATES_WITH_A_STORED_FILE ? newStorageKey('doc') : null,
+      storageKey: index < storedCertificates ? newStorageKey('doc') : null,
       data: { name: `${prefix} Target`, amountUsd: '10000.00' },
     })),
   )
@@ -320,9 +373,6 @@ export async function seedErasureFixture(prefix: string): Promise<{
 
   return { account: account!, investorEmail, offer: offerRows[0]! }
 }
-
-/** How many of the six certificates carry a storage key. */
-export const CERTIFICATES_WITH_A_STORED_FILE = 3
 
 /** The round name this fixture hangs everything from, for a given prefix. */
 export function erasureFixtureRound(prefix: string): string {
