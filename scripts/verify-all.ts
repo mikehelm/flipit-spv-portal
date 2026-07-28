@@ -126,7 +126,6 @@ const VERIFICATIONS: readonly Verification[] = [
   { name: 'roadmap', proves: 'the portal roadmap tiles' },
   { name: '2fa', proves: 'the second factor, enrolled and demanded' },
   { name: 'health', proves: 'the health endpoint, present and absent' },
-  { name: 'mutants', proves: 'that the checks fail when the claims they check stop being true' },
   { name: 'media', proves: 'ingest, metadata stripping and serving, against a real store' },
   { name: 'object-store', proves: 'the S3 client against a real socket that verifies signatures' },
   { name: 'restore', proves: 'a dump restored into a scratch database and read back', needs: ['PG_TOOLS'] },
@@ -137,6 +136,13 @@ const VERIFICATIONS: readonly Verification[] = [
   { name: 'erasure-bytes', proves: 'an erasure destroying real bytes, pressed in a browser', needs: ['BUILD', 'BROWSER'] },
   { name: 'recorder', proves: 'the video recorder, recording and playing back', needs: ['BUILD', 'BROWSER', 'CAMERA'] },
   { name: 'viewport', proves: 'every screen at 375px, in a real browser', needs: ['BUILD', 'BROWSER', 'CAMERA'] },
+  // Last, and that is not cosmetic. It runs other verifications with the code
+  // deliberately broken, so those runs *fail on purpose* — and a script that
+  // fails part way through may not reach its own cleanup, leaving fixture rows
+  // in the database. Every script clears its own prefix on the way in, so
+  // residue in front of a script that has not run yet is the only way that can
+  // bite. Running this after all of them means there is never one in front.
+  { name: 'mutants', proves: 'that the checks fail when the claims they check stop being true' },
 ]
 
 interface Outcome {

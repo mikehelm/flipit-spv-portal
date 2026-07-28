@@ -238,6 +238,35 @@ const MUTATIONS: readonly Mutation[] = [
     replace: '  if (false) return null',
     noticedBy: 'verify:qa',
   },
+  {
+    // Checklist 11. The AI proposes a *column mapping* and nothing else — it
+    // never supplies a value and never names a field this import does not have.
+    // Accepting an unknown target is how a model's invention would reach a row.
+    claim: 'the AI path cannot map a column to anything but a field of this import',
+    file: 'src/lib/import/ai.ts',
+    find: '    if (!isTargetField(target)) {',
+    replace: '    if (false) {',
+    noticedBy: 'vitest run src/lib/import/ai.test.ts',
+  },
+  {
+    // The partner of the Q&A guard the sweep found untested last time, and it
+    // resolves the other way. `data.ts` excludes withdrawn entries in SQL and
+    // `toPublicEntry` excludes them again; the second exists for "a caller that
+    // forgets the `unpublishedAt is null` clause", so it is unreachable through
+    // `loadSharedQa` **by construction** and `verify:qa` cannot exercise it.
+    //
+    // The sweep said so — the mutation survived `verify:qa` — and the honest
+    // answer was not a new fixture but the right witness: a projection-level
+    // guarantee is tested at the projection level, and `anonymity.test.ts`
+    // already drives it. Recorded here because "the check named beside the
+    // claim is the wrong one" is a real outcome of this file and looks nothing
+    // like the other one.
+    claim: 'a withdrawn Q&A entry is refused by the projection, not only by the query',
+    file: 'src/lib/qa/anonymity.ts',
+    find: '  if (entry.unpublishedAt !== null) return null',
+    replace: '  if (false) return null',
+    noticedBy: 'vitest run src/lib/qa/anonymity.test.ts',
+  },
 ]
 
 /** What a run of one check produced. */

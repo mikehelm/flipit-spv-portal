@@ -12770,3 +12770,130 @@ check in `verify:qa`.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## Two more claims, and a flake the sweep caused
+
+The last entry named point 11 as the next item and called it cheap. It was. What
+came with it was not planned.
+
+### Point 11, and the partner guard
+
+- ***`normaliseProposal` made to accept a target the import does not have.***
+  Checklist 11 asks whether the AI path can change a calculated figure; the
+  answer is that it proposes a *column mapping* and nothing else, and the guard
+  that keeps a model's invention out of a row is the one that refuses an unknown
+  target field. Caught by `ai.test.ts`. **Eleven of the twelve are now covered.**
+- ***`toPublicEntry`'s withdrawn-entry filter removed.*** The partner of the guard
+  the sweep found untested last time, and it resolves the other way.
+
+That second one survived `verify:qa`, and the honest answer was **not** a second
+fixture. `loadSharedQa` excludes withdrawn entries in SQL, so the projection's
+own filter is unreachable through it *by construction* — it exists, in its own
+words, for "a caller that forgets the `unpublishedAt is null` clause". A
+projection-level guarantee is tested at the projection level, and
+`anonymity.test.ts` already drives it. The mutation now names that as its
+witness, with the reasoning written beside it.
+
+**So a surviving mutant has two resolutions, and they look nothing alike.** Last
+entry's was a real gap and needed a new check. This one was the wrong witness
+named beside a right claim. Recording the difference matters, because the second
+is the one that tempts somebody to delete the entry.
+
+### The flake, and what caused it
+
+`pnpm verify:all` failed once, in the middle of three runs that passed. That is
+the worst kind of result to shrug at, and the cause is this session's own doing.
+
+`verify:mutants` runs other verifications **with the code deliberately broken**,
+so those runs fail on purpose — and a script that fails part way through may not
+reach its own cleanup. Every verification clears its own prefix on the way *in*,
+so leftover rows only bite a script that has not run yet. `verify:mutants` sat
+sixteenth in the list, which put its wreckage in front of ten others.
+
+***It now runs last.*** There is never a script after it to trip over what a
+deliberately-failed run left behind, and the next full run's own cleanup clears
+it. Three consecutive green runs since.
+
+**Decisions.**
+
+- ***The order is load-bearing and now says so.*** The comment above the entry
+  explains it, because a later tidy-up that sorts the table alphabetically would
+  reintroduce an intermittent failure in the one command run before a release —
+  and an intermittent failure is the hardest kind to attribute.
+- ***The mutated runs are not made to clean up after themselves.*** They fail the
+  way a real failure fails, which is the point of running them at all. Making
+  them tidy would be testing a different thing.
+
+**Deviations.** None.
+
+**Checklist.** Eleven of the twelve now have a mutation demonstrating the check
+catching the claim being broken. Only point 8 — *does any log line contain a
+token, an email body, or the OpenAI key* — has none.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2817**) are green.
+`pnpm verify:all` is **26 passed, 0 failed, 0 skipped**, three times in a row.
+`pnpm verify:mutants` is **30 passed, 0 failed** — fifteen claims.
+
+**Uncertain.**
+
+- ***Point 8 has no mutation, and it is the hard one.*** It is a property of every
+  log statement in the repository rather than of one function, so there is no
+  single line to break. The nearest thing to a target is whatever redacts a
+  credential before it is printed; if there is no single such function, the
+  honest finding is that the property is enforced by convention. **This is the
+  next item, and it may end in a note rather than a mutation.**
+- ***The flake was found by luck.*** One run in three. Nothing runs `verify:all`
+  twice, and an ordering hazard that shows up a third of the time is invisible to
+  a single run. Nothing measures whether the suite is deterministic.
+- ***Every mutation is still a single edit to a single file.*** The defects this
+  repository has actually shipped were omissions.
+- ***Nothing mutates the verification scripts themselves.***
+- ***`.filter(...).length === 0` has not been looked at.***
+- ***The six negated checks without controls are recorded, not solved.***
+- ***The same trick would work on the health *signal*.***
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved.***
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

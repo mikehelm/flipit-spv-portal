@@ -1683,7 +1683,7 @@ It is careful with your files: it reads the original before writing anything,
 puts it back afterwards, reads it again to confirm, and restores if you press
 Ctrl-C. It never uses git to undo, so uncommitted work of your own is safe.
 
-**It now holds thirteen promises, and ten of the twelve items on the release
+**It now holds fifteen promises, and eleven of the twelve items on the release
 checklist have one.** Among the newer ones: no send can skip the compliance
 approval; one investor in a country the approval does not cover must not stop
 everybody else's invitation; sign-in links are stored scrambled rather than as
@@ -1708,6 +1708,30 @@ wording does not appear anywhere on the page.
 
 That is the mutation command earning its place on its second run: it found a
 real defence that nothing had ever tested.
+
+A second promise later turned out to be a different case, and it is worth
+knowing the difference. A related rule — a withdrawn question must not reappear
+on the shared page — is also enforced twice, and the second enforcement is
+deliberately unreachable from the page: it exists for code that has not been
+written yet. That one was already tested, just not by the command it had been
+paired with. So the pairing was corrected rather than a new test invented.
+
+**A promise that goes uncaught means one of two things** — a defence nobody has
+tested, or the wrong check named beside it — and the temptation with the second
+is to quietly delete the entry. Both outcomes are now written down where the
+next person will read them.
+
+### One more thing it caused
+
+Running all twenty-six commands failed once, in the middle of three runs that
+passed. The cause was this new command: it breaks the code on purpose, so the
+checks it runs fail on purpose, and a check that fails part way through does not
+always tidy up the test data it created. It was sitting in the middle of the
+list, so its mess was in front of ten commands that had not run yet.
+
+It runs **last** now, and there is a note in the code explaining why, so that a
+later tidy-up that sorts the list alphabetically does not quietly bring the
+problem back. Three clean runs since.
 
 **How it was proved.** One promise was deliberately paired with a check that
 could not possibly see it: *"MUTANT SURVIVED — the check reported success"*. And
