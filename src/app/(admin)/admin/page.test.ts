@@ -146,14 +146,6 @@ describe('the guided start', () => {
     )
   })
 
-  it('uses only the four human task states and pairs each with a visible symbol', () => {
-    const body = guideCode()
-    expect(body).toContain(
-      "type HumanStatus = 'Needs you' | 'Waiting' | 'Ready' | 'Complete'",
-    )
-    expect(body).toContain('STATUS_ICON')
-  })
-
   it('derives Mike’s decisions from the two available pending counts', () => {
     const page = code()
     const body = guideCode()

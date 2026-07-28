@@ -1,74 +1,12 @@
 import Link from 'next/link'
-import { Card, Pill } from '@/components/admin/ui'
+import {
+  PathItem,
+  Status,
+  type HumanStatus,
+} from '@/components/admin/guided'
+import { Card } from '@/components/admin/ui'
 import type { OnboardingProgress } from '@/lib/auth/onboarding'
 import type { AdminRole } from '@/lib/roles'
-
-type HumanStatus = 'Needs you' | 'Waiting' | 'Ready' | 'Complete'
-
-const STATUS_TONE: Record<
-  HumanStatus,
-  'ok' | 'warn' | 'neutral' | 'accent'
-> = {
-  'Needs you': 'accent',
-  Waiting: 'warn',
-  Ready: 'neutral',
-  Complete: 'ok',
-}
-
-const STATUS_ICON: Record<HumanStatus, string> = {
-  'Needs you': '→',
-  Waiting: '◷',
-  Ready: '◇',
-  Complete: '✓',
-}
-
-function Status({ status }: { status: HumanStatus }) {
-  return (
-    <Pill tone={STATUS_TONE[status]}>
-      <span aria-hidden="true">{STATUS_ICON[status]}</span> {status}
-    </Pill>
-  )
-}
-
-function PathItem({
-  number,
-  title,
-  description,
-  status,
-  href,
-}: {
-  number: string
-  title: string
-  description: string
-  status: HumanStatus
-  href: string
-}) {
-  return (
-    <li className="rounded-sm border hairline bg-bg2/55 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <span
-            aria-hidden="true"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border hairline text-xs font-bold text-silver2"
-          >
-            {number}
-          </span>
-          <div>
-            <h3 className="text-sm font-semibold text-ftext">{title}</h3>
-            <p className="mt-1 text-xs leading-relaxed text-dim">{description}</p>
-          </div>
-        </div>
-        <Status status={status} />
-      </div>
-      <Link
-        href={href}
-        className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-orange"
-      >
-        Open {title.toLowerCase()}
-      </Link>
-    </li>
-  )
-}
 
 function OperatorStart({
   firstName,

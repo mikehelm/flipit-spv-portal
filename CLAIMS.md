@@ -35,7 +35,6 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Guided status foundation | codex-guided-release-20260728 | 2026-07-28 09:20 UTC | `src/components/admin/guided.tsx`; `src/components/admin/guided-start.tsx`; `src/components/admin/guided.test.ts`; `src/app/(admin)/admin/page.test.ts` |
 
 ## Done, so nobody starts it again
 
