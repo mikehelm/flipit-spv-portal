@@ -17,9 +17,17 @@ import { describe, expect, it } from 'vitest'
  */
 
 const PAGE = join(process.cwd(), 'src/app/(admin)/admin/page.tsx')
+const GUIDE = join(process.cwd(), 'src/components/admin/guided-start.tsx')
 
 function code(): string {
   return readFileSync(PAGE, 'utf8')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+}
+
+function guideCode(): string {
+  return readFileSync(GUIDE, 'utf8')
     .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '')
@@ -83,5 +91,74 @@ describe('there is always a way through to the health page', () => {
     const card = body.slice(body.indexOf('<Card title="System health">'))
     expect(card).toContain('href="/health"')
     expect(card).toContain('Nothing needs you')
+  })
+})
+
+describe('the guided start', () => {
+  it('gives each admin role a different honest start', () => {
+    const body = guideCode()
+    expect(body).toContain("role === 'OPERATOR'")
+    expect(body).toContain("role === 'OWNER'")
+    expect(body).toContain('Safe test guide')
+    expect(body).toContain('Mike’s decisions')
+    expect(body).toContain('David’s next step')
+    expect(body).toContain('Rehearse a proposal')
+    expect(body).toContain('View as John Doe')
+  })
+
+  it('does not make Mike’s sending credential David’s task', () => {
+    const body = guideCode()
+    const page = code()
+    expect(body).toContain("onboarding.nextStep === 'SENDING_ACCOUNT'")
+    expect(body).toContain('That credential belongs to Mike.')
+    expect(body).toContain("href: '/admin/email-review'")
+    expect(body).toContain('Continue with the email review')
+    expect(body).toContain("step.id !== 'SENDING_ACCOUNT'")
+    expect(body).toContain('Review your remaining setup')
+    expect(page).not.toContain('Change the sending account')
+  })
+
+  it('derives setup state from onboarding while leaving later work unclaimed', () => {
+    const body = guideCode()
+    expect(body).toContain('onboarding.complete')
+    expect(body).toContain('onboarding.completedCount')
+    expect(body).toContain('Ready does not mean reviewed or approved.')
+    expect(body).toContain('no completion is assumed')
+    expect(body).toContain('Investor rehearsal')
+    expect(body).toContain('href="/portal/demo"')
+    expect(body).toContain('status="Ready"')
+    expect(body).not.toContain('This becomes available after setup')
+  })
+
+  it('handles the saved-but-not-finished edge without inventing an unfinished step', () => {
+    const body = guideCode()
+    expect(body).toContain('onboarding.canComplete')
+    expect(body).toContain('One click left — confirm your setup is finished')
+    expect(body).toContain("action: 'Finish setup'")
+  })
+
+  it('does not call an empty owner queue complete', () => {
+    const body = guideCode()
+    expect(body).toContain("pendingAccessRequests > 0 ? 'Needs you' : 'Ready'")
+    expect(body).toContain("submittedProposals > 0 ? 'Needs you' : 'Ready'")
+    expect(body).toContain(
+      "<Status status={totalDecisions > 0 ? 'Needs you' : 'Ready'} />",
+    )
+  })
+
+  it('derives Mike’s decisions from the two available pending counts', () => {
+    const page = code()
+    const body = guideCode()
+    expect(page).toContain('countPendingAccessRequests()')
+    expect(page).toContain('countSubmittedEmailReviewProposals()')
+    expect(body).toContain('pendingAccessRequests + submittedProposals')
+  })
+
+  it('keeps the existing configuration below the guided layer in a quiet disclosure', () => {
+    const body = code()
+    expect(body.indexOf('<GuidedStart')).toBeLessThan(body.indexOf('<details'))
+    expect(body).toContain('System and configuration details')
+    expect(body).toContain('<MailConnectionPanel health={mail} />')
+    expect(body).toContain('<Card title="System health">')
   })
 })

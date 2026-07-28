@@ -1,0 +1,416 @@
+/*
+ * The paper surface, as a compiled stylesheet.
+ *
+ * This was a runtime `<style dangerouslySetInnerHTML>` and it did not work.
+ * `src/lib/security/csp.ts` sets `style-src 'self'`: a `<style>` element in the
+ * served markup without the nonce is refused, and so is every `style` attribute
+ * parsed from markup. The element was in the DOM carrying the right CSS text
+ * and none of it applied — which left the pencil marks unpositioned and
+ * unfilled, so a 16x16 proof mark rendered as a solid black shape 1539px wide
+ * across the header.
+ *
+ * A CSS Module is compiled at build time and served from this origin as a
+ * stylesheet, which `'self'` covers. Nothing here needs a nonce, a widening or
+ * a change to the policy.
+ *
+ * The same rule governs geometry: no component in this folder may carry a
+ * `style` attribute that reaches the served HTML, so the grid is placed by
+ * class here rather than by `style={{ gridRow }}` there. The one exception is
+ * the balloon's measured coordinates, which are written through the CSSOM after
+ * mount — a route CSP does not govern, and the only way to place a portalled
+ * element over arbitrary content.
+ *
+ * `globals.css` is untouched: it is the palette contract that `palette.test.ts`
+ * reads token by token, and it describes a dark portal. The paper keeps its own
+ * variables, scoped to `.root`.
+ */
+
+.root {
+  --paper: #f6f4ef;
+  --paper-warm: #faf8f4;
+  --paper-cool: #eeebe3;
+  --paper-edge: #d7d2c7;
+  --ink: #1a1a20;
+  --ink-soft: #43434d;
+  --ink-faint: #66666f;
+  --graphite: #3a3a46;
+  --desk-bg: #05061c;
+  --columns:
+    minmax(17ch, 1fr)
+    clamp(1rem, 2vw, 2.5rem)
+    minmax(17ch, 1fr);
+
+  min-width: 0;
+  overflow: hidden;
+}
+
+.desk {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.75rem clamp(0.4rem, 1vw, 0.85rem) 1rem;
+  background:
+    radial-gradient(130% 90% at 50% -10%, rgba(255, 255, 255, 0.045), transparent 62%),
+    var(--desk-bg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 26px 52px -34px rgba(0, 0, 0, 0.95);
+}
+
+/*
+ * The stage is the shared width. The paper layer is absolutely positioned over
+ * it and the text spread is a block child of it, so both are exactly as wide as
+ * the stage and both resolve `--columns` against the same width — which is what
+ * makes the sheets line up under the text without either knowing the other's
+ * track sizes. `min-width: min-content` lets the stage grow past the desk when
+ * the type is large enough that two readable measures no longer fit, at which
+ * point the desk scrolls sideways and the sheets scroll with it.
+ */
+.stage {
+  position: relative;
+  min-width: min-content;
+}
+
+.paperLayer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: var(--columns);
+  pointer-events: none;
+}
+
+.sheet {
+  position: relative;
+  border-radius: 3px;
+  background: linear-gradient(
+    180deg,
+    var(--paper-warm) 0%,
+    var(--paper) 10%,
+    var(--paper) 90%,
+    var(--paper-cool) 100%
+  );
+  box-shadow:
+    0 0 0 1px var(--paper-edge),
+    0 1px 1px rgba(0, 0, 0, 0.3),
+    0 24px 46px -28px rgba(0, 0, 0, 0.9);
+}
+
+.sheet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0.55;
+  background-image: repeating-linear-gradient(
+    97deg,
+    rgba(26, 26, 32, 0.02) 0 1px,
+    transparent 1px 6px
+  );
+}
+
+.sheetLeft {
+  grid-column: 1;
+}
+
+.sheetRight {
+  grid-column: 3;
+}
+
+/*
+ * Every cell carries only a column. The rows come from grid auto-placement:
+ * with `grid-auto-flow: row` and a definite column on each item, the placement
+ * cursor moves left, gutter, right, then drops a row — so a paired change is
+ * one grid row, and one grid row is one height. That is why the two sides stay
+ * level with each other with no synchronising JavaScript, and it is why no
+ * element here needs `style={{ gridRow }}`.
+ */
+.spread {
+  display: grid;
+  grid-template-columns: var(--columns);
+  align-items: stretch;
+}
+
+.colLeft {
+  grid-column: 1;
+}
+
+.colTie {
+  grid-column: 2;
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.colRight {
+  grid-column: 3;
+}
+
+.cell {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+.letterhead {
+  padding: 1.25rem 1.25rem 0.75rem;
+  background-image: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(26, 26, 32, 0.17) 7%,
+    rgba(26, 26, 32, 0.17) 93%,
+    transparent 100%
+  );
+  background-size: 100% 1px;
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+}
+
+.rule {
+  background-image: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(26, 26, 32, 0.1) 7%,
+    rgba(26, 26, 32, 0.1) 93%,
+    transparent 100%
+  );
+  background-size: 100% 1px;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+}
+
+.foot {
+  height: 2rem;
+}
+
+.serif {
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua",
+    Georgia, "Times New Roman", serif;
+}
+
+/* Unitless, so the A-/A+ control moves the leading with the type. */
+.body {
+  color: var(--ink);
+  line-height: 1.72;
+}
+
+.ink {
+  color: var(--ink);
+}
+
+.inkFaint {
+  color: var(--ink-faint);
+}
+
+.passage {
+  position: relative;
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 0.6rem 1rem 0.75rem 2.1rem;
+}
+
+.passage:hover {
+  background: rgba(26, 26, 32, 0.035);
+}
+
+.passage[data-selected="true"] {
+  background: rgba(26, 26, 32, 0.055);
+}
+
+/*
+ * The one mark that survives Markup off. It is a selection bracket, not a diff
+ * mark: without it a clean page gives no sign that clicking a paragraph did
+ * anything.
+ */
+.passage[data-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0.6rem;
+  top: 0.55rem;
+  bottom: 0.55rem;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--graphite);
+  opacity: 0.6;
+}
+
+.margin {
+  position: absolute;
+  left: 0.35rem;
+  top: 0.45rem;
+  bottom: 0.45rem;
+  width: 1.1rem;
+  pointer-events: none;
+}
+
+.marginRule {
+  position: absolute;
+  inset: 0;
+}
+
+.marginGlyph {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1rem;
+  height: 1rem;
+}
+
+.loop {
+  position: absolute;
+  left: 1.55rem;
+  right: 0.45rem;
+  top: 0.3rem;
+  bottom: 0.3rem;
+  pointer-events: none;
+}
+
+.stroke {
+  fill: none;
+  stroke: var(--graphite);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.34;
+}
+
+.passage:hover .stroke,
+.passage[data-selected="true"] .stroke {
+  opacity: 0.62;
+}
+
+.added {
+  color: #0f0f15;
+  text-decoration-line: underline;
+  text-decoration-color: rgba(58, 58, 70, 0.5);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.22em;
+  text-decoration-skip-ink: none;
+}
+
+.removed {
+  color: rgba(26, 26, 32, 0.6);
+  text-decoration-line: line-through;
+  text-decoration-color: rgba(58, 58, 70, 0.66);
+  text-decoration-thickness: 1.5px;
+}
+
+/*
+ * The gutter stroke is drawn for the selected pair only, in both modes, so it
+ * reads as a selection tie rather than as a diff mark.
+ */
+.tieStroke {
+  position: absolute;
+  left: -0.25rem;
+  right: -0.25rem;
+  top: 50%;
+  height: 1.5rem;
+  margin-top: -0.75rem;
+  opacity: 0;
+}
+
+.tieStroke[data-on="true"] {
+  opacity: 0.75;
+}
+
+.tieStroke .stroke {
+  stroke: rgba(232, 233, 245, 0.75);
+  opacity: 0.7;
+  stroke-dasharray: 3 5;
+}
+
+.legend {
+  padding: 0.75rem 1rem;
+}
+
+/*
+ * The balloon is portalled to `document.body`, so it is outside `.root` and
+ * carries its own colours. `top` and `left` are written through the CSSOM after
+ * it has been measured; everything that can be a class is one, so an unplaced
+ * balloon is invisible rather than parked in the corner.
+ */
+.balloon {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 90;
+  width: min(25rem, calc(100vw - 1.5rem));
+  border-radius: 4px;
+  background: #fbfaf6;
+  color: #1a1a20;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.2),
+    0 20px 44px -20px rgba(0, 0, 0, 0.8);
+}
+
+.balloon[data-placed="true"] {
+  opacity: 1;
+}
+
+.balloon[data-pinned="true"] {
+  pointer-events: auto;
+}
+
+.balloonArrow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0.7rem;
+  height: 0.7rem;
+  background: #fbfaf6;
+  transform: rotate(45deg);
+}
+
+.balloonBody {
+  position: relative;
+  padding: 1rem;
+}
+
+.balloonInk {
+  color: #1a1a20;
+}
+
+.balloonSoft {
+  color: #43434d;
+}
+
+.balloonFaint {
+  color: #66666f;
+}
+
+.balloonRule {
+  border-top: 1px solid rgba(26, 26, 32, 0.12);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(26, 26, 32, 0.28);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  color: #2a2a33;
+}
+
+.chip[data-unverified="true"] {
+  border-color: rgba(150, 42, 32, 0.5);
+  color: #8c2a20;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .passage {
+    transition: background-color 140ms ease;
+  }
+
+  .stroke,
+  .tieStroke {
+    transition: opacity 160ms ease;
+  }
+}

@@ -23,6 +23,18 @@ describe('the email-review AI boundary', () => {
     expect(built.prompt).toContain('Which reasons are not recorded?')
   })
 
+  it('uses the actual current send source when the stored wording has changed', () => {
+    const built = buildEmailReviewPrompt(
+      'What is live now?',
+      undefined,
+      'Subject: A newly promoted exact invitation',
+    )
+    expect(built.prompt).toContain('Subject: A newly promoted exact invitation')
+    expect(built.prompt).not.toContain(
+      '"currentEmail": "Subject: Private invitation to participate in Flipit',
+    )
+  })
+
   it('sends only the selected clause when the user asks from a clause', () => {
     const built = buildEmailReviewPrompt(
       'What do we actually know about this change?',

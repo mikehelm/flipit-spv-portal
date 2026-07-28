@@ -117,6 +117,17 @@ export const templateKindEnum = pgEnum('template_kind', [
   'REMINDER',
 ])
 
+export const emailReviewProposalStatusEnum = pgEnum(
+  'email_review_proposal_status',
+  [
+    'SUBMITTED',
+    'CHANGES_REQUESTED',
+    'REJECTED',
+    'PROMOTED',
+    'WITHDRAWN',
+  ],
+)
+
 export const messageDirectionEnum = pgEnum('message_direction', [
   'FROM_INVESTOR',
   'FROM_OPERATOR',
@@ -571,6 +582,52 @@ export const emailTemplates = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('email_templates_kind_current_idx').on(t.kind, t.isCurrent)],
+)
+
+/**
+ * One bounded wording change proposed from the private review studio.
+ *
+ * The complete candidate source is stored here because a proposal must remain
+ * reviewable even after the live template moves. It is private operational
+ * data and is never copied into the audit log or any investor-facing surface.
+ */
+export const emailReviewProposals = pgTable(
+  'email_review_proposals',
+  {
+    id: id(),
+    createdById: text('created_by_id')
+      .notNull()
+      .references(() => users.id),
+    sectionId: text('section_id').notNull(),
+    sectionLabel: text('section_label').notNull(),
+    beforeText: text('before_text').notNull(),
+    proposedText: text('proposed_text').notNull(),
+    reason: text('reason').notNull(),
+    status: emailReviewProposalStatusEnum('status').notNull().default('SUBMITTED'),
+    baseTemplateHash: text('base_template_hash').notNull(),
+    candidateTemplateHash: text('candidate_template_hash').notNull(),
+    candidateSubject: text('candidate_subject').notNull(),
+    candidateHtmlSource: text('candidate_html_source').notNull(),
+    candidateTextSource: text('candidate_text_source').notNull(),
+    policyResults: jsonb('policy_results').notNull().default([]),
+    aiReview: text('ai_review'),
+    aiModel: text('ai_model'),
+    submittedAt: timestamp('submitted_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    reviewedById: text('reviewed_by_id').references(() => users.id),
+    reviewNote: text('review_note'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    promotedTemplateId: text('promoted_template_id').references(
+      (): AnyPgColumn => emailTemplates.id,
+    ),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('email_review_proposals_status_idx').on(t.status, t.createdAt),
+    index('email_review_proposals_creator_idx').on(t.createdById, t.createdAt),
+  ],
 )
 
 /**

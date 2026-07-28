@@ -5722,6 +5722,75 @@ and it restores a limit the middleware had lowered rather than raising one.
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
 
+## Approved physical curl, three-person view switcher and readable text
+
+Mike visually approved the corrected Package 1 curl on 27 July 2026 and asked
+for it to be put into the canonical David-review release. He also asked for one
+floating switch between Mike, David and the synthetic John Doe investor, and
+for the portal text to start at twice its previous size with a hover-accessible
+size control.
+
+**Built.**
+
+- The approved reflection-anchored curl geometry and its WebGL/SVG renderer are
+  now in the canonical source. The copied Package 1 files match the approved
+  checkpoint byte for byte.
+- The curl appears on the landing, sign-in and access-request screens. In the
+  admin and investor portal it conceals the name, email, role, password,
+  two-factor and sign-out controls; hovering or focusing the corner reveals the
+  panel, while clicking the corner pins it until navigation, Escape or an
+  outside click closes it.
+- The low-left switch now offers three explicit destinations: Mike's owner
+  overview, David's private email-review workspace and John Doe's guarded
+  investor preview. It closes on navigation, outside pointer input and Escape.
+- Text defaults to `2×`. The account panel contains smaller/larger controls
+  covering `1×`, `1.5×`, `2×` and `2.5×`, and remembers the browser's choice.
+  Typography utilities are scaled without changing rem-based widths or spacing.
+
+**Decisions.**
+
+- ***The view switcher navigates to truthful workspaces; it does not impersonate
+  another account.*** Mike leads to the owner overview, David to the email
+  review, and John Doe to the existing synthetic guarded portal.
+- ***Text is scaled at the typography-utility layer rather than by changing the
+  root font size.*** Doubling the root rem would also double card widths,
+  paddings and mobile gutters.
+- ***Development-only Curl Lab UI files are not part of this release.*** The
+  approved settings and geometry remain; the unreferenced lab page and its
+  route-only test were excluded. Packages 2, 3 and 6 remain future curl work.
+
+**Deviations.**
+
+- The broad viewport suite was not rerun. Mike requested proportionate testing,
+  so this release uses the focused curl/preview checks, TypeScript and a
+  production build. The final visual check belongs in the already-authenticated
+  live browser after deployment.
+
+**Checklist.**
+
+1. *Money, sends, approvals, recipient scope and tokens?* Untouched.
+2. *Does the preview create or mutate an investor?* No. John Doe remains
+   synthetic, behind `requireAdmin`, with every investor mutation disabled.
+3. *Does David gain owner authority?* No. The switch is navigation, and server
+   guards continue to enforce the signed-in role.
+4. *Can another investor be revealed?* No. The only investor option is the
+   fixed John Doe fixture.
+5. *Credentials, deployment settings or production data changed?* No.
+
+Focused verification is green: 697 assertions across the curl geometry,
+renderer integration and John Doe preview; `pnpm typecheck`; and a clean
+production `pnpm build`.
+
+**Uncertain.**
+
+- Mike should visually confirm the live admin page at the default `2×` setting
+  and try `1.5×` or `2.5×` from the curl panel. No synthetic login or broad
+  viewport run was created solely for that visual preference check.
+- Packages 2, 3 and 6 — direct thumb-and-finger dragging, general polygon
+  clipping and the Curl Lab A/B harness — are not in this release.
+- The saved text size is browser-local. A different browser or device starts at
+  the requested `2×` default.
+
 ## David can review the email without inheriting an invented rationale
 
 **Built.**
@@ -7043,3 +7112,696 @@ brings a screen up to the standard every other screen already met.
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
+
+## 2026-07-27 — 1.5× text default and wide-screen use
+
+**Built.**
+
+- The default typography scale is 1.5× instead of 2×.
+- A small `Text 150%` control is always visible at the bottom-right of every
+  page. Hover or keyboard focus reveals A− and A+ in 25% steps from 100% to
+  200%.
+- The old 2× browser preference key was versioned rather than reused, so a
+  previous automatic 2× value cannot silently keep this release oversized.
+- The administrator frame now uses `max-w-6xl` instead of `max-w-4xl`, preserving
+  outer cushion while letting navigation, prose and cards use more of a wide
+  screen.
+
+**Decisions.**
+
+- The text control is global rather than hidden under the account curl. It is a
+  reading aid, not account administration, and must be easy to discover before
+  somebody knows what the curl contains.
+- Font scaling still changes typography utilities rather than the root `rem`, so
+  the wider frame does not enlarge padding, controls or card dimensions.
+
+**Deviations.**
+
+- None from Mike's corrected direction. The earlier 2× default and curl-only
+  control were replaced.
+
+**Checklist.**
+
+- `src/lib/portal/demo-preview.test.ts`: 7 of 7.
+- `pnpm typecheck`: passed.
+- Focused ESLint on the new control, both layouts and its regression test:
+  passed.
+- `pnpm build`: passed using the existing protected review-deployment
+  environment; no secret was copied into source control.
+
+**Uncertain.**
+
+- Mike's own browser is the acceptance surface for the balance between the new
+  1.5× type and 72rem-wide administrator frame. The control can immediately move
+  that preference down to 125% or up to 175% without another release.
+
+## 2026-07-27 — David’s private email revision studio
+
+**Built.**
+
+- `/admin/email-review` is now a wide three-zone studio: a change map on the
+  left, David’s preserved Gmail draft and the actual current invitation source
+  in aligned columns, and evidence/AI/proposal/review tools on the right.
+- Selecting a change in the map scrolls it into view and selects both sides of
+  the same row. Added, removed, changed and unchanged passages use symbols and
+  labels as well as colour.
+- The right-hand inspector shows every recorded SPEC, TEST or UNVERIFIED reason.
+  UNVERIFIED remains visibly unverified; no missing rationale was reconstructed.
+- AI questions can be scoped to the selected paired change or the whole
+  document. The application names `OpenAI GPT-5.6 Sol`, sends the actual current
+  invitation rather than a stale duplicate, uses `store: false`, records token
+  usage, and treats the answer as advisory.
+- David can propose one bounded section at a time and must explain why. The
+  proposal updates the real subject/HTML/plain-text candidate together and runs
+  twelve deterministic policy checks before it can reach Mike.
+- Mike sees the exact before/after wording, David’s reason, policy results and
+  the advisory AI review. Request-changes and reject decisions preserve the live
+  source. Promotion is owner-only, rechecks the base hash, candidate hash and
+  every policy rule, creates a versioned current template, and leaves sending
+  disabled until a fresh exact-hash compliance approval is recorded.
+- Pending proposals are counted in the Communication menu for Mike. David sees
+  his own proposal status and Mike’s note, but no promotion control.
+- The review is available to David before optional media, SMTP and test-send
+  onboarding are complete. Those gates still govern sending; they no longer
+  block private document preparation.
+- Migration `0015_yummy_red_skull.sql` adds the private proposal record. Complete
+  candidate sources remain server-side and are never copied into the audit log
+  or any investor route.
+
+**Decisions.**
+
+- The comparison’s right side is derived from `loadCurrentTemplate('INVITATION')`,
+  the source that would actually be sent. `EMAIL_TEMPLATE.txt` remains provenance
+  material rather than a second editable truth.
+- Proposals are single-section changes, not an unrestricted email editor. This
+  makes the before/after review exact and lets the policy engine refuse a
+  protected-rule break before a proposal is stored.
+- The AI explains and reviews; it never approves, promotes, calculates investor
+  figures or supplies a missing legal reason. Deterministic checks and Mike’s
+  owner action remain the authority boundaries.
+- A promoted edit deliberately creates drift. The existing compliance gate is
+  not bypassed or rewritten; the UI warns Mike before promotion and confirms the
+  resulting send lock afterward.
+- Earlier promoted wording is resolved from the version history, so a later
+  proposal starts from the wording actually live rather than the shipped
+  default.
+
+**Deviations.**
+
+- No production deployment or production database migration was made in this
+  package. The full workflow was exercised against an isolated local copy of the
+  review database, including a preview-only subject promotion.
+- The isolated copy did not contain the stored OpenAI key, so the page showed
+  the honest disconnected state there. The protected production configuration
+  was checked read-only and reports that the key is configured; the provider
+  wrapper had already passed its live key/model check.
+
+**Checklist.**
+
+1. *Does David see the original and the source that is actually sent?* Yes.
+2. *Are unknown reasons still unknown?* Yes — six UNVERIFIED clauses are called
+   out and the AI instruction forbids guessing.
+3. *Can David change the live invitation?* No. He can submit a candidate only.
+4. *Can a viewer read or mutate this workspace?* No. The route and actions admit
+   owner/operator roles; the investor portal imports none of the review record.
+5. *Can an operator promote or record approval?* No. Promotion begins with
+   `requireOwner()`, and compliance approval remains a separate owner control.
+6. *Can a stale or altered proposal be promoted?* No. Base and candidate hashes
+   are recomputed and compared immediately before a version is created.
+7. *Can a promotion silently keep sending enabled?* No. The live hash changes,
+   and the existing exact-hash approval gate disables sending.
+8. *Does AI storage remain off?* Yes, for selected-change, whole-document and
+   proposal-review calls.
+9. *Does an audit event contain email bodies, David’s reason, a key or an AI
+   answer?* No. Audit metadata contains ids, hashes, model, counts and rule ids.
+10. *Focused verification?* TypeScript passed; focused ESLint passed; 52
+    email-review/template tests passed; the production build passed. Browser
+    checks at the project’s 150% text default verified the three-column layout,
+    synchronized pair selection, David’s no-promote boundary, Mike’s submit →
+    review → promote flow, stored version change, iterative second-edit source,
+    and the post-promotion send lock.
+
+**Uncertain.**
+
+- The migration and application commit still need a deliberate release/deploy
+  step before the production page contains this workspace. Deployment was not
+  inferred from approval to build.
+- David’s production account exists and is allowlisted, but it has no password
+  yet. Mike still needs to issue or resend David’s setup invitation before the
+  walkthrough.
+- No compliance approval is recorded for the invitation wording. The six
+  UNVERIFIED rationale rows remain the exact list for a qualified person to
+  confirm; this workspace does not reduce that queue.
+- SMTP remains a separate launch prerequisite. David can now review wording
+  before it is connected, but no real invitation should be enabled until the
+  sending account, test invitation and exact-hash approval have all passed.
+
+## 2026-07-27 — Paper review: the two letters as marked-up pages
+
+**Built.**
+
+- `/admin/email-review` opens on a new **Paper review** mode. A segmented switch
+  at the top of the workspace chooses between it and the **Technical view**,
+  which is the previous dark comparison, unchanged and still one click away.
+- Each email is a white sheet with black ink: warm paper stock, a restrained
+  edge/shadow treatment, a serif measure, and a dark "desk" trough that sets both
+  sheets clearly apart from the change map on the left and the tools on the
+  right. The whole spread is one CSS grid — each paired change is one row, and
+  the two sheets are grid items spanning every row behind the text — so the two
+  sides stay level with each other with no synchronising JavaScript.
+- A **Markup on/off** switch sits beside the view switch. Off gives two clean
+  pages with every diff mark hidden; selection, hover, focus and the explanation
+  balloon all keep working, and the selected passage keeps a plain graphite
+  margin bracket so the interaction is still legible.
+- The marks are a reviewer's pencil, not a software diff: a graphite underline
+  under wording that arrived, a strike through wording that left, a restrained
+  open loop around a rewritten passage, a wobbling rule down the margin beside
+  every marked paragraph with a small insert/delete/revise proof mark, and a
+  dashed stroke across the gutter tying the selected pair together. Every stroke
+  is an SVG path built by arithmetic in `src/components/email-review/markup.ts`;
+  there are no images and no new packages.
+- Marks are word-level. `markPassage()` aligns the two sides of a paired change
+  by longest common subsequence over words, so the strike lands on *Hong Kong*
+  and the underline on *Global Limited* rather than on the whole paragraph.
+  Beyond 400 words a side it marks the passage whole, which is what the eye
+  wants at that length anyway.
+- Hover, keyboard focus or a click on a passage opens an explanation balloon
+  carrying the clause title, the Added/Removed/Changed status, and the recorded
+  reason and evidence. Clicking pins it; Escape closes a pinned one. It is
+  rendered through a portal into `document.body`, because the spread is an
+  overflow box and an in-flow balloon would be clipped by exactly the passages a
+  reviewer reads at large text sizes.
+- Selecting either side still selects the pair, still scrolls the change map's
+  target into view, and still drives the Evidence, Ask AI, Propose and Review
+  tools. David's proposal flow and Mike's review/promote flow are untouched.
+
+**Decisions.**
+
+- **The balloon may not invent a reason.** The rationale record stores the
+  literal sentence "Reason not recorded anywhere." for six clauses; rendering
+  that into a box headed "Recorded reason" would present all six as explained.
+  `recordedText()` turns the placeholder back into an absence, and the balloon
+  says *Unknown means unknown* with an UNVERIFIED chip instead. A passage with no
+  recorded clause at all is treated as unverified rather than as explained.
+- **The pencil wobble is seeded, not random.** A path from `Math.random()`
+  renders differently on the server and in the browser — a hydration mismatch —
+  and it would move a reviewer's marks between visits. Every stroke is derived
+  from the change id through an FNV-1a seed.
+- **The paper keeps its own colour variables**, scoped under `.root` in
+  `src/components/email-review/paper.module.css`. `globals.css` is the palette
+  contract that `palette.test.ts` reads token by token, and it describes a dark
+  portal; pushing six light-mode values into it to make one screen white would
+  put them in front of every other screen too.
+- Column minimums are in `ch`, not pixels, so the spread only begins to scroll
+  sideways once the text is genuinely too large for two readable measures. At the
+  project's 1.5× default it does not scroll at ordinary desktop widths.
+- Motion is gated behind `prefers-reduced-motion: no-preference`, and
+  `chooseUnit()` now reads the same preference in JavaScript — the `!important`
+  rule in `globals.css` cannot reach a `scrollIntoView({behavior: 'smooth'})`.
+
+**Verified.**
+
+1. *Is the technical view still available and unchanged?* Yes. It is the second
+   segment, and its markup is the previous block verbatim inside a conditional.
+2. *Does markup-off hide every diff mark?* Yes. `[data-markup="off"]` removes
+   the SVG marks and the underline/strike decorations. The gutter tie is drawn
+   only for the selected pair in both modes, so it is a selection cue rather
+   than a diff mark.
+3. *Can the balloon show a reason that was never recorded?* No — asserted for
+   every UNVERIFIED clause in the real record, in
+   `src/components/email-review/markup.test.ts`.
+4. *Do the pencil marks point at the right words?* Asserted, including that the
+   aligner loses and duplicates nothing and never strikes across a paragraph
+   break.
+5. *Are the strokes stable between renders?* Asserted.
+6. *Focused verification?* **Not run — see Uncertain.** The sandbox this package
+   was built in refused every command that executes code (`pnpm`, `npx`,
+   `node -e`, the local binaries), so `pnpm typecheck`, focused ESLint and
+   `pnpm vitest run` could not be run here. `git diff --check` passed and is
+   clean. Everything else in this entry is a claim about the source, not about a
+   passing run.
+
+**Uncertain.**
+
+- The required checks have not been run. `pnpm typecheck`, focused ESLint over
+  the changed TS/TSX, and `pnpm vitest run src/lib/email-review
+  src/lib/email/templates/templates.test.ts src/components/email-review` are the
+  exact commands, and they are the first thing to run against this working tree.
+- No browser has rendered this yet. The paper spread, the pencil strokes, the
+  balloon's flip-above-when-there-is-no-room behaviour, and the point at which
+  the spread starts to scroll sideways are all geometry, and geometry is checked
+  by looking.
+- `scripts/verify-viewport.ts` expects the phrase *Unknown means unknown* on
+  `/admin/email-review`; at the previous commit nothing on that page contained
+  it, so that assertion was already failing. The paper view's footer now states
+  it plainly — it is the rule this screen actually follows — and the default
+  view is rendered on the server, so a static fetch should find it. That is
+  reasoning about the source, not a passing run of `pnpm verify:viewport`.
+- The AGENTS.md What Next lifecycle events for this package were not posted; the
+  sandbox refused the `whatnext.js` command as well.
+
+### The stylesheet the policy refused
+
+Browser acceptance at 1163×654 and 150% text found the paper view rendering as
+giant solid-black shapes across the header, with the view switch and the markup
+toggle unreachable underneath them. DOM measurement named the cause: the
+`<style>` element was present, carrying exactly the expected CSS text, and none
+of its rules applied — `.margin` computed `position: static; display: inline`
+and its SVG measured 1539×1005 at y −41.
+
+**It was the Content-Security-Policy, and it was refusing two things, not one.**
+`src/lib/security/csp.ts` sets `style-src 'self'`. That directive refuses a
+`<style>` element in the served markup that carries no nonce, and — because
+`style-src-attr` falls back to it and a nonce cannot reach an attribute — it also
+refuses **every `style` attribute parsed from markup**. So the grid placement,
+which was `style={{ gridColumn, gridRow }}` on the sheets and on every cell, was
+dropped on the server-rendered page as well. The grid collapsed, the pencil
+marks lost the positioned containers they hang from, and an SVG path with no
+`fill` declared is filled black. The comment in `csp.ts` had already written this
+down: *"an inline style added anywhere from now on is refused: the element
+renders with that one rule missing and nothing says so."*
+
+**Fixed within the writable map, with no change to the policy.**
+
+- `paper-styles.tsx` is deleted. The stylesheet is now
+  `src/components/email-review/paper.module.css`, a CSS Module compiled at build
+  time and served from this origin, which `'self'` already covers. No nonce, no
+  widening, no `'unsafe-inline'`, no change to `globals.css`.
+- **No component in the folder carries a `style` attribute any more.** The grid
+  rows come from auto-placement: every cell declares a *column* class only, and
+  with `grid-auto-flow: row` the placement cursor runs left, gutter, right and
+  then drops a row — so a paired change is still exactly one grid row and the two
+  sides still stay level with no synchronising JavaScript. The two sheets moved
+  out of the grid into an absolutely-positioned layer that resolves the same
+  `--columns` against the same width, because a grid item with a definite row
+  *and* column occupies those cells and auto-placement would have had to route
+  every paragraph around it.
+- The balloon's measured coordinates are written through `element.style` after
+  mount. `verify:viewport` documents why that is the one legitimate route:
+  *"a style set through the CSSOM still applies — and CSP does not"* govern it.
+  Everything else about the balloon — visibility before it has been measured,
+  and whether it accepts the pointer — is a class keyed off a data attribute, so
+  an unplaced balloon is invisible rather than parked in the corner.
+- Every stroke now carries `fill="none"`, `stroke`, `stroke-width` and a
+  `width`/`height` of `100%` as **SVG presentation attributes** as well as in the
+  stylesheet. Attributes cannot be refused by any policy, so with no CSS at all
+  the marks are hairlines bounded by their own passage rather than black shapes
+  the size of the page. CSS still wins where both are present, which is how the
+  gutter tie keeps its pale stroke.
+- **Markup off is enforced in the component, not in the stylesheet.** With the
+  pencil down no mark is rendered at all and no underline or strike class is
+  applied, so the guarantee does not depend on a rule arriving.
+
+`markup.test.ts` gained five checks that read source, because this failure
+renders perfectly in a unit test and only appears behind a real policy: no
+`<style>` element and no `dangerouslySetInnerHTML` in the folder, no `style`
+attribute in any component, the stylesheet imported from the CSS Module by all
+three files that need it, every `styles.x` naming a class the stylesheet
+actually defines — a CSS Module returns `undefined` for a name it does not have,
+which looks identical to a refused rule — and every `<path>` drawn with an
+explicit fill.
+
+### Codex acceptance
+
+- `pnpm typecheck`: passed.
+- Focused ESLint over the workspace and the new presentation folder: passed.
+- Focused email-review/template/paper tests: 69 passed in 6 files.
+- `pnpm build`: passed.
+- `git diff --check`: passed.
+- Browser acceptance at the application's 150% text default verified the
+  default Paper review, distinct white sheets, bounded pencil marks, clean
+  markup-off mode, working Technical view switch, paired selection, and a
+  pinned explanation balloon. The balloon kept an unknown reason visibly
+  UNVERIFIED and explained that unknown means unknown.
+- The first browser build exposed CSP-blocked inline styles as oversized black
+  SVGs. The final build was recompiled and rechecked after the CSS Module fix;
+  the black shapes and blocked controls were gone without weakening CSP.
+
+## 2026-07-27 — Graham experience-test mode
+
+**Built.**
+
+- Graham keeps the existing `VIEWER` role. The email-review route now admits a
+  signed-in reader and shows a prominent **Graham test mode** notice.
+- The complete paper/technical comparison, change map, evidence balloons and AI
+  question flow are available in test mode. AI provider storage remains off and
+  neither the question nor answer is written to the database; the existing
+  counts-only usage and metadata-only audit receipts remain.
+- The Practice tab accepts wording and a reason, then displays the result as a
+  paired practice card held only in React state. The viewer form has no server
+  action. Reloading or closing the tab removes it.
+- The real proposal action still begins with `requireAdmin()`, and review or
+  promotion still begins with the existing acting-admin/owner guards. A crafted
+  request from Graham is therefore refused even if the browser-only boundary is
+  bypassed.
+- The low-left view switch now appears for a viewer. The existing `/portal/demo`
+  investor rehearsal admits a signed-in reader, remains synthetic John Doe
+  data, creates no investor session or record, and continues to suppress every
+  investor mutation.
+
+**Decisions.**
+
+- This is an added capability of the read-only `VIEWER` role, not an operator
+  promotion. Graham gains no send, import, export, approval, invitation,
+  template, investor-status or audit-log authority.
+- AI questions are read-only analysis rather than product changes. Their text
+  remains transient, while the existing non-content usage/audit receipts remain
+  because removing those records would reduce accountability.
+- Practice proposals deliberately do not run the real submit/promote pipeline.
+  Showing a simulated proposal is safer than creating a temporary database row
+  that another screen, export or reviewer could mistake for David's work.
+
+**Deviations.**
+
+- Graham does not yet have a real investor record: the current production
+  database contains zero investor accounts. Investor mode therefore uses the
+  existing clearly labelled John Doe synthetic rehearsal rather than inventing
+  an offer or percentage for Graham.
+- Targeted ESLint still reports the pre-existing
+  `react-hooks/set-state-in-effect` finding in
+  `portal-preview-switch.tsx` at the route-change close effect. This package
+  changed the role type and visibility of that component, not the existing
+  effect, so the working behavior was not refactored as unrelated cleanup.
+
+**Checklist.**
+
+1. *Can Graham open David's email-review workspace?* Yes, in the candidate.
+2. *Can he select changes, toggle markup and use both document views?* Yes.
+3. *Can he ask the configured AI about a selection or both emails?* Yes; the
+   read-only question action admits a reader.
+4. *Can his practice wording reach the proposal server action?* No. Test mode
+   supplies no form action, and the server action independently requires an
+   acting administrator.
+5. *Can he save, promote, approve or send?* No.
+6. *Can he switch to investor view?* Yes, through the existing synthetic,
+   mutation-free preview.
+7. *Focused verification?* TypeScript passed; 29 focused authorization,
+   email-review, role and preview checks passed; `git diff --check` passed; the
+   production build passed when loaded with the unchanged live release
+   environment.
+
+**Uncertain.**
+
+- This candidate is not deployed. The governing production rule requires
+  Mike's explicit approval for the live release step.
+- Graham has no password and the previously issued setup token cannot be
+  recovered from its hash. A fresh setup link is a credential action and still
+  needs Mike's explicit approval after deployment.
+- The OpenAI key is present, but this package did not spend an API call merely
+  to prove it again. Graham's first permitted AI question is the final
+  end-to-end provider check.
+
+## 2026-07-27 — Unified email-review tool rail
+
+**Built.**
+
+- The separate Change Map and selected-change sidebars now occupy one persistent
+  review rail. Its five tabs are Changes, Evidence, Ask AI, Propose/Practice and
+  Review/Status.
+- Paper and technical views now use a two-column workspace: one compact tool
+  rail and the document surface. At desktop widths the paired documents receive
+  the space previously reserved for the second sidebar.
+- The paper desk padding and the visual gutter between the two sheets are
+  tighter, while the email type size, line height, selection synchronization,
+  pencil markup and explanation balloons are unchanged.
+- The rail remains first on narrow screens and all existing evidence, AI,
+  proposal, practice and protected promotion behavior is preserved.
+
+**Decisions.**
+
+- Changes is the default tool because it is the navigation layer. Evidence, AI
+  and editing are actions on the current selection, so they belong in the same
+  rail rather than competing for permanent screen width.
+- The rail stays 17–18rem wide. That is enough for the longer review forms while
+  giving the paired pages roughly a quarter more width at the inspected desktop
+  size.
+- Only unproductive outer padding and inter-page desk space were reduced. The
+  paper text measure and reading rhythm were not compressed.
+
+**Deviations.**
+
+- No product behavior or permission boundary changed.
+- The existing authenticated browser session was no longer valid after the
+  local preview restarted, so final visual acceptance remains a signed-in
+  reviewer check rather than an automated credential workaround.
+
+**Checklist.**
+
+1. *One visible tool rail rather than two?* Yes.
+2. *Changes, evidence, AI, proposal/practice and review still reachable?* Yes.
+3. *Paired paper surface materially wider?* Yes; the desktop grid removes the
+   former 18–22rem right column and gives that width to the document.
+4. *Focused verification?* TypeScript passed; focused ESLint passed; 30 focused
+   email-review tests passed; the production build passed; `git diff --check`
+   passed.
+
+**Uncertain.**
+
+- Mike should make one signed-in visual pass at his preferred text size. The
+  local preview is running at `http://127.0.0.1:3010/admin/email-review`.
+- This candidate is not deployed; deployment remains a separate owner-approved
+  release action.
+
+## 2026-07-28 — Guided mobile and viewer acceptance blockers
+
+**Built.**
+
+- The floating text-size control now grows inward from the lower-right edge,
+  keeps its hidden controls out of layout/accessibility measurement, and uses
+  44×44px adjustment buttons.
+- The Audit date range stacks at phone width, and long action/entity IDs wrap
+  instead of widening the document.
+- The account-access browser verifier now covers the actual Graham rehearsal:
+  guided email review, one bounded selected-change AI question, browser-only
+  proposal creation, zero proposal rows, disappearance on reload, John Doe,
+  Investors, Round, Questions, refusals, and signed-out redirects.
+- The viewport verifier now recognizes the Guided review that replaced the
+  older always-visible “Unknown means unknown” text.
+
+**Decisions.**
+
+- A clipped control is still an overflow and an undersized target even when it
+  is transparent. Hidden adjustment buttons therefore use `visibility` until
+  hover or keyboard focus, while the focusable Text control remains visible.
+- Graham's production setup link was not consumed. The complete technical
+  rehearsal used a disposable database restored from the pre-cutover backup
+  and an obvious synthetic viewer account.
+- No legal wording, source email, role, transport, credential, schema,
+  production data, or investor record changed.
+
+**Deviations.**
+
+- The headless Chromium on this Mac returns `NotSupportedError` for its fake
+  camera device. The browser simultaneously reports no Permissions-Policy
+  violation and the response still serves `camera=(self)`. This is recorded as
+  a harness limitation, not treated as a product failure or hidden by weakening
+  the assertion.
+
+**Checklist.**
+
+1. *All tested routes fit at 375×812?* Yes: no horizontal scroll or overflowing
+   element remains.
+2. *All non-prose interactive targets reach 44px?* Yes.
+3. *Contrast, CSP and console clean?* Yes across all 384 product checks.
+4. *Email review visible and populated?* Yes.
+5. *Viewer AI works?* Yes; one selected-clause answer returned without logging
+   its content.
+6. *Practice proposal persists?* No database row was written, and reload removed
+   the card.
+7. *Viewer authority remains bounded?* Yes; 49/49 isolated account and role
+   journey checks passed.
+8. *Focused checks?* ESLint, TypeScript, 16 focused tests, production build and
+   diff validation passed.
+
+**Uncertain.**
+
+- Graham and David still need to supply their subjective human feedback after
+  opening their private setup links.
+
+## 2026-07-28 — Person-specific sign-in link and retained email
+
+**Built.**
+
+- The sign-in page accepts an email in its private URL and fills that address
+  into the email field.
+- After a rejected password, the email remains in place while the password is
+  cleared. The page now shows one refusal message rather than repeating it
+  above and below the form.
+
+**Decisions.**
+
+- The address is the only value carried by the link. A password, setup token or
+  other credential is never embedded in the URL.
+- The email control is intentionally controlled by the browser so React's
+  post-action reset clears the secret password without clearing the address.
+
+**Deviations.**
+
+- None. Authentication, rate limiting, roles and setup-link rules are
+  unchanged.
+
+**Checklist.**
+
+1. *Does Graham's private sign-in URL fill his address?* Yes.
+2. *Does a rejected password retain that address?* Yes.
+3. *Does the password remain private and clear after submission?* Yes.
+4. *Focused verification?* TypeScript, focused ESLint and 43 relevant tests
+   passed.
+
+**Uncertain.**
+
+- Graham still needs to enter the password he chose; the application cannot
+  recover or display it.
+
+## 2026-07-28 — Branded private-link preview
+
+**Built.**
+
+- Pasted portal links now advertise a privacy-safe Flipit Global SPV title,
+  concise private-review description and large branded preview image.
+- A matching high-resolution app icon gives browser tabs, saved links and
+  mobile shortcuts a coherent identity.
+- The artwork uses the portal's navy, white, orange, gold and curled-document
+  visual language without names, addresses, amounts or investor information.
+
+**Decisions.**
+
+- The social card carries no recipient-specific content. The secret link
+  identifies its recipient; public preview metadata must not.
+- The share artwork is 1200×630 and the icon master is 512×512, covering the
+  dimensions used by common messaging and mobile surfaces.
+- Existing noindex, nofollow and nocache rules remain unchanged.
+
+**Deviations.**
+
+- None.
+
+**Checklist.**
+
+1. *Does the rendered page publish Open Graph and large-card metadata?* Yes.
+2. *Are the generated assets present at their declared dimensions?* Yes.
+3. *Does metadata expose a person, email or offer?* No.
+4. *Focused verification?* TypeScript, focused ESLint and three metadata checks
+   passed; the running page emitted the expected absolute image URL.
+
+**Uncertain.**
+
+- Messaging applications cache link previews. A previously pasted URL may
+  retain its older preview until that application's cache refreshes.
+
+## 2026-07-28 — Exact square WhatsApp preview
+
+**Built.**
+
+- Social metadata now points to the exact square curled-document icon Mike
+  selected instead of asking WhatsApp to crop the separate landscape artwork.
+- Twitter-style metadata uses the corresponding square summary treatment.
+
+**Decisions.**
+
+- The landscape artwork remains available as a project asset, but the square
+  icon is the canonical pasted-link preview.
+
+**Deviations.**
+
+- None.
+
+**Checklist.**
+
+1. *Does rendered Open Graph metadata identify `/icon.png` at 512×512?* Yes.
+2. *Does the corresponding summary metadata use the same asset?* Yes.
+3. *Focused verification?* TypeScript, focused ESLint and all three metadata
+   checks passed.
+
+**Uncertain.**
+
+- A messaging service may keep the preview cached for an already pasted URL.
+  Adding a harmless query parameter makes the next paste a fresh URL without
+  changing the setup token.
+
+## 2026-07-28 — Seven-day David usability signals
+
+**Built.**
+
+- David's admin session now records coarse page buckets, time on page, total
+  clicks, rapid-click frustration signals and browser-error counts.
+- The owner-only `David’s test activity` screen summarizes the last seven days
+  and shows the newest signals without recording click targets or page content.
+- David sees a permanent plain-language notice while the test is active.
+- Every write removes expired rows, and `pnpm usability:prune` gives the
+  scheduler an independent daily retention enforcement path.
+
+**Decisions.**
+
+- The collector is first-party and fixed to David's canonical operator address;
+  another owner, operator, viewer or investor is not tracked.
+- The schema is deliberately incapable of holding typed text, document
+  content, AI questions, click targets, coordinates, screenshots or replay.
+- Dynamic record identifiers and query strings are removed before a page name
+  is stored.
+- Rapid clicking and browser errors are signals to ask a person, not proof that
+  the product is broken.
+
+**Deviations.**
+
+- This is intentionally the basic version: no heat map, session replay,
+  third-party analytics, per-control instrumentation or behavioral scoring.
+- The full repository suite was not run. Mike asked for proportionate testing,
+  so verification was limited to the new privacy boundary, TypeScript, focused
+  lint and a production build.
+
+**Checklist.**
+
+1. *David only?* Yes; the route discards every other signed-in identity.
+2. *Seven-day retention?* Yes; enforced on every write and by a separate daily
+   pruning command.
+3. *No sensitive content?* Yes; strict request validation and the database
+   schema accept only a coarse page path and five numeric/time fields.
+4. *Visible disclosure?* Yes; David sees it on every tracked admin page and the
+   public privacy policy describes the same boundary.
+5. *Owner-only report?* Yes; `requireOwner()` guards the page.
+6. *Focused verification?* Four boundary tests, TypeScript, focused ESLint,
+   migration generation, `git diff --check` and the configured production
+   build passed.
+
+**Uncertain.**
+
+- The signals begin only after the migration and immutable release are
+  deployed. Existing browser history is neither available nor reconstructed.
+- The owner should treat a trouble signal as a reason to check in with David,
+  not as surveillance or a diagnosis of intent.
+
+## 2026-07-28 — David usability tracking removed
+
+**Built.**
+
+- The David login/trouble heartbeat was deleted.
+- The browser collector, ingestion route, owner report, navigation link,
+  disclosure copy and scheduled pruning command were removed.
+- Migration 0017 drops `usability_events`, deleting the tracking rows and the
+  database's ability to store more of them.
+
+**Decisions.**
+
+- Mike withdrew the feature entirely, so it is removed rather than merely
+  paused or hidden.
+- Migration 0016 remains in history because an applied migration is never
+  rewritten; migration 0017 reverses it explicitly and reproducibly.
+
+**Deviations.**
+
+- None. Investor records, email review, roles, credentials, sending controls
+  and the ordinary append-only audit trail are unchanged.
+
+**Checklist.**
+
+1. *Monitor gone?* Yes; the heartbeat automation was deleted.
+2. *Collection gone?* Yes; no client collector or API route remains.
+3. *Stored tracking data gone?* Yes after migration 0017 drops the whole table.
+4. *Owner report gone?* Yes; the route and menu item were removed.
+5. *Focused verification?* The production build, TypeScript, focused ESLint and
+   `git diff --check` passed.
+
+**Uncertain.**
+
+- None.

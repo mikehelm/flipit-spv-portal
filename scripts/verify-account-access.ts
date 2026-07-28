@@ -47,7 +47,13 @@ import { existsSync } from 'node:fs'
 import { and, eq, inArray } from 'drizzle-orm'
 import { chromium, type Browser, type Page } from 'playwright'
 import { db } from '@/db'
-import { auditEvents, operatorInvites, sessions, users } from '@/db/schema'
+import {
+  auditEvents,
+  emailReviewProposals,
+  operatorInvites,
+  sessions,
+  users,
+} from '@/db/schema'
 import { issueAdminSetupLink } from '@/lib/auth/bootstrap'
 import { hashPassword } from '@/lib/auth/password'
 import { onScreen } from '@/lib/verify/page-text'
@@ -311,6 +317,75 @@ async function viewer(browser: Browser): Promise<void> {
     'and their own password page',
     password === '/admin/password',
     `landed on ${password}`,
+  )
+
+  // The complete Graham rehearsal: the private comparison, one bounded AI
+  // question, a browser-only practice proposal, and the synthetic investor
+  // view. The proposal count is read before and after so a convincing UI card
+  // cannot hide an accidental database write.
+  const proposalsBefore = await db
+    .select({ id: emailReviewProposals.id })
+    .from(emailReviewProposals)
+  const reviewWhere = await land(page, '/admin/email-review')
+  const reviewText = await onScreen(page)
+  check(
+    'the private email review is open to a viewer',
+    reviewWhere === '/admin/email-review',
+    `landed on ${reviewWhere}`,
+  )
+  check(
+    'and it clearly identifies Graham test mode',
+    reviewText.includes('Graham test mode') && reviewText.includes('Guided review'),
+  )
+
+  await page.getByRole('button', { name: 'Ask AI', exact: true }).click()
+  await page
+    .locator('textarea[name="question"]')
+    .fill('Explain this selected change and name anything that remains unverified.')
+  await page.getByRole('button', { name: 'Ask about this change', exact: true }).click()
+  await page.getByText(/Automated explanation/).waitFor({ timeout: 45_000 })
+  check(
+    'a viewer receives one selected-change AI explanation',
+    (await page.getByText(/Automated explanation/).count()) === 1,
+  )
+
+  await page.getByRole('button', { name: 'Practice', exact: true }).first().click()
+  await page
+    .locator('textarea[name="proposedText"]')
+    .fill('Synthetic browser-only wording for the read-only acceptance check.')
+  await page
+    .locator('textarea[name="reason"]')
+    .fill('This synthetic explanation proves the practice workflow without saving.')
+  await page
+    .getByRole('button', { name: 'Try proposal — nothing saved', exact: true })
+    .click()
+  await page.getByTestId('practice-proposal').waitFor({ timeout: 10_000 })
+  check(
+    'the practice proposal appears in the current tab',
+    (await page.getByTestId('practice-proposal').count()) === 1,
+  )
+
+  const proposalsAfter = await db
+    .select({ id: emailReviewProposals.id })
+    .from(emailReviewProposals)
+  check(
+    'and the practice proposal writes no database row',
+    proposalsAfter.length === proposalsBefore.length,
+    `${proposalsAfter.length - proposalsBefore.length} rows`,
+  )
+
+  await page.reload({ waitUntil: 'networkidle' })
+  check(
+    'reloading removes the practice proposal',
+    (await page.getByTestId('practice-proposal').count()) === 0,
+  )
+
+  const demoWhere = await land(page, '/portal/demo')
+  const demoText = await onScreen(page)
+  check(
+    'the synthetic John Doe investor view is open to a viewer',
+    demoWhere === '/portal/demo' && demoText.includes('John Doe'),
+    `landed on ${demoWhere}`,
   )
 
   // Scope B: the records are open, the levers are not.

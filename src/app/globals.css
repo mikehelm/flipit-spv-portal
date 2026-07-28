@@ -45,6 +45,110 @@
 
 :root {
   --line: rgba(255, 255, 255, 0.09);
+  --user-text-scale: 1.5;
+}
+
+/*
+ * Mike asked for the portal to start at 50% above its former text size while
+ * leaving cards, gutters and controls at their designed dimensions. The
+ * visible floating A-/A+ control changes this one variable.
+ *
+ * These rules scale Tailwind's typography utilities, not the root rem. A
+ * larger root rem would also double every width and padding, which would make
+ * the phone layout unusable instead of making its text easier to read.
+ */
+.text-\[9px\] {
+  font-size: calc(9px * var(--user-text-scale));
+  line-height: 1.4;
+}
+
+.text-\[10px\] {
+  font-size: calc(10px * var(--user-text-scale));
+  line-height: 1.4;
+}
+
+.text-\[11px\] {
+  font-size: calc(11px * var(--user-text-scale));
+  line-height: 1.4;
+}
+
+.text-xs {
+  font-size: calc(0.75rem * var(--user-text-scale));
+  line-height: 1.35;
+}
+
+.text-sm {
+  font-size: calc(0.875rem * var(--user-text-scale));
+  line-height: 1.4;
+}
+
+.text-base {
+  font-size: calc(1rem * var(--user-text-scale));
+  line-height: 1.45;
+}
+
+.text-lg {
+  font-size: calc(1.125rem * var(--user-text-scale));
+  line-height: 1.4;
+}
+
+.text-xl {
+  font-size: calc(1.25rem * var(--user-text-scale));
+  line-height: 1.35;
+}
+
+.text-2xl {
+  font-size: calc(1.5rem * var(--user-text-scale));
+  line-height: 1.25;
+}
+
+.text-3xl {
+  font-size: calc(1.875rem * var(--user-text-scale));
+  line-height: 1.2;
+}
+
+.text-4xl {
+  font-size: calc(2.25rem * var(--user-text-scale));
+  line-height: 1.1;
+}
+
+.text-5xl {
+  font-size: calc(3rem * var(--user-text-scale));
+  line-height: 1;
+}
+
+.leading-tight {
+  line-height: 1.25;
+}
+
+.leading-snug {
+  line-height: 1.375;
+}
+
+.leading-relaxed {
+  line-height: 1.625;
+}
+
+@media (min-width: 40rem) {
+  .sm\:text-sm {
+    font-size: calc(0.875rem * var(--user-text-scale));
+    line-height: 1.4;
+  }
+
+  .sm\:text-3xl {
+    font-size: calc(1.875rem * var(--user-text-scale));
+    line-height: 1.2;
+  }
+
+  .sm\:text-4xl {
+    font-size: calc(2.25rem * var(--user-text-scale));
+    line-height: 1.1;
+  }
+
+  .sm\:text-5xl {
+    font-size: calc(3rem * var(--user-text-scale));
+    line-height: 1;
+  }
 }
 
 html,

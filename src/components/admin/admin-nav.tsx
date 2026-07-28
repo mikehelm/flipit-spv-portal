@@ -24,7 +24,7 @@ interface Menu {
 
 const OVERVIEW: NavItem = {
   href: '/admin',
-  label: 'Overview',
+  label: 'Start',
   roles: ['OWNER', 'OPERATOR', 'VIEWER'],
 }
 
@@ -75,7 +75,7 @@ const MENUS: Menu[] = [
           {
             href: '/admin/email-review',
             label: 'David’s email review',
-            roles: ['OWNER', 'OPERATOR'],
+            roles: ['OWNER', 'OPERATOR', 'VIEWER'],
           },
           {
             href: '/updates',
@@ -149,7 +149,13 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || (href !== '/admin' && pathname.startsWith(`${href}/`))
 }
 
-export function AdminNav({ role }: { role: AdminRole }) {
+export function AdminNav({
+  role,
+  emailReviewPendingCount = 0,
+}: {
+  role: AdminRole
+  emailReviewPendingCount?: number
+}) {
   const pathname = usePathname()
   const navRef = useRef<HTMLElement>(null)
   const [opened, setOpened] = useState<{ id: string; pathname: string } | null>(null)
@@ -195,7 +201,7 @@ export function AdminNav({ role }: { role: AdminRole }) {
                 : 'hairline bg-bg2 text-dim hover:border-orange/40 hover:text-ftext'
             }`}
           >
-            Overview
+            {OVERVIEW.label}
           </Link>
         </li>
 
@@ -261,7 +267,13 @@ export function AdminNav({ role }: { role: AdminRole }) {
                                     : 'text-dim hover:bg-white/5 hover:text-ftext'
                                 }`}
                               >
-                                {item.label}
+                                <span>{item.label}</span>
+                                {item.href === '/admin/email-review' &&
+                                emailReviewPendingCount > 0 ? (
+                                  <span className="ml-auto rounded-full bg-orange px-2 py-0.5 text-[9px] font-bold text-ink">
+                                    {emailReviewPendingCount}
+                                  </span>
+                                ) : null}
                               </Link>
                             </li>
                           )

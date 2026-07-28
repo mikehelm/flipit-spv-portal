@@ -73,6 +73,32 @@ describe('the credit never reaches a formal instrument', () => {
     )
     expect(users.sort()).toEqual(['src/app/(admin)/layout.tsx', 'src/app/portal/page.tsx'])
   })
+
+  it('adds the quiet public credit only to the start and sign-in pages', () => {
+    const publicCredit = readFileSync('src/components/public-maker-credit.tsx', 'utf8')
+    const home = readFileSync('src/app/page.tsx', 'utf8')
+    const signIn = readFileSync('src/app/signin/page.tsx', 'utf8')
+    const accessRequest = readFileSync('src/app/access-request/page.tsx', 'utf8')
+
+    expect(publicCredit).toContain('Made with Mike')
+    expect(publicCredit).toContain('bottom-20')
+    expect(publicCredit).toContain('sm:right-40')
+    expect(home).toContain('<PublicMakerCredit')
+    expect(signIn).toContain('<PublicMakerCredit')
+    expect(accessRequest).not.toContain('<PublicMakerCredit')
+  })
+
+  it('keeps the interior credit beneath the account curl until it opens', () => {
+    const accountCurl = readFileSync('src/components/account-curl-menu.tsx', 'utf8')
+    const creditAt = accountCurl.indexOf('data-testid="curl-maker-credit"')
+    const curlAt = accountCurl.indexOf('<CurlCorner')
+
+    expect(creditAt).toBeGreaterThan(-1)
+    expect(curlAt).toBeGreaterThan(creditAt)
+    expect(accountCurl).toContain('aria-hidden={!visible}')
+    expect(accountCurl).toContain("visible ? 'opacity-80 delay-150'")
+    expect(accountCurl).toContain('Made with Mike')
+  })
 })
 
 describe('the optional link', () => {

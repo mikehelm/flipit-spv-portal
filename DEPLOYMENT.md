@@ -322,7 +322,7 @@ Worth knowing before you meet one at speed.
 
 ## 8. The schedule
 
-Two entries. `pnpm reminders:run` sends the reminders that are due and, on a
+Three entries. `pnpm reminders:run` sends the reminders that are due and, on a
 deadline date, the §6.6 digest to the operator. `pnpm check:health` watches it,
 and everything else that can go quietly wrong.
 
@@ -335,6 +335,7 @@ and everything else that can go quietly wrong.
 
 # Every stored file against the row that names it, and back again. Weekly.
 30 8 * * 1 cd /srv/spv && /usr/bin/pnpm media:check >> /var/log/spv/media.log 2>&1
+
 ```
 
 Hourly rather than daily, and it does not matter if a run is missed. Reminders

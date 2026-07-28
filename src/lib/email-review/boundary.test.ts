@@ -19,21 +19,86 @@ function filesUnder(relativePath: string): string[] {
 }
 
 describe('David’s private email-review boundary', () => {
-  it('guards both the page and the server action as acting administrators', () => {
+  it('admits a reader to the page and AI while keeping proposal writes acting-admin only', () => {
     expect(read('src/app/(admin)/admin/email-review/page.tsx')).toContain(
-      'requireOnboardedAdmin()',
+      'requireReader()',
     )
-    expect(read('src/actions/email-review.ts')).toContain('requireOnboardedAdmin()')
+    const action = read('src/actions/email-review.ts')
+    const questionStart = action.indexOf('export async function askEmailReviewQuestionAction')
+    const proposalStart = action.indexOf('export async function submitEmailReviewProposalAction')
+    const question = action.slice(questionStart, proposalStart)
+    const proposal = action.slice(proposalStart)
+    expect(question).toContain('const admin = await requireReader()')
+    expect(proposal).toContain('const admin = await requireAdmin()')
   })
 
-  it('offers the page to Mike and David, never to a viewer', () => {
+  it('reserves proposal promotion for Mike and requires a fresh wording acknowledgement', () => {
+    const action = read('src/actions/email-review.ts')
+    const reviewStart = action.indexOf('export async function reviewEmailProposalAction')
+    const review = action.slice(reviewStart)
+    expect(review).toContain('const owner = await requireOwner()')
+    expect(review).toContain("parsed.data.acknowledged !== 'on'")
+    expect(review).toContain('live.hash !== proposal.baseTemplateHash')
+    expect(review).toContain('hashOf(candidate) !== proposal.candidateTemplateHash')
+    expect(review).toContain('approvalRequired: true')
+  })
+
+  it('offers the page to Mike, David and a read-only experience tester', () => {
     const nav = read('src/components/admin/admin-nav.tsx')
     const item = nav.slice(
       nav.indexOf("href: '/admin/email-review'"),
       nav.indexOf("href: '/admin/email-review'") + 180,
     )
-    expect(item).toContain("roles: ['OWNER', 'OPERATOR']")
-    expect(item).not.toContain('VIEWER')
+    expect(item).toContain("roles: ['OWNER', 'OPERATOR', 'VIEWER']")
+  })
+
+  it('keeps a tester proposal in browser memory and off the persistence action', () => {
+    const page = read('src/app/(admin)/admin/email-review/page.tsx')
+    const workspace = read('src/components/email-review-workspace.tsx')
+    const data = read('src/lib/email-review/data.ts')
+    expect(page).toContain("testMode={admin.role === 'VIEWER'}")
+    expect(workspace).toContain('data-testid="experience-test-mode"')
+    expect(workspace).toContain('data-testid="practice-proposal"')
+    expect(workspace).toContain('action={testMode ? undefined : proposalAction}')
+    expect(workspace).toContain('onSubmit={testMode ? rehearseProposal : undefined}')
+    expect(workspace).toContain('This exists only in this browser tab.')
+    expect(data).toContain('eq(emailReviewProposals.createdById, admin.id)')
+  })
+
+  it('uses one review rail so the paired papers keep the available width', () => {
+    const workspace = read('src/components/email-review-workspace.tsx')
+    const paper = read('src/components/email-review/paper.module.css')
+    expect(workspace).toContain(
+      "type InspectorTab = 'CHANGES' | 'EVIDENCE' | 'AI' | 'PROPOSE' | 'REVIEW'",
+    )
+    expect(workspace).toContain('aria-label="Review tools"')
+    expect(workspace).toContain("lg:grid-cols-[17rem_minmax(0,1fr)]")
+    expect(workspace).not.toContain(
+      'lg:grid-cols-[11rem_minmax(0,1fr)_18rem]',
+    )
+    expect(paper).toContain('clamp(1rem, 2vw, 2.5rem)')
+    expect(paper).toContain(
+      'padding: 0.75rem clamp(0.4rem, 1vw, 0.85rem) 1rem',
+    )
+  })
+
+  it('adds a local guided view without creating a second review authority', () => {
+    const workspace = read('src/components/email-review-workspace.tsx')
+    const switcher = read('src/components/email-review/view-switch.tsx')
+
+    expect(switcher).toContain("export type ReviewView = 'GUIDED' | 'PAPER' | 'TECHNICAL'")
+    expect(switcher).toContain("id: 'GUIDED'")
+    expect(workspace).toContain("useState<ReviewView>('GUIDED')")
+    expect(workspace).toContain("const inspectedUnit = view === 'GUIDED' ? guidedUnit : selected")
+    expect(workspace).toContain('aria-label="Guided email review"')
+    expect(workspace).toContain('Local review progress only')
+    expect(workspace).toContain('Change {guidedIndex + 1} of {guidedUnits.length}')
+    expect(workspace).toContain('Previous')
+    expect(workspace).toContain('Next')
+    expect(workspace).toContain('View proposal status')
+    expect(workspace).toContain("setTab(")
+    expect(workspace).not.toContain('guidedReviewAction')
+    expect(workspace).not.toContain('guidedCompleteAction')
   })
 
   it('puts no source email text in the reusable client JavaScript', () => {
@@ -63,5 +128,26 @@ describe('David’s private email-review boundary', () => {
     expect(provider).toContain("reasoning: { effort: 'high' }")
     expect(metadata).not.toContain('question')
     expect(metadata).not.toContain('answer')
+  })
+
+  it('caps viewer questions before loading or calling OpenAI without storing text', () => {
+    const action = read('src/actions/email-review.ts')
+    const reserveAt = action.indexOf('await reserveViewerQuestionAttempt(admin)')
+    const keyAt = action.indexOf('const configured = await loadAiKey()', reserveAt)
+    const providerAt = action.indexOf('await answerEmailReviewQuestion(', reserveAt)
+    const attemptAudit = action.slice(
+      action.indexOf("action: 'email_review.question_attempted'"),
+      action.indexOf('return true', action.indexOf("action: 'email_review.question_attempted'")),
+    )
+
+    expect(action).toContain("if (admin.role !== 'VIEWER') return true")
+    expect(action).toContain('VIEWER_EMAIL_REVIEW_LIMIT')
+    expect(action).toContain('pg_advisory_xact_lock')
+    expect(action).toContain('return db.transaction(async (tx)')
+    expect(reserveAt).toBeGreaterThan(-1)
+    expect(reserveAt).toBeLessThan(keyAt)
+    expect(reserveAt).toBeLessThan(providerAt)
+    expect(attemptAudit).not.toContain('question:')
+    expect(attemptAudit).not.toContain('answer:')
   })
 })
