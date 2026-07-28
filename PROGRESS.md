@@ -7617,3 +7617,38 @@ explicit fill.
 
 - Graham and David still need to supply their subjective human feedback after
   opening their private setup links.
+
+## 2026-07-28 — Person-specific sign-in link and retained email
+
+**Built.**
+
+- The sign-in page accepts an email in its private URL and fills that address
+  into the email field.
+- After a rejected password, the email remains in place while the password is
+  cleared. The page now shows one refusal message rather than repeating it
+  above and below the form.
+
+**Decisions.**
+
+- The address is the only value carried by the link. A password, setup token or
+  other credential is never embedded in the URL.
+- The email control is intentionally controlled by the browser so React's
+  post-action reset clears the secret password without clearing the address.
+
+**Deviations.**
+
+- None. Authentication, rate limiting, roles and setup-link rules are
+  unchanged.
+
+**Checklist.**
+
+1. *Does Graham's private sign-in URL fill his address?* Yes.
+2. *Does a rejected password retain that address?* Yes.
+3. *Does the password remain private and clear after submission?* Yes.
+4. *Focused verification?* TypeScript, focused ESLint and 43 relevant tests
+   passed.
+
+**Uncertain.**
+
+- Graham still needs to enter the password he chose; the application cannot
+  recover or display it.
