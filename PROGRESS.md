@@ -7718,3 +7718,55 @@ explicit fill.
 - A messaging service may keep the preview cached for an already pasted URL.
   Adding a harmless query parameter makes the next paste a fresh URL without
   changing the setup token.
+
+## 2026-07-28 — Seven-day David usability signals
+
+**Built.**
+
+- David's admin session now records coarse page buckets, time on page, total
+  clicks, rapid-click frustration signals and browser-error counts.
+- The owner-only `David’s test activity` screen summarizes the last seven days
+  and shows the newest signals without recording click targets or page content.
+- David sees a permanent plain-language notice while the test is active.
+- Every write removes expired rows, and `pnpm usability:prune` gives the
+  scheduler an independent daily retention enforcement path.
+
+**Decisions.**
+
+- The collector is first-party and fixed to David's canonical operator address;
+  another owner, operator, viewer or investor is not tracked.
+- The schema is deliberately incapable of holding typed text, document
+  content, AI questions, click targets, coordinates, screenshots or replay.
+- Dynamic record identifiers and query strings are removed before a page name
+  is stored.
+- Rapid clicking and browser errors are signals to ask a person, not proof that
+  the product is broken.
+
+**Deviations.**
+
+- This is intentionally the basic version: no heat map, session replay,
+  third-party analytics, per-control instrumentation or behavioral scoring.
+- The full repository suite was not run. Mike asked for proportionate testing,
+  so verification was limited to the new privacy boundary, TypeScript, focused
+  lint and a production build.
+
+**Checklist.**
+
+1. *David only?* Yes; the route discards every other signed-in identity.
+2. *Seven-day retention?* Yes; enforced on every write and by a separate daily
+   pruning command.
+3. *No sensitive content?* Yes; strict request validation and the database
+   schema accept only a coarse page path and five numeric/time fields.
+4. *Visible disclosure?* Yes; David sees it on every tracked admin page and the
+   public privacy policy describes the same boundary.
+5. *Owner-only report?* Yes; `requireOwner()` guards the page.
+6. *Focused verification?* Four boundary tests, TypeScript, focused ESLint,
+   migration generation, `git diff --check` and the configured production
+   build passed.
+
+**Uncertain.**
+
+- The signals begin only after the migration and immutable release are
+  deployed. Existing browser history is neither available nor reconstructed.
+- The owner should treat a trouble signal as a reason to check in with David,
+  not as surveillance or a diagnosis of intent.

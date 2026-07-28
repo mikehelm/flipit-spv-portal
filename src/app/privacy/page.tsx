@@ -98,10 +98,19 @@ export default function PrivacyPage() {
 
       <Section title="What is not held">
         <p>
-          <strong className="text-white">No tracking.</strong> There is no
-          analytics service, no advertising pixel, and no third-party script on
-          any page. Emails sent by this portal contain no tracking pixel and no
-          click-through redirect; a link in an email goes where it says it goes.
+          <strong className="text-white">No third-party tracking.</strong> There
+          is no analytics service, advertising pixel or third-party tracking
+          script on any page. Emails sent by this portal contain no tracking
+          pixel and no click-through redirect; a link in an email goes where it
+          says it goes.
+        </p>
+        <p>
+          During the named operator&rsquo;s private review, the portal keeps a
+          first-party troubleshooting count of pages visited, time, clicks,
+          rapid clicking and browser errors for seven days. It cannot record
+          typed text, document content, AI questions, click targets,
+          coordinates, screenshots or screen replay. The operator is told on
+          every tracked page while this is active.
         </p>
         <p>
           <strong className="text-white">No payment details.</strong> No bank
