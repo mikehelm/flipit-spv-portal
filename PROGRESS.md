@@ -11938,3 +11938,169 @@ on the screen rather than in the rule. None of the other eleven is affected.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The parity question, asked without naming a rule
+
+The last entry queued this and said it was cheap. It was, and asking it properly
+turned out to be a different question from the one that was queued.
+
+The queued item was *"`erasureFindings` is on the banner and no test says the
+banner and the page agree about it, the way the storage one now does."* Writing
+that test would have produced a second test named after a second rule — and the
+entry above it already says why that is not enough: **every parity test in this
+repository is about the one rule somebody had just got wrong.** The storage test
+walks five media states and names `storageFindings`. A test walking five erasure
+states and naming `erasureFindings` leaves the third rule exactly as unprotected
+as the second one was.
+
+### The invariant, stated so that a machine can check it
+
+The banner is not the report and is not meant to be. It is built from
+`UnattendedFacts` — the subset cheap enough to gather on every admin page load —
+and it leaves out `overdueFindings`, `mailFindings`, `backupFindings` and the
+rest because each of those is another query. None of that is a defect.
+
+So the rule is not *every finding must be on the banner*. It is:
+
+> **A rule whose answer does not depend on anything the banner cannot afford has
+> no excuse for not being on the banner.**
+
+And that is decidable with no roster to maintain. **Hold the cheap facts still,
+vary every expensive fact underneath, and watch what a rule returns.** A rule
+that answers identically in every expensive world did not read an expensive
+fact; it is computable from what the banner already holds. If such a rule raises
+a `WRONG` the banner does not carry, that is the defect — whatever it is called,
+and whether or not anybody thought to write a test for it.
+
+### What was built
+
+`src/lib/health/banner-parity.test.ts`. **76 checks.**
+
+- ***Eighteen cheap worlds*** — every state the cheap facts can be in, including
+  four erasure shapes, six media-check shapes and five scheduler shapes.
+  Deliberately more states than the rules currently distinguish, because a state
+  nobody has written a rule for is where the next rule goes.
+- ***Three expensive worlds***, as unlike each other as the types allow: healthy,
+  everything-broken, and a sunset deployment with a drifted approval. A rule that
+  returns the same answer in all three read none of it.
+- ***The rules are discovered from the module namespace***, not listed. Every
+  export ending in `Findings`, minus the two assemblies. A rule added tomorrow is
+  covered the moment it is exported, with nobody remembering to come back — which
+  is precisely the thing that failed last time.
+- ***The other direction too***: every headline on the banner must be on the page,
+  in every cheap world crossed with every expensive one. That is the sentence
+  `storageFindings` actually states in its comment, and it is the worse failure —
+  somebody follows the link the banner gave them and reads a page that disagrees
+  with the sentence that sent them.
+- ***And the opposite failure***: a quiet system raises nothing. A parity rule
+  satisfied by putting everything on the banner would pass every other check in
+  the file.
+
+### Proved by breaking it
+
+Three mutations, each reverted:
+
+- ***`erasureFindings` removed from `unattendedFindings`.*** 4 failed, naming the
+  rule and quoting all three of its sentences.
+- ***`bucketRetentionFindings` removed*** — the original defect, reintroduced.
+  3 failed.
+- ***A rule that did not exist when the test was written***, added to
+  `buildFindings` only. **4 failed**, naming it. This is the one that matters:
+  the file caught a rule it had never heard of.
+
+The failure message names the rule, quotes the headline, and gives the two ways
+out — put it on the banner, or make it read a fact the banner cannot afford and
+say why.
+
+**Decisions.**
+
+- ***A coincidence is resolved towards the banner.*** A rule that genuinely needs
+  an expensive fact but happens to answer identically in all three worlds would
+  be demanded on the banner. Three maximally different worlds make that
+  unlikely, and the direction of the error is the conservative one — it asks for
+  a finding to be surfaced more loudly than it strictly needs to be, which is the
+  side taken everywhere else here.
+- ***A rule that reads an expensive fact and could have been written not to is
+  invisible to this file***, and that is stated in it rather than left to be
+  discovered. That is a design judgement, not an omission, and a test that
+  guessed at it would fail on decisions somebody made deliberately.
+- ***The discovery is itself checked.*** A namespace filter that silently found
+  nothing would make every check in the file pass, so the count is asserted and
+  two rules are named as present.
+- ***The existing storage parity test is left alone.*** It is now redundant in
+  substance and remains the more readable statement of the specific case; a
+  general test and a worked example are not the same document.
+
+**Deviations.** None. The queued item asked for a test naming `erasureFindings`;
+what was built covers it and every other rule, which is more than was asked and
+not less.
+
+**Checklist.** None of the twelve is touched. No rule, page or component
+changed — this file adds a check and nothing else.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2798**, was 2722) are green.
+
+**Uncertain.**
+
+- ***How many other checks in this repository cannot fail?*** One was found by
+  accident last entry, in a script whose subject was the thing it was failing to
+  check. The method that found it — change the fixture, see what stays green —
+  has now been applied to two files deliberately and to nothing else.
+  `verify:erasure`, `verify:health` and `verify:register` are the same shape and
+  have never been mutated. **This is the next item, and it is the one most likely
+  to find something.**
+- ***The same trick would work on the health *signal*.*** `summariseHealth` reduces
+  the report for an uptime monitor, and nothing asks whether the thing it reduces
+  and the thing the page shows agree about what needs a person. It is a third
+  surface for the same findings and it has no parity test at all.
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.*** Both are on this machine, in the same directory.
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved*** and
+  the finding says the process did not survive, which is not what happened.
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all***, and it is the longest coordinating
+  document in the repository.
+- ***The healthy overview has now been measured for the first time***, and only
+  the totals were compared with yesterday's run.
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is not to build it.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

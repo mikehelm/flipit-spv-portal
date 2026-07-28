@@ -1536,6 +1536,37 @@ checks that it was.
 
 ---
 
+## The next rule to go missing
+
+There is a section above about a storage bucket whose warning was on the wrong
+page. The fix included a test — and that test names the storage rule. So it
+would catch the same mistake again, and it would not catch the same mistake
+made one rule along.
+
+That is now handled differently. There is a check that asks the question
+**without naming any rule at all.**
+
+The banner at the top of the admin screens is a short list, on purpose: it runs
+on every page load, so it is only allowed to ask the questions that are cheap to
+answer. Several warnings on **Admin → System health** are legitimately absent
+from it because answering them means another trip to the database. That is a
+cost decision, not a mistake.
+
+So the check holds the cheap facts still, changes everything expensive
+underneath, and watches what each rule answers. A rule that gives the same
+answer every time never looked at anything expensive — which means the banner
+could have shown it, and if the banner does not, that is the mistake. The rules
+are found by looking through the code rather than listed, so **a rule written
+next year is covered the day it is written**, with nobody having to remember.
+
+**How it was proved.** Three deliberate breakages. The erasure warnings taken
+off the banner: caught. The storage-bucket warning taken off the banner — the
+original mistake, put back deliberately: caught. And a brand-new warning that
+did not exist when the check was written, added to the page and not the banner:
+**caught, and named.** That last one is the whole point.
+
+---
+
 ## Things worth knowing
 
 - The `ENCRYPTION_KEY` and `AUTH_SECRET` in your local `.env` are throwaway development values. Generate fresh ones for anything real.
