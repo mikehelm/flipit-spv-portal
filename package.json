@@ -47,6 +47,7 @@
     "verify:export": "tsx scripts/verify-export.ts",
     "verify:erasure": "tsx scripts/verify-erasure.ts",
     "verify:erasure-bytes": "tsx scripts/verify-erasure-bytes.ts",
+    "verify:mutants": "tsx scripts/verify-mutants.ts",
     "verify:all": "tsx scripts/verify-all.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
   },

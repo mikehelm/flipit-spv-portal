@@ -909,7 +909,7 @@ The run went from 357 checks to **391**, and it now clears up after itself prope
 
 ## Six checks that existed and could not be run
 
-A tidy-up, and a surprising one. There are twenty-three checking commands in this project — `pnpm verify:viewport`, `pnpm verify:health`, and so on. **Six of them had no command.**
+A tidy-up, and a surprising one. There are twenty-six checking commands in this project — `pnpm verify:viewport`, `pnpm verify:health`, and so on. **Six of them had no command.**
 
 The files were there. The checks were there. But nothing in the project listed them, so `pnpm run` did not show them, and the only place they were mentioned was a line of notes inside each file. Between them they hold **259 checks against a real database**, covering:
 
@@ -1646,6 +1646,47 @@ knows about.
 **How it was proved.** Every investor's update feed was made to come back empty.
 The new form failed and named the check; the old form said *ok*. Same defect,
 same run.
+
+---
+
+## A command that breaks the application on purpose
+
+There is now a twenty-sixth checking command, and it is the odd one out:
+`pnpm verify:mutants`. Every other command checks that the application is right.
+This one checks that **the other commands would notice if it stopped being
+right.**
+
+The three sections above were all found the same way — by breaking something
+deliberately and seeing which checks went quiet. That worked every time it was
+tried, and nothing was running it, so the answer went stale the moment somebody
+stopped looking.
+
+The command holds a short list of promises this application makes, each with the
+smallest possible change that would make it a lie, and the check that is supposed
+to catch it:
+
+- **Money is never handled as an ordinary computer number** — the percentage
+  calculation switched to one.
+- **The operator can never sign off a compliance approval** — the operator
+  allowed to.
+- **Nothing real is sent from a testing deployment** — that refusal switched off.
+- **An erased investor keeps no name** — the replacement name made to keep it.
+- **An update sent to one investor appears on nobody else's portal** — every
+  portal feed made to come back empty.
+
+...and two more. For each, it breaks the code, runs the check, **puts the code
+back**, and reports a failure if the check said everything was fine. All seven
+are caught, and six of them are also checked for saying *which* thing broke,
+rather than just failing.
+
+It is careful with your files: it reads the original before writing anything,
+puts it back afterwards, reads it again to confirm, and restores if you press
+Ctrl-C. It never uses git to undo, so uncommitted work of your own is safe.
+
+**How it was proved.** One promise was deliberately paired with a check that
+could not possibly see it: *"MUTANT SURVIVED — the check reported success"*. And
+one of the code snippets it looks for was misspelled: *"NOT APPLIED"* — so a
+promise it can no longer find is reported, rather than quietly counted as passed.
 
 ---
 

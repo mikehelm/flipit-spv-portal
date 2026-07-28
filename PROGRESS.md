@@ -12443,3 +12443,176 @@ code changed.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The checks, checked
+
+The last entry named this and said the shape of the answer: *"a `pnpm
+verify:mutants` that applies a declared list of mutations and fails when one is
+not caught is the shape of the answer, and it does not exist."*
+
+It exists.
+
+### Why it is worth a script rather than an afternoon
+
+Four entries in a row have ended with the same open item, and it has been the
+most productive one every time. The method that answered it is always the same:
+**change the thing under test and watch what stays green.** By hand, it has
+found a banner assertion that could not fail, twenty-one `every()` calls on
+collections that could be empty, and twelve negated `some()` calls that were the
+privacy promises. Eight assertions mutated, across four sessions, and every
+sweep found something.
+
+Nothing ran it. So the answer decayed the moment the session ended, and the next
+person had to have the idea again.
+
+### What it does
+
+`scripts/verify-mutants.ts`. Each entry names a claim this application makes,
+the smallest change to the production code that makes the claim **false**, and
+the check that is supposed to report it. It applies the change, runs that check,
+puts the file back, and fails if the check passed.
+
+**A surviving mutant is a check that cannot fail** — not a slow one or a weak
+one, but one reporting success about a system that has stopped doing the thing
+it reports on.
+
+Seven claims, weighted towards the twelve-point review checklist, because those
+are the twelve things somebody will read this repository to satisfy themselves
+about and *"there is a test for it"* is a weaker sentence than *"here is the test
+failing when it stops being true"*:
+
+| Claim | Checklist | Broken by | Noticed by |
+| --- | --- | --- | --- |
+| Money is never a JavaScript number | 1 | `computeIndirectPercentage` via `Number()` | `money.test.ts` |
+| The operator can never record an approval | 4 | `OPERATOR` allowed alongside `OWNER` | `authority.test.ts` |
+| No send when the base URL is not production | 12 | the §18.1 block made unreachable | `guard.test.ts` |
+| An erased investor keeps no name | — | the pseudonym given the row id | `verify:erasure` |
+| A rule the banner could afford is on the banner | — | `erasureFindings` dropped from the banner | `banner-parity.test.ts` |
+| The stuck remedy names the lock probe first | — | the lock probe dropped from the remedy | `verify:health` |
+| An update reaches nobody else's portal | 5 | every feed returns empty | `verify:updates` |
+
+All seven are caught. Six also assert *what the failure says*, not merely that it
+exits non-zero — a check that fails for the wrong reason is a different thing
+from one that fails.
+
+### What it is careful about
+
+It edits files in `src/` and puts them back, which is worth being explicit
+about:
+
+- ***The original bytes are read into memory first and written back in a
+  `finally`.*** Not `git checkout` — a working tree with uncommitted work in it
+  is the ordinary state during a session, and a tool that quietly reverted
+  somebody's edits would be far worse than the thing it is looking for.
+- ***The restore is verified*** by reading the file back and comparing. A restore
+  that silently failed would leave a mutated repository looking healthy, which is
+  exactly the class of defect this file is about.
+- ***`SIGINT` and `SIGTERM` restore before exiting***, so Ctrl-C is still the
+  answer to a run that is taking too long.
+- ***Each search string must appear exactly once*** before anything is written. A
+  mutation whose target has been reworded reports `NOT APPLIED` rather than
+  silently applying nothing and calling the check successful — which is the same
+  defect one level up, and the one thing a mutation harness must not have.
+
+### Proved by breaking it
+
+Two self-proofs, both reverted:
+
+- ***A mutation pointed at a check that cannot see it*** — the money mutation with
+  `verify:roadmap` named as its witness. `FAIL … MUTANT SURVIVED — the check
+  reported success`.
+- ***A search string reworded*** — `pseudonymReff`. `FAIL … NOT APPLIED — the text
+  appears 0 times`.
+
+**Decisions.**
+
+- ***In `verify:all`, not beside it.*** It costs 21 seconds and it is the one
+  command run before a release. A mutation sweep nobody runs is a mutation sweep
+  that rots, which is the argument this file is made of.
+- ***In-memory restore rather than `git checkout`.*** See above. The consequence
+  is that a crash between write and restore leaves a mutated file, so the restore
+  is also attempted from a signal handler and from the top-level `catch`, and the
+  failure message names the file and says to check it out.
+- ***Seven, not seventy.*** Every entry has to be maintained against the code it
+  names — that is what `NOT APPLIED` is for — so the set is chosen rather than
+  generated. Mutations of a claim nobody would read the repository to check would
+  be maintenance without a reader.
+- ***The witness is named per mutation***, rather than running the whole suite.
+  Running everything would prove the mutation is caught *somewhere*, which is a
+  weaker and much slower statement than the check that is supposed to catch it
+  catching it.
+
+**Deviations.** None.
+
+**Checklist.** Three of the twelve — 1, 4 and 12 — plus point 5, now have a check
+that demonstrates itself failing. Nothing in the application changed.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2817**) are green.
+`pnpm verify:all` is **26 passed, 0 failed, 0 skipped — 4 minutes**.
+`pnpm verify:mutants` is **14 passed, 0 failed**.
+
+**Uncertain.**
+
+- ***Eight of the twelve checklist points have no mutation.*** 2, 3, 6, 7, 8, 9,
+  10 and 11 are covered by tests and by nothing that has watched those tests
+  fail. Point 3 — *a jurisdiction block stops one recipient, never the whole
+  batch* — is the one where a mutation would be most informative, because the
+  defect is a plausible refactor rather than a typo. **This is the next item.**
+- ***Every mutation here is a single edit to a single file.*** The defects this
+  repository has actually shipped were omissions — a rule missing from a list, a
+  fix applied to two files of five. A mutation that *deletes* rather than
+  rewrites is a different generator and there is none.
+- ***Nothing mutates the verification scripts themselves.*** The banner defect was
+  in a script, not in `src/`, and this harness cannot express it.
+- ***`.filter(...).length === 0` has not been looked at***, and it is the third
+  coat of the empty-collection defect.
+- ***The six negated checks without controls are recorded, not solved.***
+- ***The same trick would work on the health *signal*.*** `summariseHealth`
+  reduces the report for an uptime monitor, and nothing asks whether it and the
+  page agree about what needs a person.
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved.***
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

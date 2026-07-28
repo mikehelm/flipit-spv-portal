@@ -126,6 +126,7 @@ const VERIFICATIONS: readonly Verification[] = [
   { name: 'roadmap', proves: 'the portal roadmap tiles' },
   { name: '2fa', proves: 'the second factor, enrolled and demanded' },
   { name: 'health', proves: 'the health endpoint, present and absent' },
+  { name: 'mutants', proves: 'that the checks fail when the claims they check stop being true' },
   { name: 'media', proves: 'ingest, metadata stripping and serving, against a real store' },
   { name: 'object-store', proves: 'the S3 client against a real socket that verifies signatures' },
   { name: 'restore', proves: 'a dump restored into a scratch database and read back', needs: ['PG_TOOLS'] },
