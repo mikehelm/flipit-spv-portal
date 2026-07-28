@@ -179,5 +179,12 @@ Durable operational receipt:
 - No setup token was consumed, no investor or production row changed, and no
   email path was exercised.
 
-The corrected candidate must replace the first guided immutable release before
-this phase is complete.
+The corrected candidate is live as immutable release
+`/Users/otto/Documents/spv-releases/20260728-guided-mobile-4d5f6cc`.
+Service cwd, scheduled jobs and commit all agree on
+`4d5f6cc4d1652ec24b0b503a79c189c8004e44b0`; public sign-in returns 200.
+Rollback to `20260728-guided-review-4f303e5` returned 200, and the corrected
+release was restored successfully. Investor sending remains locked.
+
+Durable operational receipt:
+`/Users/otto/Documents/spv-releases/DEPLOYMENT-20260728-guided-mobile-4d5f6cc.md`

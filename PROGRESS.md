@@ -7615,8 +7615,5 @@ explicit fill.
 
 **Uncertain.**
 
-- The corrected commit still needs its own immutable release, scheduler/service
-  repoint, live smoke, and rollback proof before it replaces the current guided
-  release.
 - Graham and David still need to supply their subjective human feedback after
   opening their private setup links.
