@@ -46,14 +46,10 @@ describe('the guided status language', () => {
     ).toEqual([])
   })
 
-  it('does not let the known legacy onboarding vocabulary grow before conversion', () => {
+  it('keeps onboarding on the shared status foundation after conversion', () => {
     const onboarding = readFileSync(ONBOARDING, 'utf8')
-    const legacyLabels = [
-      ...onboarding.matchAll(/label:\s*['"]([^'"]+)['"]/g),
-    ].map((match) => match[1])
-    const knownLegacyLabels = new Set(['Done', 'Now', 'Later'])
-
-    expect(legacyLabels.length).toBeGreaterThan(0)
-    expect(legacyLabels.filter((label) => !knownLegacyLabels.has(label))).toEqual([])
+    expect(onboarding).toContain("from '@/components/admin/guided'")
+    expect(onboarding).not.toMatch(/\b(?:Done|Now|Later)\b/)
+    expect(onboarding).not.toMatch(/type HumanStatus\s*=/)
   })
 })
