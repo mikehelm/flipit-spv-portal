@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Basic 7-day David usability signals | Codex / root | 2026-07-28 12:29 | `package.json`; `src/db/schema.ts`; `drizzle/0016_*`; `drizzle/meta/*`; `src/lib/usability/*`; `src/components/usability-tracker.tsx`; `src/app/api/usability/route.ts`; `src/app/(admin)/layout.tsx`; `src/app/(admin)/admin/usability/page.tsx`; `src/components/admin/admin-nav.tsx`; `src/app/privacy/page.tsx`; `scripts/prune-usability.ts`; `DEPLOYMENT.md`; `PROGRESS.md` |
 
 ## Done, so nobody starts it again
 
