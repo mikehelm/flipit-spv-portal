@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Remove legacy onboarding status allowance | codex-guided-invariant-20260728 | 2026-07-28 09:33 UTC | `src/components/admin/guided.test.ts` |
 
 ## Done, so nobody starts it again
 
