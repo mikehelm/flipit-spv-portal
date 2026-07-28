@@ -100,7 +100,7 @@ Phase 4 commit: `c407947`
 - Owner and operator behavior is unchanged.
 - Focused lint, 18 focused tests, typecheck and diff validation passed.
 
-Phase 5 AI-cap commit: pending
+Phase 5 AI-cap commit: `4d885c1`
 
 ## Phase 7 safety fix — normalized deployment truth
 
@@ -111,4 +111,18 @@ Phase 5 AI-cap commit: pending
 - Focused lint, 137 health/environment/transport-guard tests, typecheck and
   diff validation passed.
 
-Health-truth commit: pending
+Health-truth commit: `04b2aef`
+
+## Frozen candidate verification
+
+- Product tip: `b387be2`
+- Shared vocabulary, onboarding, guided email review, viewer limit, AI model,
+  health truth and transport guard focused matrix: 167/167 passed.
+- Production build: passed.
+- AI readiness: passed with synthetic non-sensitive text.
+- Claims table: empty.
+- Human Graham walkthrough: pending on the deployed review release; automated
+  viewer authority and persistence boundaries passed.
+
+The release may be deployed for private review with investor sending locked.
+It is not cleared for real invitations.
