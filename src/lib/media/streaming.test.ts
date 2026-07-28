@@ -6,7 +6,7 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { resetEnvCache } from '@/lib/env'
 import { serveMedia } from './serve'
-import { S3ObjectClient, responseLength, type BucketVersioning } from './s3'
+import { S3ObjectClient, responseLength, type BucketVersioning, type HiddenVersions } from './s3'
 import { mediaStore, resetMediaStoreCache, type MediaStore, type StoredStream } from './store'
 
 /**
@@ -268,6 +268,10 @@ class SpyStore implements MediaStore {
 
   async versioning(): Promise<BucketVersioning> {
     return 'DISABLED'
+  }
+
+  async hiddenVersions(): Promise<HiddenVersions | null> {
+    return null
   }
 }
 

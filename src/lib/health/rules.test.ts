@@ -1004,3 +1004,59 @@ describe('whether the store keeps what it is told to delete', () => {
     expect(findings.some((finding) => finding.headline.includes('told to delete'))).toBe(true)
   })
 })
+
+describe('copies the store kept behind delete markers', () => {
+  const hidden = (patch: { nonCurrent: number; deleteMarkers: number; atLeast?: boolean }) =>
+    withMediaCheck({
+      hiddenVersions: { atLeast: false, ...patch },
+    })
+
+  it('says nothing when there are none', () => {
+    expect(bucketRetentionFindings(hidden({ nonCurrent: 0, deleteMarkers: 0 }))).toEqual([])
+  })
+
+  it('says nothing when the store cannot say', () => {
+    expect(bucketRetentionFindings(withMediaCheck({ hiddenVersions: null }))).toEqual([])
+  })
+
+  it('says nothing on a run from before the question existed', () => {
+    expect(bucketRetentionFindings(withMediaCheck({ hiddenVersions: undefined }))).toEqual([])
+  })
+
+  it('is WRONG even when versioning now reports permanent deletes', () => {
+    /*
+     * The finding this rule would otherwise lose at exactly the wrong moment.
+     * Somebody reads the warning, switches versioning off, and the status goes
+     * quiet — while every copy it made is still in the bucket.
+     */
+    const findings = bucketRetentionFindings(
+      hidden({ nonCurrent: 3, deleteMarkers: 3 }),
+    )
+    expect(findings).toHaveLength(1)
+    expect(findings[0]!.severity).toBe('WRONG')
+    expect(findings[0]!.headline).toContain('6 copies')
+    expect(findings[0]!.remedy).toContain('Expire the non-current versions')
+  })
+
+  it('says "at least" when the listing was truncated', () => {
+    const findings = bucketRetentionFindings(
+      hidden({ nonCurrent: 500, deleteMarkers: 500, atLeast: true }),
+    )
+    expect(findings[0]!.headline).toContain('at least 1000')
+  })
+
+  it('and both findings appear when versioning is still on', () => {
+    const facts = withMediaCheck({
+      versioning: 'ENABLED',
+      hiddenVersions: { nonCurrent: 1, deleteMarkers: 1, atLeast: false },
+    })
+    const findings = bucketRetentionFindings(facts)
+    expect(findings).toHaveLength(2)
+    expect(findings.every((finding) => finding.severity === 'WRONG')).toBe(true)
+  })
+
+  it('and it reaches the storage findings the page reads', () => {
+    const findings = storageFindings(hidden({ nonCurrent: 2, deleteMarkers: 0 }))
+    expect(findings.some((finding) => finding.headline.includes('still holding'))).toBe(true)
+  })
+})

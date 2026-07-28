@@ -164,6 +164,21 @@ So it is asked rather than tested. `pnpm media:check` calls
 every one already there — including any file an erasure destroyed while it was
 on.
 
+**And switching it off is not the end of it.** Turning versioning off stops new
+copies; it removes none of the ones already made. A bucket that had it on for a
+fortnight and has it off today reports `Deletes are permanent` and can still
+hold a copy of everything deleted during that fortnight. So `media:check` asks a
+second question — `ListObjectVersions` — and prints a second line:
+
+| It says | What it means |
+| --- | --- |
+| `And it holds nothing behind a delete marker` | Clean. This is the line to want. |
+| `It is STILL HOLDING n superseded versions and n delete markers` | Copies of objects this application asked the store to destroy. Counted as a problem and raised as a **WRONG** finding, **whatever the versioning status now says**. |
+| *(nothing)* | The store cannot say — a filesystem, or a bucket that refused the question. Never reported as zero. |
+
+`at least n` means the listing was truncated at one page and the real number is
+higher.
+
 **Turn versioning off, and expire the non-current versions**: a lifecycle rule
 that removes them immediately is the usual way. The same applies to object
 locks, legal holds and any retention policy on the bucket. Until that is done,

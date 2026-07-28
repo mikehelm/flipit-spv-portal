@@ -326,8 +326,46 @@ async function main(): Promise<void> {
     (await store2.versioning()) === 'ENABLED',
   )
 
+  /*
+   * And the half that survives the remedy.
+   *
+   * The warning above tells somebody to switch versioning off. They do. The
+   * status goes quiet — and the copy the bucket made while it was on is still
+   * there, along with every other one. A report that stopped at the status
+   * would go silent at exactly the moment somebody believed they had fixed it.
+   */
+  const hiddenWhileOn = await store2.hiddenVersions(1000)
+  check(
+    'the bucket says how many copies it kept',
+    hiddenWhileOn?.nonCurrent === 1 && hiddenWhileOn.deleteMarkers === 1,
+    JSON.stringify(hiddenWhileOn),
+  )
+
   fake.versioning = 'DISABLED'
+  check('versioning switched off, the status is clean again', (await store2.versioning()) === 'DISABLED')
+  const hiddenAfter = await store2.hiddenVersions(1000)
+  check(
+    '— and the copy is still there, which is what the status can no longer say',
+    hiddenAfter?.nonCurrent === 1,
+    JSON.stringify(hiddenAfter),
+  )
+  check(
+    'and the bytes really are the document, not a marker with nothing behind it',
+    fake.nonCurrent.get(doomedKey)?.bytes.equals(Buffer.from(doomedBytes)) === true,
+  )
+
+  fake.versioningApi = 'REFUSED'
+  check(
+    'a bucket that will not answer gives null, never a reassuring zero',
+    (await store2.hiddenVersions(1000)) === null,
+  )
+  fake.versioningApi = 'PRESENT'
+
   fake.nonCurrent.clear()
+  check(
+    'and once the copies are expired it reports none',
+    (await store2.hiddenVersions(1000))?.nonCurrent === 0,
+  )
 
   await cleanup()
   const leftovers = await db.select().from(mediaAssets).where(like(mediaAssets.name, `${PREFIX}%`))

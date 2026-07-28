@@ -10724,3 +10724,174 @@ gate, no token.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## Switching versioning off does not undo it
+
+The item the last entry ranked next, and it is the one that would have made the
+last entry's own remedy quietly wrong:
+
+> ***Nothing asks whether non-current versions are actually there.***
+> `ListObjectVersions` would say — a bucket with versioning newly switched off
+> can still be full of copies of everything ever deleted.
+
+**Built.** **22 new tests** (2624 → **2646**), `verify:object-store` **52** (up
+from 46). `S3ObjectClient.hiddenVersions()`, `MediaStore.hiddenVersions()`, a
+second line in `pnpm media:check`, a second health finding, and the counts in
+the audit record.
+
+### The gap, which is in the remedy rather than in the code
+
+Yesterday's entry finishes by telling somebody to turn versioning off. They do.
+`GetBucketVersioning` then reports `DISABLED`, `media:check` prints *"Deletes
+are permanent on this store"*, the health finding clears, and **every copy the
+bucket made while it was on is still in it** — because switching versioning off
+stops new versions being written and removes not one already there.
+
+So the check built yesterday goes quiet at precisely the moment somebody
+believes they have fixed it. That is a worse failure than the one it replaced:
+before, nobody had been told anything; after, somebody has been told it is
+fixed.
+
+`ListObjectVersions` is the question that survives the fix, and it is asked
+separately and counted separately for exactly that reason.
+
+### What was built
+
+- **`hiddenVersions(limit)`** on the client and on the seam. One page, not a
+  walk: `atLeast` says the number is a floor. A count that is short is still a
+  count that is not zero, which is the whole question, and walking a bucket full
+  of dead versions to total them exactly is a great many round trips to reach
+  the same conclusion.
+- **Counts only, never a key.** `parseVersionListing` reads no `<Key>` and
+  returns none. A storage key is a capability — the image route serves one with
+  no session — and this answer is printed in a report and written into an audit
+  row that is exported and read on a screen. *How many* is what raises the
+  alarm; the console the person then opens can name them.
+- **Null, never zero, when the store will not say.** The filesystem store
+  answers null permanently: there is no such thing as a superseded version of a
+  file, and zero would be a claim about a machine this store cannot see — a
+  snapshot, an hourly backup.
+- **Counted as its own problem**, added to the versioning one rather than
+  replacing it, so a bucket that is versioned *and* full of copies reports two.
+- **A second health finding at WRONG**, which fires on the count alone. There is
+  a test named for the case: *"is WRONG even when versioning now reports
+  permanent deletes"*.
+
+### The demonstration, carried one step further
+
+`FakeS3` now answers `?versions`, built from the objects it is holding and the
+ones a versioned delete moved aside. `verify:object-store` walks the whole
+journey in one sequence:
+
+    ok    the delete is accepted, exactly as it would be on any other bucket
+    ok    — and the bytes are still in the bucket, which is the whole point
+    ok    the bucket says how many copies it kept
+    ok    versioning switched off, the status is clean again
+    ok    — and the copy is still there, which is what the status can no longer say
+    ok    and the bytes really are the document, not a marker with nothing behind it
+    ok    a bucket that will not answer gives null, never a reassuring zero
+    ok    and once the copies are expired it reports none
+
+The fourth and fifth lines are this entry. Everything before them was yesterday.
+
+### Proved by breaking it
+
+- **Every version counted, current ones included** — two failed, including
+  *"does not count a live object as a copy of anything"*. A count that included
+  live objects would report every ordinary bucket as full of copies, which is
+  the way a warning like this becomes noise and then becomes ignored.
+- **A refusal reported as an all-clear** — the unit failed and so did
+  `verify:object-store`: *"a bucket that will not answer gives null, never a
+  reassuring zero"*. This is the same shape as yesterday's break and it was
+  aimed at the same branch on the second method.
+
+**Decisions.**
+
+- ***One page, and `atLeast` rather than a total.*** The decision the count is
+  for is binary — is there anything in there — and it is not made more actionable
+  by an exact figure.
+- ***A separate problem and a separate finding, not a modifier on the
+  versioning one.*** They have different remedies: one is a setting, the other
+  is a lifecycle rule. Folding them together produces a message that tells
+  somebody to do something they have already done.
+- ***`hiddenVersions` costs a second round trip per `media:check` run.***
+  Accepted: it is a scheduled job, and combining it with the versioning question
+  is not possible — they are two different API calls.
+- ***`ObjectLockConfiguration` was looked at and not built.*** Object Lock on S3
+  **requires** versioning, so every bucket that has it also reports `ENABLED`
+  and is already caught by yesterday's check. A separate probe would add an API
+  call and catch nothing the existing one misses. Recorded here rather than left
+  on the Uncertain list as though it were still outstanding.
+- ***Both new schema fields are optional.*** Same reason as yesterday, and the
+  same test: `report.ts` treats a row that fails the schema as no row at all, so
+  a required field silently deletes an existing finding for every deployment
+  until its next scheduled run.
+
+**Deviations.** None.
+
+**Checklist.** **8**, again and deliberately: the version listing is parsed for
+counts and the keys in it are never read out, so nothing new can reach a log, a
+report or an exported audit row. **5** is why it exists. 1–4, 6, 7 and 9–12
+untouched.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2646**) are green.
+`pnpm verify:object-store` is **52**, `pnpm verify:erasure` is **136**,
+`pnpm verify:erasure-bytes` is **24**, `pnpm verify:account-access` is **81**.
+
+**Uncertain.**
+
+- ***No real bucket has answered either question.*** `GetBucketVersioning` and
+  `ListObjectVersions` are in every documented S3-compatible API; whether AWS,
+  R2 and B2 each return exactly the bodies parsed here is untested against a
+  real endpoint. **Both parsers fail towards `UNKNOWN` and `null` rather than
+  towards an all-clear**, which is the right direction for a wrong guess, and it
+  is still a guess. **This is now the largest open thing about the media store**,
+  and it is one afternoon with a real bucket rather than a build.
+- ***A truncated version listing is a floor and nothing walks it.*** A bucket
+  with ten thousand dead versions reports "at least 1000". Right for the
+  decision, useless for progress: somebody expiring them cannot watch the number
+  come down.
+- ***Nothing connects a count of copies to the investors they belong to.***
+  Deliberate — the keys are not read — and it means the report can say an
+  erasure was incomplete and cannot say whose.
+- ***The health finding is still only as fresh as the last `media:check`***, and
+  the cron in DEPLOYMENT §8 is weekly.
+- ***Nothing crashes the process mid-`remove()` loop.***
+- ***The partial state has no report.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is not to build it.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

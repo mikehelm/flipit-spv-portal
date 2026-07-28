@@ -280,7 +280,15 @@ Nothing that *uses* the storage can tell the difference, so the application stop
 - *"DELETES ARE NOT PERMANENT ON THIS STORE"* — versioning is on, or was on and is suspended. The command fails, and the health report says so in as many words. Suspended is not safe either: it stops *new* copies being kept and keeps every copy already made.
 - *"…is NOT KNOWN"* — the bucket would not answer. Some providers do not offer the question, and some access keys are allowed to read and write files but not to ask about the bucket's settings. **This is not treated as "fine"** — it asks you to check in the provider's console yourself — but it does not fail the command, because otherwise a provider that cannot answer would fail it for ever.
 
-Whether this matters was not taken on trust. The check works against a storage service that behaves exactly like a versioned bucket: it accepts the delete, reports the file gone, leaves it out of every listing — and still has the bytes afterwards, which the check then goes and finds. That is the whole danger, demonstrated rather than described. It is also written into `DEPLOYMENT.md §1` and the configuration file's own notes, because it is a box somebody ticks once and nothing else will ever complain about.
+**And there is a second question, because switching versioning off does not undo it.** Turning it off stops the storage keeping *new* copies. Every copy it already made stays exactly where it is. So a bucket that had versioning on for a fortnight and has it off today reports *"deletes are permanent"* — perfectly true from now on — while still holding a copy of everything deleted during that fortnight. That is the state somebody reaches by reading the warning, ticking the box, and stopping. `pnpm media:check` therefore also asks the storage how many copies it is holding, and says so:
+
+- *"And it holds nothing behind a delete marker"* — clean. This is the line to want.
+- *"It is STILL HOLDING 6 superseded versions and 6 delete markers"* — copies of files this application asked the storage to destroy. This fails the command and shows in the health report **whatever the versioning setting now says**, which is the whole point of asking it separately.
+- Nothing at all — the storage cannot say, which is the permanent answer for an ordinary disk. It is never reported as zero.
+
+The fix is to expire those copies: a lifecycle rule that removes non-current versions immediately is the usual way, or delete them in the provider's console. Then run the command again and it will say so.
+
+Whether this matters was not taken on trust. The check works against a storage service that behaves exactly like a versioned bucket: it accepts the delete, reports the file gone, leaves it out of every listing — and still has the bytes afterwards, which the check then goes and finds. That is the whole danger, demonstrated rather than described — and then versioning is switched off in the middle of the check, the status goes clean, and the copy is still found sitting there. It is also written into `DEPLOYMENT.md §1` and the configuration file's own notes, because it is a box somebody ticks once and nothing else will ever complain about.
 
 None of this applies if your files are on an ordinary disk rather than in a bucket. There, a delete is a delete.
 

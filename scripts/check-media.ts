@@ -234,6 +234,7 @@ function printOrphans(result: Reconciliation): void {
 function printRetention(result: Reconciliation): void {
   if (result.versioning === 'DISABLED') {
     console.log('\n  Deletes are permanent on this store — versioning is off.')
+    printHidden(result)
     return
   }
 
@@ -241,9 +242,10 @@ function printRetention(result: Reconciliation): void {
     console.log(
       '\n  Whether deletes are permanent on this store is NOT KNOWN. It would not say — the' +
         '\n  provider may not implement the question, or the key pair may be scoped to objects' +
-        '\n  and not to the bucket. Check in the provider\u2019s console that versioning is off,' +
-        '\n  along with any object lock or retention rule. See DEPLOYMENT.md \u00a71.',
+        '\n  and not to the bucket. Check in the provider’s console that versioning is off,' +
+        '\n  along with any object lock or retention rule. See DEPLOYMENT.md §1.',
     )
+    printHidden(result)
     return
   }
 
@@ -253,7 +255,42 @@ function printRetention(result: Reconciliation): void {
       '\n  can be clean while every deleted file remains recoverable from the console. An' +
       '\n  investor erasure destroys stored documents and says so on the screen; on this' +
       '\n  bucket that sentence is not true. Turn versioning off and expire the non-current' +
-      '\n  versions, then run this again. See DEPLOYMENT.md \u00a71 and \u00a712.',
+      '\n  versions, then run this again. See DEPLOYMENT.md §1 and §12.',
+  )
+  printHidden(result)
+}
+
+/**
+ * What the store is still holding that nothing points at any more.
+ *
+ * Separate from the lines above, because it is the half of the question that
+ * survives the fix. Turning versioning off is what the warning asks for, and it
+ * removes nothing already written: a bucket corrected this morning reports
+ * permanent deletes and can still hold a copy of every document deleted while
+ * it was on. That is the state somebody reaches by ticking the box and stopping
+ * there, and it reads as clean everywhere else in this application.
+ *
+ * Null is the filesystem store, which has no such thing to count. Nothing is
+ * printed then — a line saying "and it holds nothing behind a delete marker"
+ * about a directory would be answering a question that was never asked of it.
+ */
+function printHidden(result: Reconciliation): void {
+  if (result.hidden === null) return
+
+  const { nonCurrent, deleteMarkers, atLeast } = result.hidden
+  if (nonCurrent + deleteMarkers === 0) {
+    console.log('  And it holds nothing behind a delete marker.')
+    return
+  }
+
+  console.log(
+    `\n  It is STILL HOLDING ${atLeast ? 'at least ' : ''}${nonCurrent} superseded ` +
+      `version${nonCurrent === 1 ? '' : 's'} and ${deleteMarkers} delete ` +
+      `marker${deleteMarkers === 1 ? '' : 's'}.` +
+      '\n  Those are copies of objects this application asked the store to destroy. Turning' +
+      '\n  versioning off does not remove them: expire the non-current versions with a' +
+      '\n  lifecycle rule, or delete them in the console, and run this again. Until then any' +
+      '\n  erasure carried out against this store is incomplete. See DEPLOYMENT.md §1.',
   )
 }
 

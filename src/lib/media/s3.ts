@@ -442,6 +442,53 @@ export function parseVersioningStatus(xml: string): BucketVersioning {
   return 'UNKNOWN'
 }
 
+/**
+ * What a bucket is still holding that nothing points at any more.
+ *
+ * The other half of the versioning question, and the half that survives turning
+ * versioning **off**. Switching it off stops new versions being written; it does
+ * not remove one that already exists. A bucket that had versioning on for a
+ * fortnight and has it off today still holds a copy of everything deleted during
+ * that fortnight — including any document an investor erasure destroyed — and
+ * reports itself as `DISABLED`, which is the answer somebody has just worked to
+ * get.
+ *
+ * `atLeast` rather than a total: this reads one page. A number that is short is
+ * still a number that is not zero, which is the whole question, and walking a
+ * bucket full of dead versions to count them exactly is a lot of round trips to
+ * reach the same conclusion.
+ */
+export interface HiddenVersions {
+  /** Versions of an object that are not the current one. */
+  nonCurrent: number
+  /** Markers left where a delete hid an object rather than removing it. */
+  deleteMarkers: number
+  /** There were more than one page held; the counts above are a floor. */
+  atLeast: boolean
+}
+
+/**
+ * A `ListVersionsResult`, counted rather than collected.
+ *
+ * No key is read out of it and none is returned. A storage key is a capability
+ * — the image route serves one without a session — and this answer is printed
+ * in a report and written into an audit row. What is needed to raise the alarm
+ * is *how many*, and the console the person then opens can name them.
+ */
+export function parseVersionListing(xml: string): HiddenVersions {
+  let nonCurrent = 0
+  for (const block of xml.match(/<Version>[\s\S]*?<\/Version>/g) ?? []) {
+    // `IsLatest` false is a superseded version. The current one is an ordinary
+    // object and is somebody's live file.
+    if (/<IsLatest>\s*false\s*<\/IsLatest>/i.test(block)) nonCurrent += 1
+  }
+
+  const deleteMarkers = (xml.match(/<DeleteMarker>[\s\S]*?<\/DeleteMarker>/g) ?? []).length
+  const atLeast = /<IsTruncated>\s*true\s*<\/IsTruncated>/i.test(xml)
+
+  return { nonCurrent, deleteMarkers, atLeast }
+}
+
 const ATTEMPTS = 3
 const BACKOFF_MS = [100, 400]
 const TIMEOUT_MS = 30_000
@@ -857,6 +904,40 @@ export class S3ObjectClient {
       // person will read it, and an error from a signed request can carry the
       // endpoint and the key id.
       return 'UNKNOWN'
+    }
+  }
+
+  /**
+   * How much the bucket is still holding behind delete markers.
+   *
+   * `GET /bucket?versions` — `ListObjectVersions`. Null means the bucket would
+   * not say, for the same reasons and by the same two doors as
+   * `bucketVersioning` above, and like it this never throws.
+   *
+   * **A bucket reporting `DISABLED` can still answer a positive number here**,
+   * and that is the case this exists for: versioning turned off today does not
+   * remove the copies made yesterday.
+   */
+  async hiddenVersions(limit: number): Promise<HiddenVersions | null> {
+    if (!Number.isSafeInteger(limit) || limit <= 0) {
+      throw new S3RequestError(0, null, 'A version listing needs a positive limit.')
+    }
+
+    try {
+      const response = await this.send('GET', {
+        query: { versions: '', 'max-keys': String(Math.min(1000, limit)) },
+      })
+      if (!response.ok) {
+        await response.arrayBuffer().catch(() => undefined)
+        return null
+      }
+      const body = await response.text()
+      // A body that is not a version listing at all is "would not say", not
+      // "nothing there" — the same rule as the versioning parser.
+      if (!/<ListVersionsResult[\s>/]/.test(body)) return null
+      return parseVersionListing(body)
+    } catch {
+      return null
     }
   }
 

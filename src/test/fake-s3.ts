@@ -57,6 +57,8 @@ export class FakeS3 {
    * rather than asserting that it would not have.
    */
   readonly nonCurrent = new Map<string, { bytes: Buffer; contentType: string }>()
+  /** What a version listing reports as truncated. */
+  versionsTruncated = false
   /**
    * How the versioning question is refused, when it is.
    *
@@ -138,7 +140,9 @@ export class FakeS3 {
      * and is told apart from an object request in the same place.
      */
     const versioningQuery = method === 'GET' && 'versioning' in query
-    const bucketLevel = listing || versioningQuery
+    /** `GET /bucket?versions` — ListObjectVersions. Bucket-level, like the rest. */
+    const versionsQuery = method === 'GET' && 'versions' in query
+    const bucketLevel = listing || versioningQuery || versionsQuery
 
     const authorization = request.headers.authorization ?? ''
     const amzDate = String(request.headers['x-amz-date'] ?? '')
@@ -169,6 +173,43 @@ export class FakeS3 {
 
     if (listing) {
       this.respondToListing(query, response)
+      return
+    }
+
+    if (versionsQuery) {
+      if (this.versioningApi !== 'PRESENT') {
+        response
+          .writeHead(this.versioningApi === 'REFUSED' ? 403 : 501)
+          .end('<Error><Code>AccessDenied</Code></Error>')
+        return
+      }
+      /*
+       * Every live object is a current version; everything hidden by a delete
+       * is a delete marker with the superseded version behind it. That is the
+       * shape S3 answers with, and it is the shape that matters: a bucket with
+       * versioning switched off today still lists what it kept yesterday.
+       */
+      const current = [...this.objects.keys()]
+        .map(
+          (key) =>
+            `<Version><Key>${key}</Key><IsLatest>true</IsLatest><Size>${this.objects.get(key)!.bytes.length}</Size></Version>`,
+        )
+        .join('')
+      const superseded = [...this.nonCurrent.keys()]
+        .map(
+          (key) =>
+            `<DeleteMarker><Key>${key}</Key><IsLatest>true</IsLatest></DeleteMarker>` +
+            `<Version><Key>${key}</Key><IsLatest>false</IsLatest><Size>${this.nonCurrent.get(key)!.bytes.length}</Size></Version>`,
+        )
+        .join('')
+      response
+        .writeHead(200, { 'content-type': 'application/xml' })
+        .end(
+          '<?xml version="1.0" encoding="UTF-8"?>' +
+            '<ListVersionsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">' +
+            `<IsTruncated>${this.versionsTruncated}</IsTruncated>${current}${superseded}` +
+            '</ListVersionsResult>',
+        )
       return
     }
 

@@ -7,7 +7,7 @@ import { FakeS3, FAKE_S3_ACCESS_KEY_ID, FAKE_S3_BUCKET, FAKE_S3_REGION, FAKE_S3_
 import { ingest } from './ingest'
 import { jpegWithMetadata } from './fixtures'
 import { mediaStore, resetMediaStoreCache, type MediaStore } from './store'
-import { S3ObjectClient, parseVersioningStatus } from './s3'
+import { S3ObjectClient, parseVersioningStatus, parseVersionListing } from './s3'
 
 /**
  * The object store as the application sees it, rather than as a signer.
@@ -620,5 +620,137 @@ describe('parsing a VersioningConfiguration', () => {
     expect(parseVersioningStatus('<Error><Code>AccessDenied</Code></Error>')).toBe('UNKNOWN')
     expect(parseVersioningStatus('')).toBe('UNKNOWN')
     expect(parseVersioningStatus('<html><body>404</body></html>')).toBe('UNKNOWN')
+  })
+})
+
+/**
+ * What the bucket is still holding that nothing points at any more.
+ *
+ * The half of the retention question that survives the remedy: switching
+ * versioning off stops new versions being written and removes not one already
+ * there. A bucket somebody corrected this morning reports permanent deletes and
+ * can still hold a copy of every document an erasure destroyed while it was on.
+ */
+describe('copies the bucket kept behind delete markers', () => {
+  it('is nothing on a bucket that never kept any', async () => {
+    const bucket = new FakeS3()
+    await bucket.start()
+    try {
+      const client = new S3ObjectClient(bucket.config())
+      expect(await client.hiddenVersions(1000)).toEqual({
+        nonCurrent: 0,
+        deleteMarkers: 0,
+        atLeast: false,
+      })
+    } finally {
+      await bucket.stop()
+    }
+  })
+
+  it('counts what a delete kept, and keeps counting after versioning is switched off', async () => {
+    const bucket = new FakeS3()
+    bucket.versioning = 'Enabled'
+    await bucket.start()
+    try {
+      const client = new S3ObjectClient(bucket.config())
+      await client.putObject(KEY, new TextEncoder().encode('an agreement'), 'application/pdf')
+      await client.deleteObject(KEY)
+
+      expect(await client.hiddenVersions(1000)).toEqual({
+        nonCurrent: 1,
+        deleteMarkers: 1,
+        atLeast: false,
+      })
+
+      // Somebody reads the warning and does what it says. The status goes
+      // quiet; the copy does not go anywhere.
+      bucket.versioning = 'DISABLED'
+      expect(await client.bucketVersioning()).toBe('DISABLED')
+      expect((await client.hiddenVersions(1000))!.nonCurrent).toBe(1)
+    } finally {
+      await bucket.stop()
+    }
+  })
+
+  it('does not count a live object as a copy of anything', async () => {
+    const bucket = new FakeS3()
+    await bucket.start()
+    try {
+      const client = new S3ObjectClient(bucket.config())
+      await client.putObject(KEY, new TextEncoder().encode('a live file'), 'application/pdf')
+      expect((await client.hiddenVersions(1000))!.nonCurrent).toBe(0)
+    } finally {
+      await bucket.stop()
+    }
+  })
+
+  it('reports a truncated listing as a floor rather than a total', async () => {
+    const bucket = new FakeS3()
+    bucket.versionsTruncated = true
+    await bucket.start()
+    try {
+      const client = new S3ObjectClient(bucket.config())
+      expect((await client.hiddenVersions(1000))!.atLeast).toBe(true)
+    } finally {
+      await bucket.stop()
+    }
+  })
+
+  it('is null, not zero, when the bucket will not say', async () => {
+    for (const mode of ['REFUSED', 'ABSENT'] as const) {
+      const bucket = new FakeS3()
+      bucket.versioningApi = mode
+      await bucket.start()
+      try {
+        const client = new S3ObjectClient(bucket.config())
+        // Zero would be an all-clear invented out of a refusal.
+        expect(await client.hiddenVersions(1000)).toBeNull()
+      } finally {
+        await bucket.stop()
+      }
+    }
+  }, 20_000)
+
+  it('and null on a filesystem store, which has no such thing', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'hidden-'))
+    const before = { store: process.env.MEDIA_STORE, dir: process.env.MEDIA_DIR }
+    process.env.MEDIA_STORE = 'filesystem'
+    process.env.MEDIA_DIR = directory
+    resetEnvCache()
+    resetMediaStoreCache()
+    try {
+      expect(await mediaStore()!.hiddenVersions(1000)).toBeNull()
+    } finally {
+      if (before.store === undefined) delete process.env.MEDIA_STORE
+      else process.env.MEDIA_STORE = before.store
+      if (before.dir === undefined) delete process.env.MEDIA_DIR
+      else process.env.MEDIA_DIR = before.dir
+      resetEnvCache()
+      resetMediaStoreCache()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('parsing a ListVersionsResult', () => {
+  it('counts superseded versions and delete markers, and not current ones', () => {
+    const xml =
+      '<ListVersionsResult>' +
+      '<IsTruncated>false</IsTruncated>' +
+      '<Version><Key>a</Key><IsLatest>true</IsLatest></Version>' +
+      '<Version><Key>b</Key><IsLatest>false</IsLatest></Version>' +
+      '<Version><Key>b</Key><IsLatest>false</IsLatest></Version>' +
+      '<DeleteMarker><Key>b</Key><IsLatest>true</IsLatest></DeleteMarker>' +
+      '</ListVersionsResult>'
+    expect(parseVersionListing(xml)).toEqual({
+      nonCurrent: 2,
+      deleteMarkers: 1,
+      atLeast: false,
+    })
+  })
+
+  it('reads truncation as a floor', () => {
+    const xml = '<ListVersionsResult><IsTruncated>true</IsTruncated></ListVersionsResult>'
+    expect(parseVersionListing(xml).atLeast).toBe(true)
   })
 })

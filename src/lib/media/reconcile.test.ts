@@ -8,7 +8,7 @@ import {
   type TrackedFile,
 } from './reconcile'
 import type { MediaStore, StoredObjectSummary, StoredStream } from './store'
-import type { BucketVersioning } from './s3'
+import type { BucketVersioning, HiddenVersions } from './s3'
 
 /**
  * The comparing that `pnpm media:check` does, without a database and without a
@@ -44,6 +44,8 @@ class FakeStore implements MediaStore {
       truncated?: boolean
       /** What this store says about keeping what it is told to delete. */
       versioningStatus?: BucketVersioning
+      /** What it is still holding behind delete markers. Null = it cannot say. */
+      hidden?: HiddenVersions | null
     } = {},
   ) {}
 
@@ -73,6 +75,10 @@ class FakeStore implements MediaStore {
 
   async versioning(): Promise<BucketVersioning> {
     return this.options.versioningStatus ?? 'DISABLED'
+  }
+
+  async hiddenVersions(): Promise<HiddenVersions | null> {
+    return this.options.hidden ?? null
   }
 
   async stat(key: string): Promise<{ sizeBytes: number } | null> {
@@ -281,6 +287,7 @@ describe('what gets written down for the health report to read', () => {
       listed: true,
       truncated: false,
       versioning: 'DISABLED',
+      hiddenVersions: null,
       problems: 2,
     })
   })
@@ -376,5 +383,92 @@ describe('whether the store keeps what it is told to delete', () => {
 
   it('reports no store as not known, rather than as permanent', () => {
     expect(recordOfUnconfigured(2).versioning).toBe('UNKNOWN')
+  })
+})
+
+/**
+ * What the store is still holding that nothing points at any more.
+ *
+ * The half of the retention question that survives the remedy. Switching
+ * versioning off is what the previous check asks for and it removes nothing
+ * already written — so a deployment that did exactly as it was told reports
+ * `DISABLED` and can still hold a copy of every document an erasure destroyed.
+ */
+describe('copies the store kept behind delete markers', () => {
+  it('is not a problem when there are none', async () => {
+    const store = new FakeStore({}, { hidden: { nonCurrent: 0, deleteMarkers: 0, atLeast: false } })
+    const result = await reconcile(store, [])
+    expect(result.problems).toBe(0)
+  })
+
+  it('is a problem even when versioning now reports permanent deletes', async () => {
+    // The state somebody reaches by ticking the box and stopping there. Every
+    // other check in this repository reads it as clean.
+    const store = new FakeStore(
+      {},
+      {
+        versioningStatus: 'DISABLED',
+        hidden: { nonCurrent: 4, deleteMarkers: 4, atLeast: false },
+      },
+    )
+    const result = await reconcile(store, [])
+    expect(result.versioning).toBe('DISABLED')
+    expect(result.problems).toBe(1)
+  })
+
+  it('counts once, not once per copy', async () => {
+    const store = new FakeStore(
+      {},
+      { hidden: { nonCurrent: 900, deleteMarkers: 900, atLeast: true } },
+    )
+    expect((await reconcile(store, [])).problems).toBe(1)
+  })
+
+  it('adds to the versioning problem rather than replacing it', async () => {
+    const store = new FakeStore(
+      {},
+      {
+        versioningStatus: 'ENABLED',
+        hidden: { nonCurrent: 1, deleteMarkers: 1, atLeast: false },
+      },
+    )
+    expect((await reconcile(store, [])).problems).toBe(2)
+  })
+
+  it('a store that cannot say is not a problem, and is not zero either', async () => {
+    // Null is the filesystem's permanent answer. Reporting it as zero would be
+    // a claim about a machine this store cannot see.
+    const store = new FakeStore({}, { hidden: null })
+    const result = await reconcile(store, [])
+    expect(result.hidden).toBeNull()
+    expect(result.problems).toBe(0)
+  })
+
+  it('is written down as counts, and never as a key', async () => {
+    const store = new FakeStore(
+      { img_AAAAAAAAAAAAAAAAAAAAAAAA: 100 },
+      { hidden: { nonCurrent: 2, deleteMarkers: 2, atLeast: false } },
+    )
+    const record = recordOf(await reconcile(store, []))
+    expect(record.hiddenVersions).toEqual({ nonCurrent: 2, deleteMarkers: 2, atLeast: false })
+    expect(mediaCheckRecordSchema.safeParse(record).success).toBe(true)
+  })
+
+  it('and a record from before the question existed still parses', () => {
+    const old = {
+      storeConfigured: true,
+      checked: 1,
+      missing: 0,
+      wrongSize: 0,
+      unreadable: 0,
+      orphans: 0,
+      listed: true,
+      truncated: false,
+      versioning: 'DISABLED' as const,
+      problems: 0,
+    }
+    const parsed = mediaCheckRecordSchema.safeParse(old)
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.hiddenVersions).toBeUndefined()
   })
 })

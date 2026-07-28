@@ -109,6 +109,13 @@ export interface MediaCheckSummary {
    * `DISABLED` and must not be reported as one.
    */
   versioning?: BucketVersioning
+  /**
+   * What the store was still holding behind delete markers on that run.
+   *
+   * Null when it could not say — which is the permanent answer for a
+   * filesystem. Undefined on a row written before the question existed.
+   */
+  hiddenVersions?: { nonCurrent: number; deleteMarkers: number; atLeast: boolean } | null
   /** Everything wrong on that run, counted once. */
   problems: number
 }
@@ -803,15 +810,49 @@ export function bucketRetentionFindings(facts: UnattendedFacts): Finding[] {
   if (last === null) return []
   if (!last.storeConfigured) return []
 
+  const findings: Finding[] = []
+
+  /*
+   * Counted first and reported separately, because it is the half of this that
+   * survives the remedy. Turning versioning off is what the finding below asks
+   * for, and it removes nothing already written — so a deployment that did
+   * exactly as it was told reports `DISABLED` and can still hold a copy of
+   * every document an erasure destroyed. A rule that stopped at the status
+   * would go quiet at precisely the moment somebody believed they had fixed it.
+   */
+  const hidden = last.hiddenVersions
+  if (hidden && hidden.nonCurrent + hidden.deleteMarkers > 0) {
+    const total = hidden.nonCurrent + hidden.deleteMarkers
+    findings.push({
+      area: 'Stored files',
+      severity: 'WRONG',
+      headline: `The store is still holding ${hidden.atLeast ? 'at least ' : ''}${total} ${
+        total === 1 ? 'copy' : 'copies'
+      } of objects it was told to destroy.`,
+      detail:
+        `${hidden.nonCurrent} superseded version${hidden.nonCurrent === 1 ? '' : 's'} and ` +
+        `${hidden.deleteMarkers} delete marker${hidden.deleteMarkers === 1 ? '' : 's'}. These ` +
+        'are what versioning kept. Switching versioning off stops new ones being made and ' +
+        'removes none of these, so a bucket that now reports permanent deletes can still hold ' +
+        'every document an investor erasure destroyed while it was on.',
+      remedy:
+        'Expire the non-current versions — a lifecycle rule that removes them immediately is ' +
+        'the usual way — or delete them in the provider’s console, then run `pnpm media:check` ' +
+        'again. Until that is done, treat any erasure carried out against this store as ' +
+        'incomplete.',
+    })
+  }
+
   const versioning = last.versioning
   // A run from before the command asked. Saying nothing is right: there is no
   // evidence either way, and inventing a warning from an absent field would put
   // one on every deployment until the next scheduled run.
-  if (versioning === undefined) return []
-  if (versioning === 'DISABLED') return []
+  if (versioning === undefined) return findings
+  if (versioning === 'DISABLED') return findings
 
   if (versioning === 'UNKNOWN') {
     return [
+      ...findings,
       {
         area: 'Stored files',
         severity: 'ATTENTION',
@@ -832,6 +873,7 @@ export function bucketRetentionFindings(facts: UnattendedFacts): Finding[] {
   }
 
   return [
+    ...findings,
     {
       area: 'Stored files',
       severity: 'WRONG',

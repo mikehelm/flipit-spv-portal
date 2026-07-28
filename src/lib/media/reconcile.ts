@@ -25,7 +25,7 @@ import { z } from 'zod'
 import { db } from '@/db'
 import { documentPackages, mediaAssets, operatorVideos } from '@/db/schema'
 import type { MediaStore, StoredObjectSummary } from './store'
-import type { BucketVersioning } from './s3'
+import type { BucketVersioning, HiddenVersions } from './s3'
 
 /** One record that names a stored file. */
 export interface TrackedFile {
@@ -81,6 +81,17 @@ export interface Reconciliation {
    * would otherwise fail this command for ever with nothing anybody could do.
    */
   versioning: BucketVersioning
+  /**
+   * What the store is still holding behind delete markers, or null when it
+   * cannot say — which is the permanent answer for a filesystem.
+   *
+   * **The half of the retention question that survives the fix.** Turning
+   * versioning off is what the report above asks for, and it does not remove a
+   * single version already written. A bucket somebody corrected this morning
+   * reports `DISABLED` and can still hold a copy of every document deleted
+   * while it was on.
+   */
+  hidden: HiddenVersions | null
   /** Everything wrong, counted once. Non-zero is what makes the command exit 1. */
   problems: number
 }
@@ -202,6 +213,7 @@ export async function reconcile(
   const truncated = listed?.truncated ?? false
 
   const versioning = await store.versioning()
+  const hidden = await store.hiddenVersions(limit)
 
   const problems =
     missing.length +
@@ -210,7 +222,11 @@ export async function reconcile(
     orphans.length +
     (truncated ? 1 : 0) +
     (listingError === null ? 0 : 1) +
-    (versioning === 'ENABLED' || versioning === 'SUSPENDED' ? 1 : 0)
+    (versioning === 'ENABLED' || versioning === 'SUSPENDED' ? 1 : 0) +
+    // Counted separately from the status, and deliberately: a bucket reporting
+    // DISABLED with a hundred superseded versions in it is the state somebody
+    // reaches by fixing the setting and stopping there.
+    (hidden !== null && hidden.nonCurrent + hidden.deleteMarkers > 0 ? 1 : 0)
 
   return {
     checked: rows.length,
@@ -222,6 +238,7 @@ export async function reconcile(
     listingError,
     truncated,
     versioning,
+    hidden,
     problems,
   }
 }
@@ -263,6 +280,22 @@ export const mediaCheckRecordSchema = z.object({
    * asked", and it is reported as exactly that rather than as `DISABLED`.
    */
   versioning: z.enum(['ENABLED', 'SUSPENDED', 'DISABLED', 'UNKNOWN']).optional(),
+  /**
+   * Counts of what the store still holds behind delete markers. Null when it
+   * cannot say; absent on a run from before the question existed. Optional for
+   * the same reason `versioning` is — see the note above it.
+   *
+   * Counts only. No key: a storage key is a capability, and this row is
+   * exported and read on a screen.
+   */
+  hiddenVersions: z
+    .object({
+      nonCurrent: z.number().int().min(0),
+      deleteMarkers: z.number().int().min(0),
+      atLeast: z.boolean(),
+    })
+    .nullable()
+    .optional(),
   problems: z.number().int().min(0),
 })
 
@@ -280,6 +313,14 @@ export function recordOf(result: Reconciliation): MediaCheckRecord {
     listed: result.listingError === null,
     truncated: result.truncated,
     versioning: result.versioning,
+    hiddenVersions:
+      result.hidden === null
+        ? null
+        : {
+            nonCurrent: result.hidden.nonCurrent,
+            deleteMarkers: result.hidden.deleteMarkers,
+            atLeast: result.hidden.atLeast,
+          },
     problems: result.problems,
   }
 }
@@ -306,6 +347,7 @@ export function recordOfUnconfigured(recordsNamingAFile: number): MediaCheckReco
     // No store to ask. Not `DISABLED`, which would be a claim about a store
     // that is not there.
     versioning: 'UNKNOWN',
+    hiddenVersions: null,
     problems: recordsNamingAFile,
   }
 }

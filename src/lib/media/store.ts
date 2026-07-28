@@ -29,7 +29,7 @@ import { Readable } from 'node:stream'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { env } from '@/lib/env'
-import { S3ObjectClient, type BucketVersioning } from './s3'
+import { S3ObjectClient, type BucketVersioning, type HiddenVersions } from './s3'
 
 export interface StoredObject {
   bytes: Uint8Array
@@ -161,6 +161,20 @@ export interface MediaStore {
    * will not say gives — see the note on the type in `s3.ts`.
    */
   versioning(): Promise<BucketVersioning>
+  /**
+   * What the store is still holding that nothing points at any more.
+   *
+   * Null means it cannot say, which for the filesystem store is the permanent
+   * and correct answer: there is no such thing as a superseded version of a
+   * file, so there is no number to give and zero would be a claim rather than a
+   * fact.
+   *
+   * **This is the half of the retention question that survives the fix.**
+   * Turning versioning off stops new versions; it does not remove the ones
+   * already there. A bucket somebody has just corrected reports `DISABLED` and
+   * may still be full of copies of everything deleted while it was on.
+   */
+  hiddenVersions(limit: number): Promise<HiddenVersions | null>
 }
 
 /**
@@ -209,6 +223,15 @@ class FilesystemMediaStore implements MediaStore {
    */
   async versioning(): Promise<BucketVersioning> {
     return 'DISABLED'
+  }
+
+  /**
+   * Null, and permanently so. A filesystem has no superseded versions to count,
+   * and answering zero would be a claim about a machine this store cannot see —
+   * a snapshot or an hourly backup holds copies and nothing here knows it.
+   */
+  async hiddenVersions(): Promise<HiddenVersions | null> {
+    return null
   }
 
   private resolve(key: string): string {
@@ -402,6 +425,10 @@ class ObjectMediaStore implements MediaStore {
 
   async versioning(): Promise<BucketVersioning> {
     return this.client.bucketVersioning()
+  }
+
+  async hiddenVersions(limit: number): Promise<HiddenVersions | null> {
+    return this.client.hiddenVersions(limit)
   }
 
   private checked(key: string): string {
