@@ -642,9 +642,11 @@ signed subscription agreement.
    why before proceeding.
 5. Type **their email address** exactly as shown, tick the box, and press
    **Erase this record**.
-6. The banner tells you the pseudonym the record now carries. **Write it down**
-   alongside the request — it is how you will find the record again if you are
-   ever asked to prove the erasure happened.
+6. **The card now names the pseudonym the record carries** — something like
+   *Erased investor de95b7e7cc48* — and it stays there on every later visit, so
+   there is nothing to catch before it disappears. Write it down alongside the
+   request anyway: it is the name to quote if anybody asks you to show that the
+   erasure happened, and the audit log has a row against it.
 
 The account is archived, every session ends and every unspent link is revoked in
 the same transaction. Nothing is emailed to anybody: telling them it is done is

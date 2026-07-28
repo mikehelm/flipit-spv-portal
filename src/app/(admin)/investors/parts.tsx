@@ -138,15 +138,25 @@ export function ChangeStatusForm({
  * There is no reason field, deliberately, and the note below says why on the
  * screen rather than only in the code: an erasure must not be the moment new
  * prose about a person enters the record.
+ *
+ * **The pseudonym is on the finished state, not only in the success banner**,
+ * and that is a fix rather than a flourish. The action revalidates `/investors`,
+ * which re-renders this card into the branch below and unmounts the form — and
+ * the banner with it. So the one thing the runbook tells the owner to write
+ * down was on screen for less than a second and then gone for ever. Driving
+ * this in a browser is what found it; nothing else could have.
  */
 export function EraseInvestorForm({
   accountId,
+  name,
   email,
   counts,
   alreadyErased,
   blockedBy,
 }: {
   accountId: string
+  /** What the record is called now. After an erasure, the pseudonym. */
+  name: string
   email: string
   counts: { label: string; n: number }[]
   alreadyErased: boolean
@@ -155,8 +165,11 @@ export function EraseInvestorForm({
   if (alreadyErased) {
     return (
       <Notice tone="warn">
-        This record has already been erased. The name and address you can see are a pseudonym,
-        the figures are what is left, and running it again would produce exactly what is here.
+        This record has been erased. It is held under{' '}
+        <span className="font-semibold text-ftext">{name}</span> — that is the name to quote if
+        anybody asks you to show that the erasure happened, and the audit log has a row against
+        it saying who did it and when. The figures are what is left. Running it again would
+        produce exactly what is already here, and it refuses rather than pretending otherwise.
       </Notice>
     )
   }

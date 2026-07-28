@@ -174,6 +174,7 @@ function AccountCard({
           <div className="mt-3">
             <EraseInvestorForm
               accountId={account.id}
+              name={erasure.name}
               email={erasure.email}
               counts={erasureLines(erasure)}
               alreadyErased={erasure.alreadyErased}

@@ -9126,3 +9126,140 @@ storage key from its message, because the key *is* the capability. 10: unchanged
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src \'self\'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+## The erasure screen, driven in a browser — and the defect that found
+
+The item at the top of the last two Uncertain lists:
+
+> ***Still nothing drives the erasure through a browser.*** The form, the
+> confirmation, the counts and the absence of the section for an operator are all
+> proved at the source and in unit tests.
+
+All of that was true and none of it was the question a person asks, which is
+*does the page come up and does the button work*. `verify:erasure` drives the
+service against a real database and never renders anything;
+`verify:account-access` already had a real server, a real Chromium and a real
+sign-in. The two halves now meet there.
+
+**It found a defect on the first run that nothing else could have.**
+
+### The pseudonym was on screen for a fraction of a second
+
+The action ends with `revalidatePath('/investors')`. That re-renders the card,
+which re-reads the preview, which now says `alreadyErased` — so the component
+switches branch, the form unmounts, **and the success banner goes with it**.
+
+The banner was the sentence naming the pseudonym. `DEPLOYMENT.md §12.2` step 6
+tells the owner to *write it down*, because it is how they find the record again
+if anybody ever asks them to show that the erasure happened. It was rendered and
+then destroyed by the same request.
+
+Every unit test asserted on the returned `ActionState`, which was correct all
+along and always had been. There is no test-at-the-source that could have caught
+this, because the bug is not in what the action returns — it is in how long what
+it returns survives.
+
+**The fix is better than the banner was.** The finished state of the card now
+carries the pseudonym permanently: *"This record has been erased. It is held
+under Erased investor de95b7e7cc48 — that is the name to quote if anybody asks
+you to show that the erasure happened."* It is there on every load, for ever,
+rather than for one render. The runbook is corrected to say so.
+
+### What the journey covers
+
+The owner's: the page renders, the section is on it, opening it shows counts
+that are the **real** ones (the fixture has three conversation messages, so a
+wrong count is a wrong number rather than a missing one), there is no reason box,
+a wrong address is refused **visibly**, the record is untouched after that
+refusal, the right address erases, the card afterwards names the pseudonym and
+does **not** repeat the erased address back, the database agrees, all three
+message bodies are redacted, the amount is unchanged, and a reload offers no form.
+
+The operator's: the investors screen renders, *"Change their status"* is still
+there because that is theirs to do, and the erasure section is **absent** — with
+`input[name="acknowledged"]` counted at zero, so "absent" means absent rather
+than hidden by a stylesheet.
+
+**Decisions.**
+
+- ***The success banner is not what is asserted on.*** It is unmountable by
+  design and asserting on it would have pinned the defect rather than the fix.
+  What is asserted is the finished card, which is where the information now lives.
+- ***Wait for the banner, never for `networkidle`.*** A server action does not
+  navigate, so on an already-idle page `waitForLoadState('networkidle')` resolves
+  before the action has run. The refusal happened to pass that way and the success
+  did not — the worst possible version of a race, because it makes a working
+  feature look broken. Waiting for `role="alert"` is both a wait and an
+  assertion; waiting for the confirmation input to **detach** is how a success is
+  waited for, since a success has no banner left to wait for.
+- ***Every locator is scoped to the card.*** `page.locator('[role="alert"]')
+  .first()` is somebody else's investor on a page that lists all of them. That
+  cost a debugging round and is written down here so it costs nobody another.
+- ***A helper that re-opens the `<details>` before every submit.*** The element
+  returns to closed on each re-render, and the first version of this submitted
+  into a collapsed form.
+- ***The operator's password is set and restored*** in the same `finally` that
+  already restores the owner's, and the fixture is cleaned up by round rather
+  than by email prefix — after a successful run the account no longer carries the
+  prefix, which is the point of the thing being tested.
+
+**Deviations.** None.
+
+**Checklist.** 5 is the one this strengthens: the operator's view is now measured
+in a browser rather than argued for, and the erasure section is proved absent
+rather than proved not-rendered-in-a-unit-test. 1–4 and 6–12 are untouched; the
+only application change is one Notice gaining the pseudonym it already had in
+scope.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (2596) are green.
+`pnpm verify:erasure` is 119 checks and `pnpm verify:account-access` is now
+**62**, up from 43, and both pass.
+
+**Uncertain.**
+
+- ***The journey erases one investor with three messages and one offer.*** It
+  does not have a document, a certificate, a question or a register entry, so the
+  lines of the count list that describe those are rendered by nothing. The two
+  that are checked are checked against real numbers; the other fourteen labels
+  are as unproved on screen as they were.
+- ***Nothing checks the screen at 375px.*** `verify:viewport` is the script that
+  does that for every other screen and it does not know about this section. The
+  count list is a `<ul>` inside a `<details>` and will almost certainly be fine,
+  which is exactly the reasoning `verify:viewport` exists to distrust.
+- ***The `blockedBy` state is never rendered.*** The refusal when a media store
+  is unreachable is proved in the service by `verify:erasure` and its `<Notice>`
+  has never been on a screen.
+- ***The batching is still proved correct and not proved fast.*** Unchanged: the
+  browser journey has one investor in its fixture, so it measures nothing about
+  a page with forty.
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12***, and it is still a
+  conversation with the formation agents rather than a package. **This is now the
+  largest genuinely open thing on this item and it is not a build.**
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael\'s
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`ACCEPTANCE.md` has not been read against the tests it claims to be generated
+  from, and it does not mention the erasure. It is the obvious next document.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is to leave it and write the recovery step into the runbook.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src \'none\'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator\'s side.*
+- *`frame-ancestors \'self\'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src \'self\'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*
