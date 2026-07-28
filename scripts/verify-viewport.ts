@@ -75,6 +75,12 @@ import { issueToken } from '@/lib/crypto'
 import { AA_LARGE, AA_TEXT, contrastRatio, reportRatio } from '@/lib/contrast'
 import { EMAIL_BODY_POLICY } from '@/lib/security/csp'
 import { drawablePngWithMetadata, FIXTURE_SECRET_MARKER } from '@/lib/media/fixtures'
+import {
+  clearStoredFiles,
+  ERASURE_COUNTS,
+  removeErasureFixture,
+  seedErasureFixture,
+} from './lib/erasure-fixture'
 import { mediaStore } from '@/lib/media/store'
 
 const PREFIX = 'wp18-viewport'
@@ -608,6 +614,18 @@ async function measureScreen(
 // ---------------------------------------------------------------------------
 
 async function cleanUp(): Promise<void> {
+  /*
+   * The erasure fixture first, and it has to be first.
+   *
+   * Its address begins with this script's prefix, so the loop below would find
+   * its account — and then fail, because that record holds conversation
+   * messages and Q&A entries pointing at offers with no `onDelete`, which the
+   * loop deletes in the wrong order for it. `removeErasureFixture` knows that
+   * order. `verifyTheErasureSection` already calls it in its own `finally`;
+   * this is for the run that dies somewhere else entirely.
+   */
+  await removeErasureFixture(`${PREFIX}-erasure`)
+
   const accounts = await db
     .select({ id: investorAccounts.id })
     .from(investorAccounts)
@@ -1010,6 +1028,8 @@ async function main(): Promise<void> {
     await verifyTheEmailPreview(page)
 
     await verifyTheMediaLibraryWithSomethingInIt(page)
+
+    await verifyTheErasureSection(page)
 
     await verifyTheErrorPage(browser)
   } catch (error) {
@@ -2199,6 +2219,188 @@ main()
  *     tested; the served response is not, and that is the artefact.
  *   - does the address printed on the screen fetch the image it names?
  */
+/**
+ * The erasure section, opened, at 375px. OPEN_DECISIONS.md item 12.
+ *
+ * `/investors` is audited by the loop above, and until now that audit could not
+ * see this section at all. It is a `<details>` and it starts **closed**, so
+ * nothing inside it is laid out, nothing inside it is measured, and a page that
+ * scrolls sideways the moment somebody expands it would have been reported green
+ * every time. It is the same gap the import wizard had — a screen reachable only
+ * by pressing something — and it is worse here, because the thing behind it is
+ * the only irreversible action in the application.
+ *
+ * What is behind it is also the tallest and narrowest-fitting thing this
+ * application draws: a sixteen-item list of sentences, each prefixed by a
+ * number, inside a bordered box, inside a card, inside a page. The longest of
+ * the sixteen is *"register entries with their reason cleared"* — forty-one
+ * characters that must wrap without pushing anything past 375px.
+ *
+ * **Both branches are measured**, because they are different layouts and only
+ * one of them has ever been thought about:
+ *
+ *   - **blocked** — the count list, then a notice where the form would be. The
+ *     notice is a long unbroken paragraph naming an environment variable, which
+ *     is exactly the shape that overflows a narrow column.
+ *   - **the form** — the count list, a second notice, a text input, a tickbox
+ *     with a paragraph beside it, and a destructive button.
+ *
+ * The record is the shared fixture from `scripts/lib/erasure-fixture.ts`, the same
+ * one `verify:account-access` reads the numbers off. That is deliberate: this
+ * script measures what that one asserts, so the list measured here can never be
+ * shorter than the list checked there.
+ *
+ * It is seeded here rather than in `seedInvestor` and removed in this function's
+ * own `finally`, so that the twenty-six screens audited above are measured
+ * against the register they have always been measured against. A hundred and
+ * forty extra rows on `/investors` is a different screen.
+ */
+async function verifyTheErasureSection(page: Page): Promise<void> {
+  console.log('\nThe erasure section, opened, which nothing had ever laid out')
+
+  const prefix = `${PREFIX}-erasure`
+
+  try {
+    const { account } = await seedErasureFixture(prefix)
+
+    const card = page
+      .locator('article', { hasText: 'Erase their personal data' })
+      .filter({ hasText: `${prefix} Target` })
+    const section = card.locator('details', { hasText: 'Erase their personal data' }).first()
+
+    /** Expand it and hand back what a person can read inside it. */
+    const open = async (): Promise<string> => {
+      if (!(await section.evaluate((node) => (node as HTMLDetailsElement).open))) {
+        await section.locator('summary').click()
+      }
+      await section.locator('li').first().waitFor({ state: 'visible', timeout: 20_000 })
+      return flatten(await section.innerText())
+    }
+
+    /*
+     * ---- blocked: the count list and the refusal ---------------------------
+     *
+     * **Only reachable on a run with no media store**, and that is a property of
+     * the branch rather than a shortcoming of this script. `blockedBy` is set
+     * when a record holds stored files *and* `mediaStore()` is null, which is
+     * process-wide — so on the configured run this script asks for a few
+     * hundred lines above, no record on the page can be in that state. It is
+     * measured when it can be and said out loud when it cannot, because a
+     * conditional check that stays quiet is a check nobody knows did not run.
+     */
+    complaints.length = 0
+    await page.goto(`${ORIGIN}/investors`, { waitUntil: 'networkidle' })
+    const blocked = await open()
+
+    if (mediaStore() === null) {
+      check(
+        'with no media store, the section is the blocked one and the notice is measured',
+        /no media store is configured/.test(blocked),
+        blocked.slice(0, 300),
+      )
+
+      /*
+       * All sixteen, on the screen, before a single pixel is measured.
+       *
+       * Without this the measurement is of whatever the card happened to draw,
+       * and this script already knows what that costs: three screens were
+       * audited in their empty state for months and reported under the name of
+       * the populated one. A count list with four lines on it is a shorter box
+       * than one with sixteen, and the whole question here is whether sixteen
+       * fit.
+       */
+      const missing = ERASURE_COUNTS.filter((row) => !blocked.includes(`${row.n} ${row.label}`))
+      check(
+        'all sixteen count lines are drawn, so the box being measured is the tall one',
+        missing.length === 0,
+        missing.map((row) => `${row.n} ${row.label}`).join(' | '),
+      )
+
+      await measureScreen(page, 'investors — erasure, blocked', {
+        mustShow: /register entries with their reason cleared/,
+      })
+    } else {
+      console.log(
+        '  note  a media store is configured, so no record on this page can be in the ' +
+          'blocked state and that branch is not measured on this run',
+      )
+    }
+
+    // ---- the form, which is the other layout -------------------------------
+    complaints.length = 0
+    await clearStoredFiles(account.id)
+    await page.goto(`${ORIGIN}/investors`, { waitUntil: 'networkidle' })
+    const offered = await open()
+
+    check(
+      'with the stored files gone, the form is what is being measured',
+      !/no media store is configured/.test(offered) &&
+        (await section.locator('input[name="confirmation"]').count()) === 1,
+      offered.slice(0, 300),
+    )
+
+    const missingFromTheForm = ERASURE_COUNTS.filter(
+      (row) =>
+        row.label !== 'stored files destroyed outright' &&
+        !offered.includes(`${row.n} ${row.label}`),
+    )
+    check(
+      'and the fifteen remaining count lines are drawn above it',
+      missingFromTheForm.length === 0,
+      missingFromTheForm.map((row) => `${row.n} ${row.label}`).join(' | '),
+    )
+
+    /*
+     * Case-insensitively, and that cost a round.
+     *
+     * The label is `Field`'s, which carries `uppercase` — a `text-transform`,
+     * not different characters in the markup. `innerText` is the *rendered*
+     * text, so it reads TYPE THEIR EMAIL ADDRESS TO CONFIRM and an exact
+     * pattern fails on a screen that is perfectly correct. Every other
+     * `mustShow` in this script happens to name content rather than a label,
+     * which is why nothing had met this before.
+     */
+    await measureScreen(page, 'investors — erasure, the form', {
+      mustShow: /type their email address to confirm/i,
+    })
+
+    /*
+     * The one thing `measureScreen` cannot ask, because it is about a box
+     * rather than about the page: does the count list itself stay inside its
+     * own container?
+     *
+     * The page-level check catches a list that pushes the document sideways. A
+     * list that overflows its bordered box *without* widening the page —
+     * because an ancestor clips or scrolls — is invisible to it, and reads on a
+     * phone as a sentence cut off mid-word with no indication that there is
+     * more.
+     */
+    const listOverflow = await section.evaluate((node) => {
+      const list = node.querySelector('ul')
+      if (!list) return { found: false, overflow: 0, worst: '' }
+      const box = list.getBoundingClientRect()
+      let overflow = 0
+      let worst = ''
+      for (const item of Array.from(list.querySelectorAll('li'))) {
+        const rect = item.getBoundingClientRect()
+        const past = Math.max(rect.right - box.right, box.left - rect.left)
+        if (past > overflow) {
+          overflow = past
+          worst = item.textContent ?? ''
+        }
+      }
+      return { found: true, overflow: Math.round(overflow), worst: worst.slice(0, 80) }
+    })
+    check(
+      'every count line stays inside the box that draws it',
+      listOverflow.found && listOverflow.overflow <= 1,
+      `${listOverflow.overflow}px past the edge on “${listOverflow.worst}”`,
+    )
+  } finally {
+    await removeErasureFixture(prefix)
+  }
+}
+
 async function verifyTheMediaLibraryWithSomethingInIt(page: Page): Promise<void> {
   console.log('\nThe media library, with something in it')
 

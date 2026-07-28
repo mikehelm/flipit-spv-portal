@@ -9590,3 +9590,194 @@ address nor the name back.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The erasure section at 375px, and one fixture for two scripts
+
+The item the last entry called the largest buildable thing left on this screen:
+
+> ***The erasure section is still not measured at 375px.*** `verify:viewport`
+> does not know about it. It is a `<ul>` inside a `<details>` and will almost
+> certainly be fine, which is exactly the reasoning that script exists to
+> distrust.
+
+**Built.** `scripts/verify-viewport.ts` — one new function,
+`verifyTheErasureSection`. `scripts/lib/erasure-fixture.ts` — new, and the
+fixture from the previous entry moved into it so both scripts seed the same
+record. `scripts/verify-account-access.ts` — reads the fixture from there
+instead of holding its own, and pins one environment variable. No application
+file changed, again.
+
+`pnpm verify:viewport` is **542 checks** and passes. The erasure section
+contributes ten of them on a run with a media store configured and nineteen on
+one without.
+
+### It was almost certainly fine. It was not measured, and one of the two states could not have been.
+
+`/investors` has been audited at 375px since WP18. That audit could not see this
+section: it is a `<details>` and it starts **closed**, so nothing inside it is
+laid out and nothing inside it is measured. It is the same gap the import wizard
+had — a screen reachable only by pressing something — and worse here, because
+what is behind it is the only irreversible action in the application, and
+because what is behind it is *tall*: sixteen sentences, each with a number,
+inside a bordered box, inside a card. The longest is **"register entries with
+their reason cleared"**, forty-one characters that have to wrap inside 375px.
+
+Both branches are measured, because they are different layouts:
+
+- **blocked** — the count list, then a notice where the form would be. A long
+  unbroken paragraph naming an environment variable, which is exactly the shape
+  that overflows a narrow column.
+- **the form** — the count list, a second notice, a text input, a tickbox with a
+  paragraph beside it, and a destructive button.
+
+Both pass on every measurement the script already makes: no horizontal scroll,
+nothing past the viewport edge, every tap target at 44px, every rendered string
+at AA, no CSP violation, nothing in the console.
+
+One check is new to this script rather than inherited, and it is the one worth
+keeping: **does the count list stay inside the box that draws it?** The
+page-level check catches a list that pushes the *document* sideways. A list that
+overflows its own bordered box without widening the page — because an ancestor
+clips or scrolls — is invisible to it, and reads on a phone as a sentence cut
+off mid-word with nothing to say there is more. So every `<li>` is compared with
+the `<ul>`'s own rectangle.
+
+### Two things that were nearly measured instead
+
+**The empty state.** This script's own history is three screens audited in their
+empty state and reported under the name of the populated one, so before a single
+pixel is measured the sixteen count lines are checked to be *on the screen*. A
+four-line box is a shorter box, and the entire question here is whether sixteen
+fit. Without that check the measurement would have silently become a measurement
+of whatever the card happened to draw.
+
+**A label that is not the label.** `mustShow: /Type their email address to
+confirm/` failed on a screen that was perfectly correct. `Field` renders its
+label with `uppercase`, which is a `text-transform` rather than different
+characters in the markup, and `innerText` is the *rendered* text — so the screen
+reads TYPE THEIR EMAIL ADDRESS TO CONFIRM. Every other `mustShow` in this script
+names content rather than a label, which is why nothing had met this before. The
+pattern is case-insensitive now and the reason is written above it.
+
+### The fixture moved twice, and the second move is the interesting one
+
+Both scripts need this record and they need it for different questions —
+`verify:account-access` asks whether each sentence carries the **right** number,
+`verify:viewport` asks whether sixteen of them **fit** — so it was extracted to
+one module. That stops the second script drifting into measuring a shorter list
+than the first one checks.
+
+It was extracted to `src/lib/verify/erasure-fixture.ts` first, and **three unit
+tests failed immediately.** `open-decisions.test.ts` scans `src/` and fails if
+anything in it hard-deletes an investor account, an offer or a recipient, because
+item 12 says the erasure pseudonymises in place. Two more guards do the same for
+snapshot rows and for what may issue a document. The fixture removes its own
+rows, so it set all three off.
+
+**The answer to a guard that fires correctly is never an exemption.** A test
+fixture that deletes test rows is not application code, and the guards are right
+that nothing in `src/` should do this. So it lives at
+`scripts/lib/erasure-fixture.ts`, all three guards are untouched, and the reason
+is written at the top of the file so the next person does not move it back.
+
+`readdirSync('scripts')` in `scripts-are-runnable.test.ts` is not recursive, so
+a `lib/` subdirectory does not read as a verification script with no `pnpm`
+entry.
+
+**Decisions.**
+
+- ***`MEDIA_STORE` is pinned empty for the server `verify:account-access`
+  starts.*** Its first phase is the blocked card, and `blockedBy` is set only
+  when `mediaStore()` is null — so inheriting the variable from `.env` made that
+  script's result depend on a line in a file it does not own: green on a machine
+  with no store and failing on one with a filesystem store, over a difference
+  that has nothing to do with what it tests. That was not hypothetical; it is
+  what happened on this machine the moment a store was configured for
+  `verify:viewport`. Nothing else in that script touches media.
+- ***`verify:viewport` measures the blocked branch only when it can, and says so
+  when it cannot.*** That script asks for a media store — the populated media
+  library cannot be measured without one — and a configured store means no record
+  on the page can be blocked. So the branch is measured when the store is absent
+  and a `note` line is printed when it is not. A conditional check that stays
+  quiet is a check nobody knows did not run.
+- ***The fixture is seeded inside the erasure function and removed in its own
+  `finally`, not in `seedInvestor`.*** A hundred and forty extra rows on
+  `/investors` is a different screen, and the twenty-six screens audited above it
+  should be measured against the register they have always been measured
+  against. `cleanUp()` calls the remover as well, first, for the run that dies
+  elsewhere — and it *has* to be first, because the fixture's address carries
+  this script's prefix and the ordinary cleanup loop deletes offers in an order
+  that record's foreign keys will not accept.
+- ***The count-line-inside-its-box check tolerates one pixel.*** Sub-pixel
+  layout means an exact comparison fails on rounding. One pixel is smaller than
+  anything a person can see and far smaller than a clipped word.
+
+**Deviations.** None. No application file changed.
+
+**Checklist.** Nothing here touches the application, so 1–12 are unchanged. The
+one it bears on is **5** only in the sense that the section measured belongs to
+the owner and the fixture is removed after every run, so no investor's record
+outlives it.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (2597) are green.
+`pnpm verify:account-access` is 68 and `pnpm verify:viewport` is **542**, and
+both pass.
+
+**Uncertain.**
+
+- ***The blocked layout is measured only on a run with no media store.*** On the
+  configured run the script asks for, it prints a note and moves on. Measuring
+  both on one run needs a second server and is the same rejected trade the last
+  entry recorded. **A reader of the output should know that a green run does not
+  necessarily mean that branch was measured.**
+- ***The bytes are still never destroyed through a browser.*** Unchanged.
+  `store.remove()` is reached only by `verify:erasure`.
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.*** Unchanged, and still a
+  human reading of `plan.ts`.
+- ***The section is measured at 375px and at no other width.*** That is true of
+  every screen this script covers and is the stated design — 375 is the
+  narrowest phone still in use — but a sixteen-item list inside a card is the
+  first thing here with an obvious intermediate breakpoint, and nothing looks at
+  414 or 768.
+- ***The count list is still read from one card.*** `/investors` renders every
+  account and both scripts scope to the fixture's card. Nothing checks that a
+  second account's card carries its own numbers rather than the first one's.
+- ***`verify:viewport` now depends on a fixture module it does not own.*** That
+  is the point of the module, but it means an edit to `ERASURE_COUNTS` changes
+  what two scripts measure, and only one of them is named in the file that
+  declares it.
+- ***The batching is still proved correct and not proved fast.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all, and
+  that is still the right answer.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is to leave it and write the recovery step into the runbook.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

@@ -250,6 +250,8 @@ The one thing that really is destroyed is **the files**: a signed subscription a
 
 So the investor that browser check erases now holds **one** row of one kind, **two** of another, and so on up to sixteen — every count different — and the screen is read for all sixteen sentences with their own numbers beside them. Swap any two labels and two numbers move. That was confirmed by doing it on purpose: two labels were swapped, the run failed and named both, and they were put back.
 
+**And it is now checked on a phone-sized screen too.** This section is the one part of the investors screen that opens rather than being there, and that turned out to be a blind spot: `pnpm verify:viewport` measures every screen at 375px, and it had never seen the inside of this one, because a closed panel is not laid out. So a sixteen-line list, a warning, a text box, a tickbox and a red button had never been measured on a phone at all. They are now — expanded, with the same sixteen-row investor behind them, in both the state that offers the form and the state that refuses. Nothing scrolls sideways, nothing spills out of its box, and every button is still big enough for a thumb.
+
 **One thing to raise with the formation agents.** Under UK and EU data-protection law, pseudonymised data is still personal data. What is built here is the most that can be done while keeping a coherent record of a securities transaction, and keeping that record is exactly what the privacy policy's *"subject only to anything that has to be retained"* is for. Whether that covers what has been kept is a question for advice, not for the build. It is written up in `OPEN_DECISIONS.md` item 12 with the two specific calls to put to them.
 
 ---
