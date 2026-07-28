@@ -43,9 +43,9 @@
 
 import 'dotenv/config'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync } from 'node:fs'
 import { and, eq, inArray } from 'drizzle-orm'
-import { chromium, type Browser, type Page } from 'playwright'
+import { type Browser, type Page } from 'playwright'
+import { launchChromium } from './lib/browser'
 import { db } from '@/db'
 import {
   accountStatusEvents,
@@ -1099,35 +1099,12 @@ async function signedOut(browser: Browser): Promise<void> {
 /**
  * A Chromium Playwright will actually launch.
  *
- * Playwright pins a browser build to its own version, and a machine that has a
- * Chromium from a different pin — a shared image, a CI cache, a sandbox that
- * pre-installs one — fails with "Executable doesn't exist" and a suggestion to
- * download it, which is not always possible and is never quick. So an explicit
- * path is honoured first, then the pinned download, and only then does this
- * give up. It never downloads anything.
- *
- * `CHROMIUM_PATH` is the escape hatch. On a developer machine that has run
- * `pnpm exec playwright install`, nothing is set and the pinned build is used.
+ * The ladder this used to hold itself now lives in `scripts/lib/browser.ts`,
+ * because it was here and in `verify:account-access` and in neither of the
+ * three scripts that needed it.
  */
 async function launchBrowser(): Promise<Browser> {
-  const explicit = process.env.CHROMIUM_PATH
-  if (explicit) return chromium.launch({ executablePath: explicit })
-
-  try {
-    return await chromium.launch()
-  } catch (error) {
-    for (const candidate of [
-      '/opt/pw-browsers/chromium',
-      '/usr/bin/chromium',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/google-chrome',
-    ]) {
-      if (!existsSync(candidate)) continue
-      console.log(`  note  Playwright's own build is absent; using ${candidate}`)
-      return chromium.launch({ executablePath: candidate })
-    }
-    throw error
-  }
+  return launchChromium()
 }
 
 

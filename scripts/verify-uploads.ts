@@ -67,7 +67,8 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq, like } from 'drizzle-orm'
-import { chromium, type Browser, type Page } from 'playwright'
+import { type Browser, type Page } from 'playwright'
+import { launchChromium } from './lib/browser'
 import { db } from '@/db'
 import { documentPackages, investorAccounts, mediaAssets, offers, rounds, users } from '@/db/schema'
 import { hashPassword } from '@/lib/auth/password'
@@ -380,9 +381,7 @@ async function main(): Promise<void> {
   let browser: Browser | undefined
 
   try {
-    browser = await chromium.launch({
-      ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
-    })
+    browser = await launchChromium()
     const context = await browser.newContext()
     const page = await context.newPage()
     watchTheConsole(page)

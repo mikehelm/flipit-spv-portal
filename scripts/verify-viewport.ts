@@ -48,7 +48,8 @@
 import 'dotenv/config'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { eq, inArray, like } from 'drizzle-orm'
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
+import { type Browser, type BrowserContext, type Page } from 'playwright'
+import { launchChromium } from './lib/browser'
 import { db } from '@/db'
 import {
   auditEvents,
@@ -882,13 +883,11 @@ async function main(): Promise<void> {
     // has to match the Playwright version exactly. Unset, Playwright uses its
     // own, which is what a developer running `pnpm exec playwright install`
     // will have.
-    const executablePath = process.env.CHROMIUM_PATH
     // Fake camera and microphone, so the recorder can actually be driven. This
     // supplies a device and auto-accepts the browser's own permission prompt;
     // it does NOT bypass the Permissions-Policy header, which Chromium enforces
     // before either. That is the point — see `verifyTheRecorder`.
-    browser = await chromium.launch({
-      ...(executablePath ? { executablePath } : {}),
+    browser = await launchChromium({
       // A fake camera, and deliberately NOT `--use-fake-ui-for-media-stream`.
       // That flag auto-accepts everything, including a request the
       // Permissions-Policy header has already refused: with `camera=()` served,

@@ -59,7 +59,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { and, desc, eq, like } from 'drizzle-orm'
-import { chromium, type Browser, type Page } from 'playwright'
+import { type Browser, type Page } from 'playwright'
+import { launchChromium } from './lib/browser'
 import { db } from '@/db'
 import {
   auditEvents,
@@ -569,8 +570,7 @@ async function main(): Promise<void> {
   let browser: Browser | undefined
 
   try {
-    browser = await chromium.launch({
-      executablePath: process.env.CHROMIUM_PATH || undefined,
+    browser = await launchChromium({
       args: [
         // A synthetic capture device. NOT --use-fake-ui-for-media-stream,
         // which would auto-accept a request the Permissions-Policy header has

@@ -11295,3 +11295,178 @@ untouched.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## Three checks that could not be run, and the fix that was already here twice
+
+The last entry named this as the obvious next item, and it was found by trying
+to run the verification suite rather than by reading anything. `verify:uploads`,
+`verify:viewport` and `verify:recorder` all died before their first check:
+
+    browserType.launch: Executable doesn't exist at
+      /opt/pw-browsers/chromium_headless_shell-1234/chrome-headless-shell-linux64/...
+    Looks like Playwright was just installed or updated.
+    Please run the following command to download new browsers.
+
+A perfectly good Chromium was on the disk at `/opt/pw-browsers/chromium`. It was
+numbered 1194 and Playwright's pin wanted 1234.
+
+**And the answer was already in the repository, twice.**
+`verify-account-access.ts` and `verify-erasure-bytes.ts` each carried the same
+ladder — honour `CHROMIUM_PATH`, try the pinned build, then walk four ordinary
+locations — with a docstring in one of them explaining exactly this failure and
+saying *"the same ladder as `verify:account-access`"*. It had been written,
+understood, documented, duplicated, and copied to none of the three scripts that
+needed it.
+
+`verify-all.ts` held a fourth copy of the launch. Its `browserPrerequisites`
+honoured `CHROMIUM_PATH` and stopped, so on this machine it reported *"Chromium
+will not launch"*, skipped four scripts, and filed it as the operator's missing
+prerequisite. **That is the one script whose entire purpose is to notice a
+verification that did not run.** Its own docstring says a preflight that guesses
+is worse than none — it was not guessing about the browser's existence, it was
+guessing about which browser, which is the same mistake one step along.
+
+This is the family `scripts-are-runnable.test.ts` was written for: a check that
+cannot fail because nothing runs it. There the cause was a missing line in
+`package.json`. Here it is a correct fix that was never shared.
+
+### What was built
+
+- ***`src/lib/verify/chromium.ts`*** — the decision, and it launches nothing.
+  `chooseChromium(env, exists)` and `fallbackChromium(exists)` take an
+  environment and a way to ask whether a path is there, so every branch is
+  testable without a browser, a download or a machine in a particular state.
+- ***`scripts/lib/browser.ts`*** — the twelve lines that act on it, and the only
+  place in the repository that calls `chromium.launch`. Each script's own
+  options pass through: `verify:recorder` and `verify:viewport` still get their
+  synthetic capture device.
+- ***All five scripts and `verify-all` rewired.*** Two lost a duplicated ladder,
+  three gained one they never had, and the preflight now answers the question
+  the same way the scripts do.
+- ***Three tests that are the actual point***: no script but `lib/browser.ts`
+  calls `chromium.launch`, no script reads `process.env.CHROMIUM_PATH` for
+  itself, and any script importing `playwright` must go through the launcher. A
+  sixth copy now fails the suite.
+
+### What it recovered
+
+    pnpm verify:uploads      55 passed, 0 failed
+    pnpm verify:viewport    542 passed, 0 failed
+    pnpm verify:recorder    107 passed, 0 failed
+
+**704 checks that could not be run in this environment**, all passing. And
+`verify:all` now opens with
+
+      note  Playwright's own build is absent; using /opt/pw-browsers/chromium
+      browser    Chromium 141.0.7390.37 launches
+      camera     a synthetic camera opens
+
+where it used to declare the browser unavailable and skip.
+
+`verify:viewport` failed once on the way, at *"a media store is configured for
+this run"* — `MEDIA_STORE` was empty in the local `.env`. That is the script
+being honest rather than measuring an empty library and calling it a pass; it is
+a configuration step and it is now written down in TEST_ME.md.
+
+**Decisions.**
+
+- ***An explicit `CHROMIUM_PATH` that is not there is a refusal, never a
+  fallback.*** Somebody who set it has said *which* browser to use, and quietly
+  substituting another makes a check pass while measuring something else. It
+  matters most for `verify:recorder`, where a headless shell and a full Chromium
+  give different answers about whether a camera opens — which is the reason the
+  variable exists.
+- ***An `executablePath` passed in by a caller is overridden.*** Choosing the
+  browser is the launcher's job, and two places deciding it is how this
+  happened.
+- ***Playwright's original error is rethrown unchanged when nothing works.*** It
+  names the download command, which is the right answer on a machine where
+  downloading is possible. Wrapping it would take that away.
+- ***The choice deliberately does not consult the filesystem for the pinned
+  build.*** `verify-all` tried that once and it was wrong in the direction that
+  matters — Playwright launches the headless *shell* in headless mode, a
+  different binary at a different path, so it declared Chromium missing and
+  skipped four scripts that ran perfectly by hand. Launch, then ask.
+- ***The pure half lives in `src/` and the launching half in `scripts/`.*** Same
+  split as `rules.ts` and `report.ts`, and it is what lets the ladder be tested
+  by `pnpm test` rather than only by running a browser script on a machine that
+  happens to be broken in the right way.
+
+**Deviations.** None.
+
+**Checklist.** None of the twelve is touched: nothing here reaches a send path,
+a figure, an investor-facing surface or a log line. It changes which binary a
+verification script starts.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2708**) are green.
+`pnpm verify:uploads` **55**, `pnpm verify:viewport` **542**,
+`pnpm verify:recorder` **107**, `pnpm verify:erasure` **160**,
+`pnpm verify:media` **54**, `pnpm verify:object-store` **52**,
+`pnpm verify:documents` **48**, `pnpm verify:erasure-bytes` **24**,
+`pnpm verify:account-access` **81**.
+
+**Uncertain.**
+
+- ***`verify:all` has not been seen through to its end here.*** It was started
+  and its preflight and first scripts watched; twenty-three scripts including
+  two servers and a `pg_restore` is a long run and the tail of it is unread.
+  **This is the first thing the next session should do**, and it is a command
+  rather than a build.
+- ***The fallback list is four paths and a guess about where a Chromium lives.***
+  It covers this sandbox and the ordinary distributions; a machine that keeps one
+  elsewhere still needs `CHROMIUM_PATH`, which is what it is for.
+- ***Nothing checks that the fallback browser is a *full* Chromium rather than a
+  headless shell.*** `verify:all` reports the camera separately and that is the
+  only place the difference shows. A shell picked up from the candidate list
+  would launch, pass most things and fail the recorder.
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved*** and
+  the finding says the process did not survive, which is not what happened.
+- ***`bucketRetentionFindings` is not in `unattendedFindings`.*** A versioned
+  bucket shows on the health page and never on the overview banner.
+- ***The partial-state findings have not been read on a screen.*** Proved through
+  the rule and the reader, not by opening `/admin/health` with a half-erased
+  investor in the database — and `verify:viewport` now runs, so that is cheap.
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***`DEPLOYMENT.md` §12.5 describes the old refusal*** and says nothing about
+  the two audit rows, the finding, or the sentence the owner now reads.
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is not to build it.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

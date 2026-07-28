@@ -1412,6 +1412,33 @@ The same is true of **Admin → Media** and of the **import** screen. And the se
 
 ---
 
+## Three checks that could not be run — and one that said so wrongly
+
+There is an earlier section on this page called *"Six checks that existed and could not be run"*. This is the same thing one level down, and it was found by simply trying to run everything.
+
+`pnpm verify:uploads`, `pnpm verify:viewport` and `pnpm verify:recorder` all drive a real browser. On this machine all three died before they started:
+
+> **Executable doesn't exist at .../chromium_headless_shell-1234/...**
+> Looks like Playwright was just installed or updated. Please run the following command to download new browsers.
+
+There *was* a perfectly good browser on the machine. It simply had a different version number than the one the testing library expected, and the three scripts had no idea to look for it — **while two other scripts in the same folder did**. `pnpm verify:account-access` and `pnpm verify:erasure-bytes` each carried a small piece of code that says "try the expected one; if it isn't there, look in the four places a browser usually lives". It worked. It had been written twice. It had been copied to none of the three scripts that needed it.
+
+And `pnpm verify:all` — the command whose whole job is to run all twenty-three checks and shout if any were skipped — held a fourth copy of the same launch. So it reported *"Chromium will not launch"*, skipped those scripts, and filed it under "your machine is missing something" rather than "this repository has the fix and did not use it".
+
+**There is now one place that decides which browser to use**, and every script goes through it. A test enforces that: adding a sixth script that launches its own browser fails the suite.
+
+The effect is not subtle. Those three commands run **704 checks** between them — every file-size limit at real sizes, every screen at 375 pixels, and David's video recorder driven with a synthetic camera. All 704 were unrunnable here and all 704 pass. And `pnpm verify:all` now prints what actually happened:
+
+```
+  note  Playwright's own build is absent; using /opt/pw-browsers/chromium
+  browser    Chromium 141.0.7390.37 launches
+  camera     a synthetic camera opens
+```
+
+**One thing about running these yourself.** `pnpm verify:viewport` needs somewhere to put a file, and will stop with *"a media store is configured for this run — set MEDIA_STORE in .env"* if you have not set one. That is the script being honest rather than measuring an empty library and calling it a pass — set `MEDIA_STORE="filesystem"` in `.env` and it runs.
+
+---
+
 ## Things worth knowing
 
 - The `ENCRYPTION_KEY` and `AUTH_SECRET` in your local `.env` are throwaway development values. Generate fresh ones for anything real.

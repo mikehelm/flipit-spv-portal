@@ -201,16 +201,18 @@ async function browserPrerequisites(): Promise<{
   browser: { ok: boolean; detail: string }
   camera: { ok: boolean; detail: string }
 }> {
-  const executablePath = process.env.CHROMIUM_PATH || undefined
-  if (executablePath && !existsSync(executablePath)) {
-    const detail = `CHROMIUM_PATH is set to ${executablePath}, which is not there`
-    return { browser: { ok: false, detail }, camera: { ok: false, detail } }
-  }
-
+  /*
+   * Through the same launcher the scripts use, which is the point.
+   *
+   * This used to hold a fourth copy of the launch, honouring `CHROMIUM_PATH`
+   * and nothing else — so on a machine whose Chromium is numbered differently
+   * from Playwright's pin it reported the browser as unavailable and skipped
+   * four scripts that `launchChromium` would have run. A preflight that
+   * disagrees with the thing it is gating is worse than no preflight.
+   */
   try {
-    const { chromium } = await import('playwright')
-    const browser = await chromium.launch({
-      executablePath,
+    const { launchChromium } = await import('./lib/browser')
+    const browser = await launchChromium({
       // The same synthetic device `verify:recorder` asks for, and deliberately
       // NOT `--use-fake-ui-for-media-stream`, which auto-accepts a request a
       // Permissions-Policy header has already refused.

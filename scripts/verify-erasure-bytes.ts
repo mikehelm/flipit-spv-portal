@@ -54,12 +54,12 @@
 
 import 'dotenv/config'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq, inArray } from 'drizzle-orm'
-import { chromium, type Browser, type Page } from 'playwright'
+import { type Browser, type Page } from 'playwright'
+import { launchChromium } from './lib/browser'
 import { db } from '@/db'
 import { documentPackages, investorAccounts, offers, participationCertificates, users } from '@/db/schema'
 import { ERASED_STORAGE_KEY, pseudonymEmail, pseudonymName } from '@/lib/erasure/plan'
@@ -195,29 +195,12 @@ async function startServer(mediaDirectory: string): Promise<ChildProcess> {
 /**
  * A Chromium Playwright will actually launch.
  *
- * The same ladder as `verify:account-access`, and it never downloads anything:
- * an explicit `CHROMIUM_PATH`, then Playwright's own pinned build, then the
- * builds a shared image is likely to have.
+ * The ladder this used to hold itself now lives in `scripts/lib/browser.ts`,
+ * because it was here and in `verify:account-access` and in neither of the
+ * three scripts that needed it.
  */
 async function launchBrowser(): Promise<Browser> {
-  const explicit = process.env.CHROMIUM_PATH
-  if (explicit) return chromium.launch({ executablePath: explicit })
-
-  try {
-    return await chromium.launch()
-  } catch (error) {
-    for (const candidate of [
-      '/opt/pw-browsers/chromium',
-      '/usr/bin/chromium',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/google-chrome',
-    ]) {
-      if (!existsSync(candidate)) continue
-      console.log(`  note  Playwright's own build is absent; using ${candidate}`)
-      return chromium.launch({ executablePath: candidate })
-    }
-    throw error
-  }
+  return launchChromium()
 }
 
 async function signInWithPassword(page: Page, email: string, password: string): Promise<void> {
