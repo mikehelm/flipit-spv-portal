@@ -8,6 +8,10 @@ citation names a test or check that exists — the same test resolves each one
 against the real label in the real file, so a renamed or deleted test breaks
 the map rather than leaving a citation pointing at nothing.
 
+And a test renders this document from that table and compares it with the
+file on disk, so a line added here by hand fails the suite rather than
+quietly claiming a check that does not exist.
+
 48 of 48 criteria have at least one automated check. 1 carry a written note.
 
 Where a check runs:

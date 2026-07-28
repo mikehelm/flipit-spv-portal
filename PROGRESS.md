@@ -9263,3 +9263,136 @@ scope.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src \'self\'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+## "The one to trust", checked
+
+The item two entries have carried:
+
+> ***`ACCEPTANCE.md` has not been checked either.*** `CLAIMS.md` calls it *"the
+> one to trust"* because it is generated from the tests rather than typed. That
+> claim is itself unverified, and generated-from-tests is exactly the sort of
+> thing that stops being true when somebody edits the output once by hand.
+
+Same treatment as `OPEN_DECISIONS.md` and `CLAIMS.md`. **The claim holds, and the
+thing that was supposed to make it hold did not exist.**
+
+### The claim is true
+
+`pnpm acceptance` was run against the committed file and the output is **byte for
+byte identical**. Nobody has hand-edited it, the 48 criteria are quoted from
+BUILD_SPEC §22 by a test that reads the specification, and every citation is
+resolved against a real label in a real file by another. `CLAIMS.md` is right to
+point people at it. That is the first honest thing anybody has been able to say
+about that sentence.
+
+### And nothing was stopping it becoming false
+
+`acceptance.test.ts` had two checks on the document, and both ran in the same
+direction: *does everything in the table appear in the file*. Neither asked the
+reverse. So a line added to `ACCEPTANCE.md` by hand —
+
+```
+- `src/lib/nothing.test.ts` — unit — "proves the thing"
+```
+
+— passed both of them, and the document then claimed a check that does not
+exist. So did an edited header: *"48 of 48 criteria have at least one automated
+check"* could have been typed over a smaller number and nothing would have
+noticed. The file says **"Do not edit it"** and that was a request.
+
+It matters more in this file than in any other, because it is the one a reader is
+sent to in order to find out what is actually proved. A document that overstates
+coverage is worse than no document: it is the specific thing somebody consults
+*instead of* looking.
+
+### The fix
+
+The rendering moved out of `scripts/acceptance-table.ts` into
+`src/lib/acceptance-document.ts`, so a test can call it. `acceptance.test.ts`
+now renders the document from the verified table and compares it with the file on
+disk, byte for byte, with a failure message that says which of the two things
+went wrong and what to run.
+
+**It was checked by breaking it**, which is the question this repository asks of
+every check: a citation for a test that does not exist was appended to the file,
+the suite failed with the intended message, and the file was restored. The two
+older assertions were kept — they give a better failure message for the ordinary
+case of forgetting to regenerate — so the new one is a floor rather than a
+replacement.
+
+The document now says so in its own header, because a reader deserves to know
+which of the sentences at the top of a generated file are enforced.
+
+**Decisions.**
+
+- ***The renderer moved rather than being duplicated in the test.*** A second
+  copy of the rendering would agree with the first until somebody changed one,
+  which is the failure this whole exercise is about.
+- ***The two existing assertions were kept.*** They are narrower and they fail
+  with *"ACCEPTANCE.md does not mention AC12's …"*, which tells somebody who
+  forgot `pnpm acceptance` exactly what changed. The byte comparison tells them
+  only that something did.
+- ***The erasure is deliberately not in the table.*** The 48 criteria are
+  BUILD_SPEC §22, and erasure is an `OPEN_DECISIONS` item rather than a §22
+  criterion. Adding a forty-ninth row would have made the document stop being
+  what its own title says it is. Where the erasure is written up is
+  `DEPLOYMENT.md §12`, `OPEN_DECISIONS.md` item 12 and `TEST_ME.md`.
+
+**Deviations.** None. `ACCEPTANCE.md` changed only by the three lines the
+renderer now emits about itself.
+
+**Checklist.** Nothing in this entry touches the application. 1–12 are unchanged
+and untouched: no money is computed, no send path exists here, no gate is read or
+written, no investor-facing surface is altered, no token is issued, no log line
+is added, no route\'s indexability changes, and the base-URL guard is not
+involved.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2597**) are green.
+
+**Uncertain.**
+
+- ***The table\'s own judgement is still unaudited.*** Every citation now
+  resolves, appears, and cannot be added by hand — but *whether a named test
+  actually proves the criterion it is filed under* is a human reading, and
+  nobody has done it for all 48. `acceptance.test.ts` spot-checks the ones WP19
+  singles out. The rest are a mapping somebody made once.
+- ***One criterion carries a written note rather than a check***, and the test
+  asserts the note explains itself rather than saying "manual". Whether the
+  explanation is a good reason is, again, a reading.
+- ***`CLAIMS.md` is now the only coordinating document with no test at all***,
+  and that remains the right answer for the reason the previous entry gave: its
+  statements are about sessions rather than about the application, and there is
+  nothing in the repository to compare them against.
+- ***The erasure section is still not measured at 375px*** — `verify:viewport`
+  does not know about it — and the `blockedBy` refusal notice has still never
+  been rendered on a screen.
+- ***The erasure journey erases one investor with three messages and one offer***,
+  so fourteen of the sixteen count labels are rendered by nothing.
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12***, and it is a conversation with
+  the formation agents rather than a package. **It is now the largest open thing
+  in the repository that is not somebody\'s configuration step.**
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael\'s
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is to leave it and write the recovery step into the runbook.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src \'none\'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator\'s side.*
+- *`frame-ancestors \'self\'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src \'self\'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

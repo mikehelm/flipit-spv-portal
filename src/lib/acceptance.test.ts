@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { ACCEPTANCE_CRITERIA } from './acceptance'
+import { renderAcceptanceDocument } from './acceptance-document'
 
 /**
  * The map of BUILD_SPEC §22 to the checks that answer it. WP19.
@@ -209,5 +210,36 @@ describe('ACCEPTANCE.md is generated from this table, not maintained beside it',
         )
       }
     }
+  })
+
+  it('and contains nothing the table does not, byte for byte', () => {
+    /*
+     * **The check the two above cannot make, and the reason this one exists.**
+     *
+     * Both of them ask whether something in the table appears in the document.
+     * Neither asks the reverse, so a line added to `ACCEPTANCE.md` by hand —
+     *
+     *     - `src/lib/nothing.test.ts` — unit — "proves the thing"
+     *
+     * — passes both, and the document then claims a check that does not exist.
+     * So does an edited count in the header: "48 of 48" could be typed over a
+     * smaller number and nothing would notice.
+     *
+     * That matters more here than it would in any other document, because
+     * `CLAIMS.md` points every reader at this one and calls it *"the one to
+     * trust"*, on the grounds that it is generated rather than typed. That
+     * claim was itself unverified — which is exactly the failure this
+     * repository has already met twice, with `OPEN_DECISIONS.md` and then with
+     * `CLAIMS.md`.
+     *
+     * Rendering the document and comparing it is the whole of the fix. The file
+     * says "Do not edit it"; this is what makes that true rather than polite.
+     */
+    const onDisk = readFileSync('ACCEPTANCE.md', 'utf8')
+    expect(
+      onDisk,
+      'ACCEPTANCE.md differs from what the table renders — either it was edited by hand, ' +
+        'or a citation changed and `pnpm acceptance` was not run. Run it.',
+    ).toBe(renderAcceptanceDocument())
   })
 })

@@ -92,6 +92,14 @@ With WP15, **all forty-eight acceptance criteria have an automated check**.
 `ACCEPTANCE.md` is the current account of which are proved and how, and it is
 generated from the tests rather than typed, so it is the one to trust.
 
+**That claim was checked on 28 July 2026 and it holds** — regenerating the file
+produces it byte for byte, so nobody has edited it. What was *missing* is now
+built: a test renders the document from the verified table and compares it with
+the file on disk, so a citation added by hand fails the suite instead of quietly
+claiming a check that does not exist. Before that, the two existing assertions
+both ran one way — does the table appear in the file — and neither asked the
+reverse.
+
 Document packages — §5's status 3 — landed after WP15 and are done too.
 
 **The object store behind the media seam is done** — `ObjectMediaStore` is a
