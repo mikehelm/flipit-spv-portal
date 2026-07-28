@@ -57,6 +57,40 @@ export function everyOf<T>(rows: HasEvery<T>, predicate: (row: T, index: number)
 }
 
 /**
+ * Nothing here matches `absent` — **and there was something here to look at**.
+ *
+ * The mirror image of `everyOf`, and it hides in the negation. `some` returns
+ * `false` for an empty collection, so
+ *
+ *     check("and Bruno's document is not in Alice's list",
+ *       !aliceList.some((d) => d.id === brunoDoc.id))
+ *
+ * passes when Alice's list is empty — which is what a defect in the query that
+ * builds it would produce. Every one of these in this repository is a
+ * checklist-point-5 claim: *no investor-facing page reveals that another
+ * investor exists.* A version of that claim satisfied by showing Alice nothing
+ * at all is not the claim.
+ *
+ * `present` is the control. It defaults to *"at least one row that is not the
+ * thing we are saying is absent"*, which is the weakest honest guard and is
+ * automatic. Where the fixture supports something stronger — *Alice's own
+ * document is there and Bruno's is not* — pass it, because that one also proves
+ * the list is being filtered rather than merely built empty.
+ *
+ * Where absence is genuinely the whole answer and there is no control to be
+ * had, this is the wrong function and a comment saying so is the right answer.
+ * A control invented to satisfy a helper is worse than an honest gap.
+ */
+export function noneOf<T>(
+  rows: readonly T[],
+  absent: (row: T, index: number) => boolean,
+  present: (row: T, index: number) => boolean = (row, index) => !absent(row, index),
+): boolean {
+  if (!rows.some((row, index) => present(row, index))) return false
+  return !rows.some((row, index) => absent(row, index))
+}
+
+/**
  * `a` appears before `b`, **and both appear**.
  *
  * `text.indexOf(a) < text.indexOf(b)` is the same defect wearing a different

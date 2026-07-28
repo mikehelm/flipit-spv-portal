@@ -12278,3 +12278,168 @@ changed.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The same defect with the polarity reversed
+
+The last entry queued this and named it exactly: *"`.some(` is the mirror image
+and has not been looked at. `rows.some(bad)` is `false` on an empty collection,
+so a check written as 'nothing here is bad' passes when there is nothing here."*
+
+Forty-three `.some(` call sites. Most are positive — *the register contains
+Nina* — and a positive `some` is self-guarding, because an empty collection
+fails it. **Twelve are negated**, and every one of them is a claim of the form
+*this thing is not visible to that person*. Several are checklist point 5 in
+person:
+
+- ***`!aliceList.some((d) => d.id === brunoDoc.id)`*** — Bruno's document is not
+  on Alice's portal.
+- ***`!aliceGroup.some(...)`*** — Alice's group on the operator's screen carries
+  nothing of Bruno's.
+- ***`!aliceFeed.updates.some(...)` and `!carolFeed.updates.some(...)`*** — a
+  targeted update reaches one investor and nobody else.
+
+All of them pass when the list is empty, and an empty list is precisely what a
+defect in the query that builds it produces. *"Alice cannot see Bruno's
+document"* satisfied by Alice seeing nothing at all is not the claim.
+
+### What was built
+
+***`noneOf(rows, absent, present?)`*** — nothing matches `absent`, **and there
+was something there to look at**. `present` is the control, and it defaults to
+*"at least one row that is not the thing we say is absent"*, which is the
+weakest honest guard and costs nothing to adopt. Where the fixture supports
+something stronger it is passed explicitly, and six sites do:
+
+- Alice's own document is the control for Bruno's absence.
+- The general update is the control in both Alice's and Carol's feed for the
+  targeted one's absence.
+- The other published entry is the control for the unpublished one leaving the
+  shared page.
+- The wording as shown is the control for the new wording being absent from the
+  acknowledgement history.
+
+That stronger form proves something the weak one does not: the list is being
+**filtered**, rather than merely built empty.
+
+### The six that were left, and why
+
+`noneOf` is the wrong function where absence is genuinely the whole answer and
+there is no control to be had — a control invented to satisfy a helper is worse
+than an honest gap. Six sites are in that position and **each now carries a
+comment saying so and naming what stands in for a control**:
+
+- ***A draft is on nobody's portal*** — the first update in the fixture, so
+  Alice's feed is legitimately empty. The check that the same feed *does* carry
+  it once published is the control, one screen later.
+- ***A withdrawn update disappears*** — it was the only one Alice ever had.
+- ***An un-issued correction is invisible*** — the point is that the investor may
+  have nothing else.
+- ***Two erasure findings clear after a retry*** — an empty list is correct, and
+  the checks that the finding was *raised* before the retry prove the reader
+  works.
+- ***A deleted object is in no listing*** — the bucket holds only what the check
+  put in it.
+
+A gap that is written down is a different thing from a gap nobody knows about.
+That is the whole subject of the last three entries.
+
+### Proved by breaking it
+
+`loadInvestorUpdates` made to return an empty feed for every investor, and
+`verify:updates` run twice against the same mutation:
+
+- ***With `noneOf`:*** `FAIL nobody else sees it`, `FAIL a status-filtered update
+  reaches only that status` — 36 passed, 5 failed.
+- ***With the old `!some` restored:*** `ok nobody else sees it`.
+
+The same defect, in the same run, caught by one form and reported green by the
+other.
+
+**Decisions.**
+
+- ***No source-level guard for `.some(` this time***, and that is deliberate.
+  Six of the twelve legitimately have no control, so a guard would either be
+  wrong or would need an escape hatch — and the obvious escape,
+  `rows.filter(bad).length === 0`, is exactly as vacuous while looking more
+  careful. A ban that people route around is worse than none. The `everyOf`
+  guard stands because there is no legitimate empty case for it.
+- ***The default control is the weak one.*** Requiring a named control at every
+  site would have meant inventing one in the places where the fixture does not
+  supply it, which is the failure mode this package exists to avoid.
+
+**Deviations.** None.
+
+**Checklist.** Point 5, strengthened at four sites: no investor-facing page
+reveals that another investor exists, now checked against a list that was proved
+to contain the right things rather than against any list at all. No production
+code changed.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2816**) are green.
+`pnpm verify:all` is **25 passed, 0 failed, 0 skipped**.
+
+**Uncertain.**
+
+- ***A check whose fixture never reaches the branch it asserts is still
+  invisible.*** That is what the overview-banner defect actually was, and neither
+  `everyOf`, `noneOf` nor `appearsBefore` would have caught it. The only method
+  that finds those is mutating the thing under test and watching what stays
+  green. It has now been done to eight assertions by hand, across four sessions,
+  and to nothing systematically. **A `pnpm verify:mutants` that applies a
+  declared list of mutations and fails when one is not caught is the shape of the
+  answer, and it does not exist.**
+- ***The six negated checks without controls are recorded, not solved.*** Three of
+  them could have controls if the fixture published a second update or seeded a
+  second document. That is a fixture change, and it was judged out of scope
+  rather than impossible.
+- ***`.filter(...).length === 0` has not been looked at***, and it is the third
+  coat of the same defect.
+- ***The same trick would work on the health *signal*.*** `summariseHealth`
+  reduces the report for an uptime monitor, and nothing asks whether it and the
+  page agree about what needs a person. A third surface for the same findings,
+  with no parity test.
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved.***
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

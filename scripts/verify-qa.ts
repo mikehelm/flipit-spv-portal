@@ -38,7 +38,7 @@ import {
   setPinned,
   unpublishEntry,
 } from '@/lib/qa/service'
-import { everyOf } from '@/lib/verify/vacuous'
+import { everyOf, noneOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp9-verify'
 
@@ -317,7 +317,13 @@ async function main(): Promise<void> {
   const afterUnpublish = await loadSharedQa()
   check(
     'an unpublished entry leaves the shared page',
-    !afterUnpublish.some((item) => item.id === seeded.entryId),
+    // The control is the other published entry: a shared page that has stopped
+    // returning anything at all would satisfy the negative on its own.
+    noneOf(
+      afterUnpublish,
+      (item) => item.id === seeded.entryId,
+      (item) => item.id === asked.entryId,
+    ),
   )
 
   console.log('\nThe reply email (§6.7.2)')

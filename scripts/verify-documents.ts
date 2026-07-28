@@ -34,6 +34,7 @@ import { resetEnvCache } from '@/lib/env'
 import { ingest } from '@/lib/media/ingest'
 import { mediaStore, resetMediaStoreCache } from '@/lib/media/store'
 import { canView, portalAccess } from '@/lib/portal/access'
+import { noneOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'docs-verify'
 
@@ -228,7 +229,17 @@ async function main(): Promise<void> {
 
   check("Alice's portal lists exactly one document", aliceList.length === 1)
   check('and it is hers', aliceList[0]?.id === aliceDoc!.document.id)
-  check("and Bruno's is not in it", !aliceList.some((d) => d.id === brunoDoc!.document.id))
+  check(
+    "and Bruno's is not in it",
+    // Hers is the control. Without one, a query that returned nothing at all
+    // would satisfy this — and "Alice cannot see Bruno's document" is not a
+    // claim that should be true because Alice can see nothing.
+    noneOf(
+      aliceList,
+      (d) => d.id === brunoDoc!.document.id,
+      (d) => d.id === aliceDoc!.document.id,
+    ),
+  )
   check("Bruno's portal lists exactly one, and it is his", brunoList.length === 1 && brunoList[0]?.id === brunoDoc!.document.id)
   check(
     "nothing in Alice's list mentions Bruno",
@@ -346,6 +357,10 @@ async function main(): Promise<void> {
   )
   check(
     'and the correction is not on her portal',
+    // No control on this list by design: the point is that an un-issued
+    // correction is invisible, and the investor may legitimately have nothing
+    // else. The check above that the issued version *is* listed proves the
+    // reader works.
     !duringUpload.some((d) => d.id === v2row!.id),
   )
 
@@ -427,7 +442,11 @@ async function main(): Promise<void> {
     aliceGroup.some((entry) => entry.documents.some((d) => d.id === aliceDoc!.document.id)))
   check(
     "and Alice's group contains no document belonging to Bruno",
-    !aliceGroup.some((entry) => entry.documents.some((d) => d.id === brunoDoc!.document.id)),
+    noneOf(
+      aliceGroup,
+      (entry) => entry.documents.some((d) => d.id === brunoDoc!.document.id),
+      (entry) => entry.documents.some((d) => d.id === aliceDoc!.document.id),
+    ),
   )
 
   await cleanup()

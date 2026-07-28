@@ -28,7 +28,7 @@ import {
   recordAcknowledgements,
 } from '@/lib/portal/acknowledgements-data'
 import { forbiddenWordsInAcknowledgement } from '@/lib/portal/acknowledgements'
-import { everyOf } from '@/lib/verify/vacuous'
+import { everyOf, noneOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp-ack-verify'
 
@@ -144,7 +144,7 @@ async function main(): Promise<void> {
   check('live wording is offered', activeMine.length === 2)
   check(
     'archived wording is not',
-    !activeMine.some((row) => row.id === archived.id),
+    noneOf(activeMine, (row) => row.id === archived.id),
   )
   check(
     'and it comes back in the configured order',
@@ -186,7 +186,13 @@ async function main(): Promise<void> {
   )
   check(
     'and does not carry the new words',
-    !after.some((row) => row.label === newWords),
+    // The words as shown are the control: a history that had stopped returning
+    // anything would satisfy the negative on its own.
+    noneOf(
+      after,
+      (row) => row.label === newWords,
+      (row) => row.label === originalWords,
+    ),
   )
   check(
     'and still carries the revision it was ticked under',
@@ -241,7 +247,7 @@ async function main(): Promise<void> {
 
   check(
     'the archived item is off the portal',
-    !(await activeAcknowledgementItems()).some((row) => row.id === optional.id),
+    noneOf(await activeAcknowledgementItems(), (row) => row.id === optional.id),
   )
   check(
     'and what was ticked under it is still on the record',

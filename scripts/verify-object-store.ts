@@ -314,6 +314,9 @@ async function main(): Promise<void> {
   check('and a stat says it is gone', (await store2.stat(doomedKey)) === null)
   check(
     'and it is in no listing',
+    // No control: this bucket holds only what this check put in it, so an empty
+    // listing is a legitimate answer. The stat and get above, which assert the
+    // object was there and then was not, are what prove the store is answering.
     !(await store2.list(1000)).objects.some((object) => object.key === doomedKey),
   )
   check(

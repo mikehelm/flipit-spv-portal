@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { appearsBefore, everyOf } from './vacuous'
+import { appearsBefore, everyOf, noneOf } from './vacuous'
 
 const root = join(import.meta.dirname, '../../..')
 
@@ -37,6 +37,53 @@ describe('every, for a check that found nothing', () => {
     // Same short-circuit as `every`. Recorded because a check that counted its
     // own calls would be surprised otherwise.
     expect(seen).toBe(2)
+  })
+})
+
+describe('nothing here matches, on a list that had something in it', () => {
+  it('is false on an empty collection, where the negation says true', () => {
+    /*
+     * The claim being defended is *"Alice cannot see Bruno's document"*. A
+     * version of it satisfied by Alice seeing nothing at all is not the claim,
+     * and an empty list is exactly what a defect in the query that builds it
+     * produces.
+     */
+    expect(![].some(() => true)).toBe(true)
+    expect(noneOf([], () => true)).toBe(false)
+  })
+
+  it('is true when the row is absent and something else is there', () => {
+    expect(noneOf(['alice'], (row) => row === 'bruno')).toBe(true)
+  })
+
+  it('is false when the row is there', () => {
+    expect(noneOf(['alice', 'bruno'], (row) => row === 'bruno')).toBe(false)
+  })
+
+  it('is false when the only rows present are the ones said to be absent', () => {
+    // The default control is "something here is not the thing we are excluding".
+    // A list of nothing but excluded rows fails on both counts.
+    expect(noneOf(['bruno'], (row) => row === 'bruno')).toBe(false)
+  })
+
+  it('takes a stronger control when the fixture has one', () => {
+    const list = ['alice-doc']
+    expect(
+      noneOf(
+        list,
+        (row) => row === 'bruno-doc',
+        (row) => row === 'alice-doc',
+      ),
+    ).toBe(true)
+    // The named control missing is a failure even though the excluded row is
+    // also missing — which is the point: the list is not the list it should be.
+    expect(
+      noneOf(
+        ['somebody-elses-doc'],
+        (row) => row === 'bruno-doc',
+        (row) => row === 'alice-doc',
+      ),
+    ).toBe(false)
   })
 })
 

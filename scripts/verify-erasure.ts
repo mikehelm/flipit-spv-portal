@@ -926,6 +926,12 @@ async function main(): Promise<void> {
     const frankRetry = await eraseAccount({ accountId: frank.account.id, actor: owner })
     check('with the obstruction cleared, running it again succeeds', frankRetry.ok)
     check(
+      // No control, and there cannot be one: an empty list is the *correct*
+      // answer here, because this deployment has no other unfinished erasure to
+      // hold the list open. A `readUnfinishedErasures` that had stopped
+      // returning anything would pass this — and would fail the checks above it
+      // that require the finding to be present before the retry, which is what
+      // stands in for the control.
       'and the finding clears',
       !(await readUnfinishedErasures()).some((row) => row.accountId === frank.account.id),
     )
@@ -1200,6 +1206,9 @@ async function main(): Promise<void> {
      */
     const stillUnfinished = await readUnfinishedErasures()
     check(
+      // As above: emptiness is the right answer and there is no control to be
+      // had. The check that the finding was *raised* before the retry is what
+      // proves the reader works.
       'the second run clears the finding',
       !stillUnfinished.some((row) => row.accountId === erin.account.id),
       JSON.stringify(stillUnfinished),

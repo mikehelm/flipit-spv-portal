@@ -25,6 +25,7 @@ import {
   resolveAudience,
   withdrawUpdate,
 } from '@/lib/updates/service'
+import { noneOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp11-verify'
 let actor: { kind: 'user'; id: string; label: string }
@@ -117,6 +118,10 @@ async function main(): Promise<void> {
 
   const aliceBefore = await loadInvestorUpdates(alice.id, activeAccess)
   check(
+    // No control: this is the first update in the fixture, so Alice's feed is
+    // legitimately empty here and `noneOf` would refuse it. The check below
+    // that the same feed *does* carry the update once it is published is what
+    // proves the feed is read rather than merely absent.
     'a draft is on nobody’s portal',
     !aliceBefore.updates.some((row) => row.id === draft.updateId),
   )
@@ -207,8 +212,20 @@ async function main(): Promise<void> {
   check('the intended recipient sees it', bobFeed.updates.some((row) => row.id === targeted.updateId))
   check(
     'nobody else sees it',
-    !aliceFeed.updates.some((row) => row.id === targeted.updateId) &&
-      !carolFeed.updates.some((row) => row.id === targeted.updateId),
+    // The general update is the control in both feeds. A feed that had stopped
+    // returning anything would otherwise prove this on its own, and "nobody
+    // else sees it" is not a claim that should be satisfied by nobody seeing
+    // anything.
+    noneOf(
+      aliceFeed.updates,
+      (row) => row.id === targeted.updateId,
+      (row) => row.id === draft.updateId,
+    ) &&
+      noneOf(
+        carolFeed.updates,
+        (row) => row.id === targeted.updateId,
+        (row) => row.id === draft.updateId,
+      ),
   )
   check(
     "and its text does not appear in anybody else's feed",
@@ -235,8 +252,10 @@ async function main(): Promise<void> {
     (await loadInvestorUpdates(carol.id, activeAccess)).updates.some(
       (row) => row.id === statusTargeted.updateId,
     ) &&
-      !(await loadInvestorUpdates(alice.id, activeAccess)).updates.some(
+      noneOf(
+        (await loadInvestorUpdates(alice.id, activeAccess)).updates,
         (row) => row.id === statusTargeted.updateId,
+        (row) => row.id === draft.updateId,
       ),
   )
 
@@ -295,6 +314,9 @@ async function main(): Promise<void> {
 
   const afterWithdraw = await loadInvestorUpdates(alice.id, activeAccess)
   check(
+    // No control: the withdrawn update is the only one Alice ever received, so
+    // her feed is legitimately empty afterwards. The check that it was there
+    // before the withdrawal is what stands in for one.
     'it disappears from every portal',
     !afterWithdraw.updates.some((row) => row.id === draft.updateId),
   )

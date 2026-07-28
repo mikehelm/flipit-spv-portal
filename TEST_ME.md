@@ -1615,6 +1615,40 @@ nothing.
 
 ---
 
+## And the same mistake upside down
+
+The section above is about checks that ask *"is every one of these true?"* of an
+empty list. There is a mirror image, and it is where the privacy claims live.
+
+Asking *"is any one of these Bruno's document?"* of an empty list gives the
+answer *no* — so a check written as **"and Bruno's document is not on Alice's
+portal"** passes when Alice's portal is showing her nothing at all. That is not
+the claim. The claim is that Alice sees her own things and not other people's,
+and a version of it satisfied by Alice seeing nothing is worthless.
+
+Twelve checks were written that way. The important ones are exactly the privacy
+promises: Bruno's document not on Alice's portal, Bruno's document not in
+Alice's group on the operator's screen, and an update sent to one investor not
+appearing in anybody else's feed.
+
+Six of them now check against a **control** — Alice's own document is there and
+Bruno's is not; the general update is still in both other feeds and the targeted
+one is not. That is a stronger statement than the original: it proves the list is
+being filtered, rather than merely coming back empty.
+
+The other six are cases where an empty list is the honest answer — a draft that
+nobody has been sent yet, an update that was withdrawn and was the only one
+there, a deleted file in a bucket that holds nothing else. **Those now carry a
+written note saying so, and naming the neighbouring check that stands in for a
+control.** A gap somebody wrote down is a different thing from a gap nobody
+knows about.
+
+**How it was proved.** Every investor's update feed was made to come back empty.
+The new form failed and named the check; the old form said *ok*. Same defect,
+same run.
+
+---
+
 ## Things worth knowing
 
 - The `ENCRYPTION_KEY` and `AUTH_SECRET` in your local `.env` are throwaway development values. Generate fresh ones for anything real.
