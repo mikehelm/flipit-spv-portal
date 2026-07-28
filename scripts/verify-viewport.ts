@@ -47,7 +47,7 @@
 
 import 'dotenv/config'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { eq, inArray, like } from 'drizzle-orm'
+import { and, eq, inArray, like } from 'drizzle-orm'
 import { type Browser, type BrowserContext, type Page } from 'playwright'
 import { launchChromium } from './lib/browser'
 import { db } from '@/db'
@@ -82,6 +82,11 @@ import {
   removeErasureFixture,
   seedErasureFixture,
 } from './lib/erasure-fixture'
+import {
+  ERASURE_BEGAN_ACTION,
+  ERASURE_COMPLETED_ACTION,
+  ERASURE_INCOMPLETE_ACTION,
+} from '@/lib/erasure/erase'
 import { mediaStore } from '@/lib/media/store'
 
 const PREFIX = 'wp18-viewport'
@@ -93,6 +98,17 @@ const VIEWPORT = { width: 375, height: 812 }
 
 const ADMIN_EMAIL = 'mike@flipthepage.com'
 const ADMIN_PASSWORD = 'wp18-verify-not-a-real-password'
+
+/**
+ * The overview banner, in either of the two sentences it can be.
+ *
+ * One pattern rather than the plural one written by hand at each site, because
+ * the plural one *was* written by hand and it silently made the check that this
+ * banner disappears unfailable: the healthy fixture carried a scheduler fault,
+ * the banner read *"One thing needs you"*, and `/things need you/` did not match
+ * it. Anything asking whether the banner is on a screen asks through this.
+ */
+const BANNER_PRESENT = /One thing needs you|\d+ things need you/
 
 let passed = 0
 let failed = 0
@@ -672,11 +688,45 @@ async function cleanUp(): Promise<void> {
       )
     }
 
+    // And the rows written *against the account itself* rather than against one
+    // of its offers. `verifyTheUnfinishedErasuresOnScreen` writes an erasure
+    // line here to draw a finding that has only ever been proved in a unit
+    // test; it removes them by id in its own `finally`, and this is for the run
+    // that dies with the browser open. Scoped to an account whose address
+    // begins with this script's prefix, so nothing a person did is touched.
+    await db
+      .delete(auditEvents)
+      .where(
+        and(eq(auditEvents.entityType, 'investor_account'), eq(auditEvents.entityId, account.id)),
+      )
+
     await db.delete(offers).where(eq(offers.accountId, account.id))
     await db.delete(investorAccounts).where(eq(investorAccounts.id, account.id))
   }
 
+  // The same check's synthetic account — an id that is deliberately not a real
+  // account, because the second finding is about a process that died and the
+  // record it was erasing is not what that finding is claiming anything about.
+  await db.delete(auditEvents).where(like(auditEvents.entityId, `${PREFIX}%`))
+
   await db.delete(recipients).where(like(recipients.email, `${PREFIX}%`))
+
+  // The completed-run line seeded above is written against the round, so it
+  // goes with the round rather than by prefix — an audit row pointing at a row
+  // that no longer exists is worse than no audit row.
+  const seededRounds = await db
+    .select({ id: rounds.id })
+    .from(rounds)
+    .where(like(rounds.name, `${PREFIX}%`))
+  if (seededRounds.length > 0) {
+    await db.delete(auditEvents).where(
+      inArray(
+        auditEvents.entityId,
+        seededRounds.map((round) => round.id),
+      ),
+    )
+  }
+
   await db.delete(rounds).where(like(rounds.name, `${PREFIX}%`))
 
   // The wizard's own leavings, which are keyed by a filename and an evidence
@@ -709,6 +759,32 @@ async function seedInvestor(): Promise<string> {
       status: 'ACTIVE',
     })
     .returning()
+
+  /*
+   * A reminder run that completed, so the fixture database is **healthy**.
+   *
+   * It was not, and nothing said so. `schedulerFindings` raises a `WRONG` the
+   * moment no `reminder.run_completed` has ever been written, which was true of
+   * this fixture from the day it was created — so every screen below was
+   * measured with an orange banner across the top of the overview, and
+   * `verifyTheBannerWithAFaultBehindIt`, whose whole subject is that banner,
+   * ended by asserting it had gone when it had not. That check tested
+   * `/things need you/` against a banner reading *"One thing needs you"*, and
+   * the singular does not match the plural. A check that cannot fail is worse
+   * than no check, and this one had the word "gone" in its label.
+   *
+   * So the baseline is now genuinely quiet: the banner branch is drawn where a
+   * function deliberately induces a fault, and nowhere else. It also means the
+   * hide-and-restore in that function finally has a row to hide, which is a
+   * second path that had never executed.
+   */
+  await db.insert(auditEvents).values({
+    actorLabel: 'verify-viewport',
+    entityType: 'round',
+    entityId: round!.id,
+    action: 'reminder.run_completed',
+    metadata: { considered: 1, sent: 0, skipped: 1, blocked: 0, failed: 0, limit: 50 },
+  })
 
   await db.insert(recipients).values({
     roundId: round!.id,
@@ -1023,6 +1099,8 @@ async function main(): Promise<void> {
     await verifyTheStylePolicy(page)
 
     await verifyTheBannerWithAFaultBehindIt(page)
+
+    await verifyTheUnfinishedErasuresOnScreen(page)
 
     await verifyTheEmailPreview(page)
 
@@ -2096,7 +2174,7 @@ async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
 
     check(
       'the banner is on the screen at all',
-      /things need you/.test(text),
+      BANNER_PRESENT.test(text),
       text.slice(0, 160),
     )
 
@@ -2104,7 +2182,7 @@ async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
     // signed in by their own address, which is their own address on their own
     // screen; the banner is the thing that must carry nobody's.
     const banner = (
-      await page.locator('p', { hasText: /things need you/ }).first().innerText()
+      await page.locator('p', { hasText: BANNER_PRESENT }).first().innerText()
     ).replace(/\s+/g, ' ')
 
     check(
@@ -2168,7 +2246,7 @@ async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
   // that is always there would have passed every check above.
   await page.goto(`${ORIGIN}/admin`, { waitUntil: 'networkidle' })
   const healthy = await onScreen(page)
-  check('and it is gone once the fault is', !/things need you/.test(healthy))
+  check('and it is gone once the fault is', !BANNER_PRESENT.test(healthy), healthy.slice(0, 160))
   check(
     'while the way through to the health page is not',
     (await page.locator('a[href$="/health"]').count()) > 0,
@@ -2179,6 +2257,349 @@ async function verifyTheBannerWithAFaultBehindIt(page: Page): Promise<void> {
     .from(auditEvents)
     .where(inArray(auditEvents.action, [HIDDEN, HIDDEN_MEDIA]))
   check('no audit entry is left renamed', leftRenamed.length === 0)
+}
+
+/**
+ * The two erasure findings, on the two screens that carry them. OPEN_DECISIONS
+ * item 12.
+ *
+ * `erasureFindings` is the newest rule in the health report and the only one
+ * about an action that cannot be undone. Every entry in PROGRESS.md since it was
+ * written has opened its Uncertain list with the same sentence — *the
+ * partial-erasure findings have not been read on a screen* — because they are
+ * proved through the rule and through the reader, and neither of those is a
+ * browser. What was actually unknown was three things, and the first two are the
+ * shape of defect this whole script exists for:
+ *
+ *   1. **Whether they lay out at 375px.** The detail of the stopped finding is
+ *      the longest string this application puts on a page — five sentences and
+ *      a comma-joined run of account ids, in a `<p>` inside a bordered `<li>`
+ *      inside a card. The banner's own sentence grows a clause per area. Neither
+ *      had ever been measured at any width, because neither had ever been drawn.
+ *   2. **Whether the wording survives being rendered.** A headline is built from
+ *      a count and a pluralised noun and a detail from six interpolations; the
+ *      unit test reads the string the function returned, and this reads the
+ *      string a browser painted, which is the one a person acts on.
+ *   3. **Whether the banner leaks what the rule was careful not to put in it.**
+ *      The finding names an account id — deliberately, as the reminder findings
+ *      name a reminder id — and the banner is supposed to carry the *area* and
+ *      nothing else. That is a claim about a component reading a rule, and this
+ *      is the only place it can be checked.
+ *
+ * Both stages are driven, because they are different sentences with different
+ * remedies and the remedies are not interchangeable: `incomplete` says run it
+ * again, `began` says look at the name first and suspend if it is already a
+ * pseudonym. A screen showing one remedy under the other's headline would be a
+ * person destroying more of an investor's data than they meant to.
+ *
+ * **And the unreadable row.** `readUnfinishedErasures` parses its metadata
+ * rather than casting it, so that a row written by a later version degrades to
+ * *"something unfinished is here and it will not say how much"* instead of
+ * vanishing. That branch changes the rendered sentence — `7` becomes `at least
+ * 7` — and until now nothing had seen it anywhere. So the check runs twice: once
+ * with two clean rows, and once with a third whose metadata this version cannot
+ * read.
+ *
+ * The stopped row is written against **the real seeded investor**, which is what
+ * makes the last check possible. The finding's central claim is that *"every
+ * screen shows an ordinary record"* — that is the whole reason it is `WRONG`
+ * rather than a note — and that claim has only ever been prose. Here the same
+ * run that reads the finding opens `/investors` and confirms the investor is
+ * still there in full, name and address and figures, exactly as the finding
+ * warns. The began row is written against a synthetic id on purpose: that
+ * finding says what state the record is in *cannot be told from here*, so
+ * attaching it to a record would be asserting something it does not know.
+ *
+ * Every row it writes is removed by id. The audit log is append-only by design
+ * and this is a script, not a person.
+ */
+async function verifyTheUnfinishedErasuresOnScreen(page: Page): Promise<void> {
+  console.log('\nThe unfinished erasures, on the two screens that carry them')
+
+  const [seeded] = await db
+    .select({ id: investorAccounts.id, name: investorAccounts.name })
+    .from(investorAccounts)
+    .where(like(investorAccounts.email, `${PREFIX}@%`))
+    .limit(1)
+
+  check('the seeded investor is there to attach a stopped erasure to', seeded !== undefined)
+  if (!seeded) return
+
+  /** An id that is deliberately not an account, and is removable by prefix. */
+  const ghostAccountId = `${PREFIX}-erasure-ghost`
+
+  const written: string[] = []
+
+  const writeLine = async (
+    entityId: string,
+    action: string,
+    metadata: unknown,
+    hoursAgo: number,
+  ): Promise<void> => {
+    const [row] = await db
+      .insert(auditEvents)
+      .values({
+        actorLabel: 'verify-viewport',
+        entityType: 'investor_account',
+        entityId,
+        action,
+        metadata: metadata as never,
+        createdAt: new Date(Date.now() - hoursAgo * 60 * 60 * 1000),
+      })
+      .returning({ id: auditEvents.id })
+    if (row) written.push(row.id)
+  }
+
+  try {
+    // A real erasure writes `began` and then its outcome, so both rows are
+    // written for the stopped one. A fixture that wrote only the outcome would
+    // be testing the rule against a state the application cannot produce, and
+    // it would quietly skip the fold in `latestPerAccount` that decides which
+    // of two lines for one account wins.
+    //
+    // The two are an hour apart rather than adjacent. Written in the same
+    // millisecond the fold breaks the tie towards the *less* resolved action
+    // — which is the right default and would make this fixture assert the
+    // wrong finding, so the fixture does not lean on it.
+    await writeLine(seeded.id, ERASURE_BEGAN_ACTION, { objects: 34 }, 6)
+    await writeLine(
+      seeded.id,
+      ERASURE_INCOMPLETE_ACTION,
+      { objectsDestroyed: 7, objectsRemaining: 27 },
+      5,
+    )
+    await writeLine(ghostAccountId, ERASURE_BEGAN_ACTION, { objects: 12 }, 2)
+
+    // ---------------------------------------------------------------------
+    // The overview banner
+    // ---------------------------------------------------------------------
+
+    await auditScreen(
+      page,
+      'overview, with two unfinished erasures',
+      '/admin',
+      200,
+      BANNER_PRESENT,
+    )
+
+    const banner = (
+      await page.locator('p', { hasText: BANNER_PRESENT }).first().innerText()
+    ).replace(/\s+/g, ' ')
+
+    check('the banner counts both of them', /^2 things need you/.test(banner), banner)
+    check(
+      'and names the area, from the finding rather than from prose',
+      /erasure/.test(banner),
+      banner,
+    )
+    check(
+      'and names it once, though two findings carry it',
+      (banner.match(/erasure/g) ?? []).length === 1,
+      banner,
+    )
+    // The list `describeAreas` built, exactly — between the colon and the full
+    // stop the page puts after it. Matching the whole sentence would not do:
+    // the banner's own prose carries both a comma and the word "and", so a
+    // pattern looking for a joined list finds one whatever the areas were.
+    check(
+      'and erasure is the whole of that list rather than one entry in it',
+      /: erasure\. /.test(banner),
+      banner,
+    )
+    check(
+      'and it sends the reader to the page that says which',
+      (await page.locator('a[href$="/health"]').count()) > 0,
+    )
+
+    // What the banner must not carry. The rule puts an account id in the
+    // finding on purpose; the banner takes areas and nothing else, and this is
+    // the only place that separation is actually exercised.
+    check('the banner names no account', !banner.includes(seeded.id) && !banner.includes(ghostAccountId), banner)
+    check('and no investor', !banner.includes(seeded.name ?? 'Alexandra'), banner)
+    check(
+      'and no email address',
+      !/[\w.+-]+@[\w-]+\.[\w.]{2,}/.test(banner),
+      banner.match(/[\w.+-]+@[\w-]+\.[\w.]{2,}/)?.[0],
+    )
+    check('and no count of destroyed files', !/\b7\b|\b27\b/.test(banner), banner)
+
+    // ---------------------------------------------------------------------
+    // The health page
+    // ---------------------------------------------------------------------
+
+    await auditScreen(
+      page,
+      'system health, with two unfinished erasures',
+      '/health',
+      200,
+      /stopped part way through/,
+    )
+
+    const health = flatten(await onScreen(page))
+
+    check('both findings are under what needs a person', /Needs you/.test(health))
+    check(
+      'the stopped erasure says so, with the count it managed before the store refused',
+      /1 erasure stopped part way through and destroyed files the record still names\./.test(
+        health,
+      ) && /after 7 stored files had already been destroyed/.test(health),
+    )
+    check(
+      'and says the bytes cannot be recovered, which is the part that is not fixable',
+      /cannot be recovered/.test(health),
+    )
+    check(
+      'and names the account, which the banner did not',
+      health.includes(seeded.id),
+      `looked for ${seeded.id}`,
+    )
+    check(
+      'and its remedy is to run the erasure again',
+      /run the erasure again from the investors page/.test(health),
+    )
+
+    check(
+      'the abandoned erasure is a separate finding with its own sentence',
+      /1 erasure began and recorded no outcome\./.test(health),
+    )
+    check(
+      'and it names the account whose process died',
+      health.includes(ghostAccountId),
+      `looked for ${ghostAccountId}`,
+    )
+    check(
+      'and its remedy is the other one — look at the name, then suspend',
+      /suspending and unsuspending revokes every session and link/.test(health),
+    )
+
+    // The two remedies are the reason these are two findings rather than one
+    // with a conditional clause. A screen that showed either under the other's
+    // headline would have somebody destroying more than they meant to.
+    check(
+      'the two remedies are both on the screen and are not the same sentence',
+      /run the erasure again from the investors page/.test(health) &&
+        /suspending and unsuspending revokes every session and link/.test(health),
+    )
+
+    // Neither finding may carry a name or an address. `erasureFindings` reads
+    // only the audit rows, so this is a check that it stays that way — the
+    // account id is the one identifier it is allowed.
+    const erasureRows = await page
+      .locator('li', { hasText: /erasure (stopped part way|began and recorded)/ })
+      .allInnerTexts()
+    const erasureText = flatten(erasureRows.join(' '))
+    check('the findings themselves are on the screen as their own rows', erasureRows.length >= 2, `${erasureRows.length} rows`)
+    check(
+      'and neither carries an email address',
+      !/[\w.+-]+@[\w-]+\.[\w.]{2,}/.test(erasureText),
+      erasureText.match(/[\w.+-]+@[\w-]+\.[\w.]{2,}/)?.[0],
+    )
+    check(
+      'and neither carries the investor’s name',
+      !erasureText.includes(seeded.name ?? 'Alexandra'),
+      erasureText.slice(0, 160),
+    )
+
+    // ---------------------------------------------------------------------
+    // The claim the finding makes about every other screen
+    // ---------------------------------------------------------------------
+    //
+    // "The database was not touched, so the investor's name, address and every
+    // line of free text are still there and every screen shows an ordinary
+    // record." That is the reason this is WRONG rather than a note, and it had
+    // only ever been prose.
+
+    await page.goto(`${ORIGIN}/investors`, { waitUntil: 'networkidle' })
+    const investors = flatten(await onScreen(page))
+    check(
+      'and the investor the stopped erasure names is still on the register in full',
+      investors.includes(seeded.name ?? 'Alexandra Fenwick-Harrington'),
+    )
+    check(
+      'with nothing on that screen to say an erasure ever started',
+      !/stopped part way through/.test(investors),
+    )
+
+    // ---------------------------------------------------------------------
+    // The row this version cannot read
+    // ---------------------------------------------------------------------
+
+    await writeLine(ghostAccountId + '-2', ERASURE_INCOMPLETE_ACTION, { objectsDestroyed: 'many' }, 9)
+
+    await page.goto(`${ORIGIN}/health`, { waitUntil: 'networkidle' })
+    const degraded = flatten(await onScreen(page))
+
+    check(
+      'a row whose metadata this version cannot read still raises the finding',
+      /2 erasures stopped part way through/.test(degraded),
+      degraded.slice(0, 200),
+    )
+    check(
+      'and the count it can still read is reported as a floor, not as the total',
+      /after at least 7 stored files had already been destroyed/.test(degraded),
+    )
+
+    await page.goto(`${ORIGIN}/admin`, { waitUntil: 'networkidle' })
+    const stillTwo = (
+      await page.locator('p', { hasText: BANNER_PRESENT }).first().innerText()
+    ).replace(/\s+/g, ' ')
+    check(
+      'because three unresolved rows are still two things to do',
+      /^2 things need you/.test(stillTwo),
+      stillTwo,
+    )
+  } finally {
+    if (written.length > 0) {
+      await db.delete(auditEvents).where(inArray(auditEvents.id, written))
+    }
+  }
+
+  // Resolved, and gone — the other half of the claim, and the half that says
+  // the finding is reading the log rather than a flag somebody set. A
+  // completion line for each account, then the banner must be silent again.
+  const resolved: string[] = []
+  try {
+    for (const entityId of [seeded.id, ghostAccountId, `${ghostAccountId}-2`]) {
+      const [row] = await db
+        .insert(auditEvents)
+        .values({
+          actorLabel: 'verify-viewport',
+          entityType: 'investor_account',
+          entityId,
+          action: ERASURE_COMPLETED_ACTION,
+          metadata: null,
+        })
+        .returning({ id: auditEvents.id })
+      if (row) resolved.push(row.id)
+    }
+
+    await page.goto(`${ORIGIN}/admin`, { waitUntil: 'networkidle' })
+    const quiet = await onScreen(page)
+    check(
+      'and once each erasure records a completion the banner is gone',
+      !BANNER_PRESENT.test(quiet),
+      quiet.slice(0, 160),
+    )
+  } finally {
+    if (resolved.length > 0) {
+      await db.delete(auditEvents).where(inArray(auditEvents.id, resolved))
+    }
+  }
+
+  const left = await db
+    .select({ id: auditEvents.id })
+    .from(auditEvents)
+    .where(
+      and(
+        eq(auditEvents.actorLabel, 'verify-viewport'),
+        eq(auditEvents.entityType, 'investor_account'),
+      ),
+    )
+  check(
+    'no erasure line this check wrote is left in the log',
+    left.length === 0,
+    `${left.length} left`,
+  )
 }
 
 main()

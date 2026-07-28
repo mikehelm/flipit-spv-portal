@@ -11722,3 +11722,219 @@ the half that rots silently while somebody reads the other half and believes it.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## Two erasure findings, read on a screen — and a check about a banner that could not fail
+
+The last three entries opened their Uncertain list with the same sentence:
+*the partial-erasure findings have not been read on a screen.* They are proved
+through the rule and through the reader, and neither of those is a browser.
+
+Driving them found something else, which is the reason this entry is not simply
+"the findings render".
+
+### The check with the word "gone" in its label
+
+`verifyTheBannerWithAFaultBehindIt` induces three faults, measures the overview
+banner, puts all three back, and ends:
+
+    check('and it is gone once the fault is', !/things need you/.test(healthy))
+
+It had passed on every run since it was written. **The banner was still there
+every time.**
+
+The fixture database has never had a `reminder.run_completed` audit row, and
+`schedulerFindings` raises a `WRONG` the moment there is none — *"No reminder run
+has ever completed."* One finding. So the banner read
+
+> **One thing needs you**, and nothing else on this screen would tell you about
+> it: the scheduled run.
+
+and `/things need you/` does not match *"thing needs you"*. The singular is a
+different sentence, and the pattern had been typed out by hand at each of the
+three sites that use it.
+
+Two consequences, and the second is the larger one:
+
+- ***The check could not fail.*** Not "was unlikely to" — the string it tests for
+  cannot appear in the branch it is asserting the absence of, so no defect in
+  the banner's disappearance would ever have been reported by it.
+- ***Every screen in this script was measured with a banner on it.*** Thirty-two
+  screens audited at 375px, and the one thing they all shared — the admin shell
+  — was carrying an orange notice the whole time. Not wrong, exactly, but it
+  meant the branch the script calls "with a fault" was the only branch anything
+  had ever been measured in, and the healthy overview had been drawn by nothing.
+
+### What was built
+
+- ***`BANNER_PRESENT`***, one pattern covering both sentences, used everywhere
+  that asks whether the banner is on a screen. The plural-only pattern is gone
+  from all three sites.
+- ***The fixture writes a completed reminder run***, so the baseline is genuinely
+  quiet and the banner branch is drawn only where a function deliberately
+  induces a fault. This also gives `verifyTheBannerWithAFaultBehindIt` a row to
+  hide — its `if (existing.length > 0)` rename-and-restore had never executed.
+- ***`verifyTheUnfinishedErasuresOnScreen`***, 49 checks, which is the item the
+  last three entries queued.
+
+### What the erasure check actually drives
+
+Audit lines are written to put the database into the two unresolved states, and
+then both screens are read.
+
+- ***`began` then `incomplete` against the real seeded investor.*** Not the
+  outcome line alone: a real erasure writes both, and a fixture that wrote one
+  would be testing the rule against a state the application cannot produce and
+  would skip the fold in `latestPerAccount` that decides which of two lines
+  wins. They are an hour apart, because in the same millisecond that fold breaks
+  the tie towards the *less* resolved action — correct behaviour, and not
+  something a fixture should lean on.
+- ***`began` alone against a synthetic id***, for the second finding. Deliberately
+  not a real account: that finding's own claim is that what state the record is
+  in *cannot be told from here*, so attaching it to a record would assert
+  something it does not know.
+- ***A third `incomplete` whose metadata this version cannot read.***
+  `readUnfinishedErasures` parses rather than casts so that a row from a later
+  version degrades to *"something unfinished is here and it will not say how
+  much"*. That branch changes the rendered sentence — `after 7 stored files` to
+  `after at least 7 stored files` — and nothing had ever seen it anywhere.
+
+What is then checked, beyond the layout and contrast pass every screen gets:
+
+- The banner counts **two** things, names **erasure**, and names it **once**
+  though two findings carry it — and the area list is the whole of the list
+  rather than one entry in it.
+- The banner carries **no account id**, no investor name, no address, and
+  **neither of the two counts**. The rule puts an account id in the finding on
+  purpose, the same way a stuck-claim finding carries a reminder id; the banner
+  takes areas and nothing else, and this is the only place that separation is
+  exercised.
+- The health page carries **both headlines**, the count, *"cannot be recovered"*,
+  **both account ids**, and **both remedies** — which are the reason these are two
+  findings and not one with a conditional clause. `incomplete` says run it again;
+  `began` says look at the name first and suspend if it is already a pseudonym.
+  A screen showing either remedy under the other's headline would have somebody
+  destroying more of an investor's data than they meant to.
+- Neither finding row carries an email address or the investor's name.
+- ***The claim the finding makes about every other screen.*** *"The database was
+  not touched … every screen shows an ordinary record."* That is why it is
+  `WRONG` rather than a note, and it had only ever been prose. The same run opens
+  `/investors` and confirms the investor is still there in full, with nothing on
+  that screen to say an erasure ever started.
+- ***Three unresolved rows are still two things to do***, because the stopped
+  finding aggregates.
+- ***A completion line for each, and the banner is gone*** — proving the finding
+  reads the log rather than a flag somebody set, and that the disappearance is
+  now testable at all.
+- Every row it writes is removed by id, and it asserts the log is clean
+  afterwards. The audit log is append-only by design and this is a script.
+
+### Proved by breaking it
+
+The seeded `reminder.run_completed` removed, and nothing else changed:
+
+    586 passed, 5 failed
+
+`and it is gone once the fault is` is among the five. It has now failed once,
+which is more than it had managed in its whole existence.
+
+**Decisions.**
+
+- ***The fixture is made healthy rather than the assertions being widened.*** The
+  alternative was to teach every check to expect a scheduler fault, which would
+  have made the fixture's own defect part of the specification of thirty-two
+  screens.
+- ***The completed-run line is deleted with the round it names***, not by prefix.
+  An audit row pointing at a row that no longer exists is worse than no audit
+  row.
+- ***The banner's area list is matched between the colon and the full stop.*** The
+  first version asserted the sentence contained no joined list, and failed: the
+  banner's own prose carries both a comma and the word "and", so that pattern
+  finds a list whatever the areas were. Matching the fragment `describeAreas`
+  produced is the only honest form.
+- ***`MEDIA_STORE="filesystem"` is required to run this script*** and that is
+  unchanged — the media library check refuses rather than measuring an empty
+  screen.
+
+**Deviations.** None.
+
+**Checklist.** Point 5 is the one this touches, and in the direction of proving
+it: the banner and both findings are checked for an address, a name and a count,
+on the screen rather than in the rule. None of the other eleven is affected.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2722**) are green.
+`pnpm verify:viewport` is **591 passed, 0 failed** — it was 542.
+
+**Uncertain.**
+
+- ***`erasureFindings` is on the banner and no test says the banner and the page
+  agree about it*** the way the storage one does. The screen check above proves
+  they agree *today*, on one fixture; the storage rule has a unit test that walks
+  five states and fails when a rule is added to one list and not the other, and
+  the erasure rule has nothing of that shape. **This is the next item, and it is
+  cheap.**
+- ***The same question, asked generally, has never been asked at all.*** Both
+  parity tests — the storage one and whatever answers the item above — name their
+  rule. Nothing enumerates the rules that are supposed to be on the banner and
+  checks the list, so a *third* rule added to `buildFindings` and forgotten in
+  `unattendedFindings` is still invisible.
+- ***How many other checks in this repository cannot fail?*** One was found by
+  accident, in a script whose subject was the thing it was failing to check. The
+  method that found it — change the fixture, see what stays green — has been
+  applied to one script and one assertion. `verify:erasure`, `verify:health` and
+  `verify:register` are the same shape and have never been mutated.
+- ***The healthy overview has now been measured for the first time***, and it
+  passed. Nothing else changed shape, but thirty-two screens were measured under
+  a different shell today than yesterday and only the totals were compared.
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.*** Both are on this machine, in the same directory.
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.*** The `began` row this
+  writes is a hand-made imitation of one.
+- ***An exception inside the transaction leaves a `began` row unresolved*** and
+  the finding says the process did not survive, which is not what happened.
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.*** §1, §8 and §12.5's
+  neighbours are prose against code in the same way, and the three cron lines in
+  §8 are the ones most likely to drift next.
+- ***`TEST_ME.md` has no test at all***, and it is the longest coordinating
+  document in the repository. Most of it could not be checked mechanically; the
+  command names and the check counts in it could.
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is not to build it.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

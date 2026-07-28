@@ -1427,7 +1427,7 @@ And `pnpm verify:all` — the command whose whole job is to run all twenty-three
 
 **There is now one place that decides which browser to use**, and every script goes through it. A test enforces that: adding a sixth script that launches its own browser fails the suite.
 
-The effect is not subtle. Those three commands run **704 checks** between them — every file-size limit at real sizes, every screen at 375 pixels, and David's video recorder driven with a synthetic camera. All 704 were unrunnable here and all 704 pass. And `pnpm verify:all` now prints what actually happened:
+The effect is not subtle. Those three commands run **704 checks** between them (**753** now — see the two sections below) — every file-size limit at real sizes, every screen at 375 pixels, and David's video recorder driven with a synthetic camera. All 704 were unrunnable here and all 704 pass. And `pnpm verify:all` now prints what actually happened:
 
 ```
   note  Playwright's own build is absent; using /opt/pw-browsers/chromium
@@ -1456,6 +1456,83 @@ Every admin screen has a banner at the top when something needs a person. It is 
 That is the wrong way round. The versioning problem is the one that makes an erasure a lie: the application deletes an investor's signed agreement, the bucket writes a note saying "deleted" and keeps the file, and every check in the application passes. It is the most serious thing this report can find and it was the quietest.
 
 It is on the banner now, and there is a test that walks five different storage states and insists that anything serious enough for the health page is also on the banner — so the next check added to one cannot quietly miss the other.
+
+---
+
+## A check that could not fail
+
+This one is worth reading even though nothing you can see has changed, because
+it is the least visible kind of defect there is.
+
+`pnpm verify:viewport` opens every screen in a real browser at phone size and
+measures it. One of its checks is about the orange banner at the top of the
+admin screens — the one that appears when something needs a person. It induces
+three faults, confirms the banner appears and says the right things, puts the
+faults back, and then confirms **the banner has gone**.
+
+That last check had passed every time it had ever run. The banner was still
+there every time.
+
+The test database had never recorded a completed reminder run, and the
+application quite correctly says so — *"No reminder run has ever completed."*
+That is one thing needing a person, so the banner read **"One thing needs you"**.
+The check was looking for the words **"things need you"**, in the plural. The
+singular is a different sentence, so the check could not match it — and a check
+that cannot match cannot fail.
+
+Two things came out of that. The banner is now recognised in either of its two
+sentences, everywhere it is asked about. And the test database now records a
+completed run, so it starts **healthy** — which means every screen measured by
+that script had, until today, been measured with an orange banner across the top
+of it, and the ordinary quiet version had been drawn by nothing.
+
+**How it was proved.** The completed run was taken back out and the script run
+again: five checks failed, including that one. It has now failed once, which is
+more than it had managed in its entire existence.
+
+---
+
+## The half-finished erasure, on the screen
+
+Erasing an investor is the one thing in this application that cannot be undone,
+and it is the one thing that can go half-done: the stored files are destroyed
+first, on purpose, because the other order would leave a signed agreement in a
+bucket with nothing pointing at it. If the storage refuses part way through, the
+files are gone and the record still describes the investor in full.
+
+The application already noticed that and put it on two screens — a line on
+**Admin → System health**, and a count in the banner. **Neither had ever been
+looked at in a browser.** They were proved by testing the rule that produces the
+words, which is not the same as opening the page.
+
+They have now been driven, at phone size, with a genuinely half-erased investor
+in the database. Forty-nine checks. The ones worth knowing about:
+
+- **The banner says two things need you, names "erasure", and names it once**
+  even though two separate findings are behind it.
+- **The banner carries no account, no name, no address and neither count.** The
+  finding itself names the account — deliberately, so you can find the record —
+  and the banner is meant to carry the subject and nothing else. This is the only
+  place that separation is actually checked.
+- **The health page carries both findings and, importantly, both remedies.** They
+  are different: a storage refusal means *run the erasure again*; a run that
+  died mid-way means *look at the name first, and if it is already a pseudonym,
+  suspend and unsuspend to sign them out everywhere*. A screen showing one
+  remedy under the other's headline would have somebody destroying more of an
+  investor's data than they meant to.
+- **The claim the warning makes about every other screen is now checked.** The
+  warning says the database was not touched and every screen still shows an
+  ordinary record. The same run opens the investors screen and confirms exactly
+  that — the investor is there in full, with nothing to suggest an erasure was
+  ever attempted. That is the whole reason this is a red warning rather than a
+  note, and until now it was only a sentence.
+- **A record written by a future version of the application still raises the
+  warning**, and reports its count as *"at least 7"* rather than pretending it
+  knows the total.
+- **Record a completion for each, and the banner goes.**
+
+Every line the check writes into the audit log is removed afterwards, and it
+checks that it was.
 
 ---
 
