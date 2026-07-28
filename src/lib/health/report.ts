@@ -16,6 +16,7 @@ import { db } from '@/db'
 import { auditEvents, reminderEvents, reminderSchedules } from '@/db/schema'
 import { readServiceConfig } from '@/lib/auth/service-config'
 import { checkTemplateDrift } from '@/lib/compliance/drift'
+import { readUnfinishedErasures } from '@/lib/erasure/unfinished'
 import { readMailConnectionHealth } from '@/lib/email/transport'
 import { env } from '@/lib/env'
 import { disabledFlags, readFeatureFlags } from '@/lib/flags'
@@ -180,6 +181,7 @@ export async function gatherFacts(now: Date = new Date()): Promise<HealthFacts> 
       stuck: await stuckClaims(),
     },
     lastMediaCheck: await lastMediaCheck(),
+    unfinishedErasures: await readUnfinishedErasures(),
     storage: {
       configured: mediaStore() !== null,
       recordsNamingAFile: await countTrackedFiles(),
@@ -241,6 +243,7 @@ export async function gatherUnattendedFacts(
       stuck: await stuckClaims(),
     },
     lastMediaCheck: await lastMediaCheck(),
+    unfinishedErasures: await readUnfinishedErasures(),
   }
 }
 

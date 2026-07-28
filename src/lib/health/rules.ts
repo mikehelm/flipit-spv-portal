@@ -26,6 +26,7 @@
  * happening. This tells them, in a sentence each, and stops.
  */
 
+import type { UnfinishedErasure } from '@/lib/erasure/unfinished'
 import type { BucketVersioning } from '@/lib/media/s3'
 
 export type Severity = 'OK' | 'ATTENTION' | 'WRONG'
@@ -87,6 +88,17 @@ export interface UnattendedFacts {
    * load. What is read here is the *verdict of the last run*, never the run.
    */
   lastMediaCheck: MediaCheckSummary | null
+  /**
+   * Erasures whose most recent line is not a completion.
+   *
+   * One indexed read, bounded by the number of erasures ever attempted here —
+   * a handful in the life of a deployment — which is why it belongs in the
+   * cheap set. It is in the cheap set rather than only the full report because
+   * this is the failure that nothing else anywhere would surface: a
+   * half-erased investor looks, from every screen in this application, exactly
+   * like an investor.
+   */
+  unfinishedErasures: UnfinishedErasure[]
 }
 
 /** The counted outcome of one `pnpm media:check`, as it was written down. */
@@ -452,6 +464,84 @@ export function stuckClaimFindings(facts: UnattendedFacts): Finding[] {
         'Gmail Sent folder first if it matters whether the message went out.',
     },
   ]
+}
+
+/**
+ * An erasure that started and did not finish.
+ *
+ * **The one action in this application that cannot be undone, and until this
+ * rule existed it was also the one that could fail silently.** `eraseAccount`
+ * destroys stored bytes before it touches the database, deliberately — the
+ * reverse order leaves a signed subscription agreement in a bucket with nothing
+ * pointing at it. The cost of that ordering is that a store which refuses part
+ * way through leaves files destroyed, the record intact and describing the
+ * investor in full, and no screen anywhere showing a difference.
+ *
+ * Two shapes, two remedies, and they are not interchangeable — so they are two
+ * findings rather than one with a conditional sentence in it.
+ *
+ * `WRONG` for both. Every other rule here reserves that for a thing that is
+ * actively failing, and this qualifies on the strictest reading: an investor
+ * has asked to be erased, has been told it was done or has been told nothing,
+ * and their data is in a state nobody chose.
+ */
+export function erasureFindings(facts: UnattendedFacts): Finding[] {
+  const stopped = facts.unfinishedErasures.filter((row) => row.stage === 'INCOMPLETE')
+  const abandoned = facts.unfinishedErasures.filter((row) => row.stage === 'BEGAN')
+  const out: Finding[] = []
+
+  if (stopped.length > 0) {
+    // Nulls are rows whose metadata this version could not read. Counting them
+    // as zero would understate it; leaving the total out entirely when one row
+    // is unreadable would lose the figure for the rest.
+    const known = stopped.filter((row) => row.objectsDestroyed !== null)
+    const destroyed = known.reduce((total, row) => total + (row.objectsDestroyed ?? 0), 0)
+    const partial = known.length < stopped.length
+
+    out.push({
+      area: 'Erasure',
+      severity: 'WRONG',
+      headline: `${stopped.length} erasure${stopped.length === 1 ? '' : 's'} stopped part way through and destroyed files the record still names.`,
+      detail:
+        `The store refused, after ${partial ? 'at least ' : ''}${destroyed} stored file` +
+        `${destroyed === 1 ? '' : 's'} had already been destroyed. Those bytes are gone and ` +
+        'cannot be recovered. The database was not touched, so the investor’s name, address ' +
+        'and every line of free text are still there and every screen shows an ordinary ' +
+        `record — account ${stopped.map((row) => row.accountId).join(', ')}, most recently ` +
+        `${describeAge(stopped[0]!.at, facts.now)}.`,
+      remedy:
+        'Find out what the store is refusing over — an object lock, a legal hold, or a key ' +
+        'pair that can read and put but not delete are the usual three — then run the erasure ' +
+        'again from the investors page. A second run destroys what is left and completes the ' +
+        'record; destroying a file that is already gone is not an error. `pnpm media:check` ' +
+        'lists the ones already destroyed as missing.',
+    })
+  }
+
+  if (abandoned.length > 0) {
+    out.push({
+      area: 'Erasure',
+      severity: 'WRONG',
+      headline: `${abandoned.length} erasure${abandoned.length === 1 ? '' : 's'} began and recorded no outcome.`,
+      detail:
+        'An erasure writes a line when it starts and another when it finishes or stops. These ' +
+        'have the first and neither of the others, which means the process did not survive the ' +
+        'attempt — a restart, a kill, or a deployment part way through. What state the record ' +
+        'is in cannot be told from here: the stored files may be partly destroyed, the ' +
+        'database may or may not have been written, and if it was, the sessions and links that ' +
+        `should have been revoked may not have been — account ` +
+        `${abandoned.map((row) => row.accountId).join(', ')}, most recently ` +
+        `${describeAge(abandoned[0]!.at, facts.now)}.`,
+      remedy:
+        'Open the account on the investors page. If the name is already a pseudonym the ' +
+        'database half went through, and the investor should be signed out everywhere — ' +
+        'suspending and unsuspending revokes every session and link. If the name is still ' +
+        'the investor’s, run the erasure again; it is safe to repeat. `pnpm media:check` says ' +
+        'which stored files are already gone.',
+    })
+  }
+
+  return out
 }
 
 /** The mail connection (§8.1) — and whether anything is waiting on it. */
@@ -1070,7 +1160,12 @@ export function storageFindings(facts: HealthFacts): Finding[] {
  * the health page can never say different things about the same fact.
  */
 export function unattendedFindings(facts: UnattendedFacts): Finding[] {
-  return [...schedulerFindings(facts), ...stuckClaimFindings(facts), ...mediaProblemFindings(facts)]
+  return [
+    ...schedulerFindings(facts),
+    ...stuckClaimFindings(facts),
+    ...erasureFindings(facts),
+    ...mediaProblemFindings(facts),
+  ]
 }
 
 /** Every rule, in the order they are printed. */
@@ -1079,6 +1174,7 @@ export function buildFindings(facts: HealthFacts): Finding[] {
     ...schedulerFindings(facts),
     ...overdueFindings(facts),
     ...stuckClaimFindings(facts),
+    ...erasureFindings(facts),
     ...mailFindings(facts),
     ...complianceFindings(facts),
     ...serviceModeFindings(facts),

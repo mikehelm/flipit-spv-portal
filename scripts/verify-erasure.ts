@@ -61,7 +61,14 @@ import {
   users,
 } from '@/db/schema'
 import type { AdminIdentity } from '@/lib/auth/guards'
-import { eraseAccount, previewErasure } from '@/lib/erasure/erase'
+import {
+  ERASURE_BEGAN_ACTION,
+  ERASURE_INCOMPLETE_ACTION,
+  eraseAccount,
+  previewErasure,
+} from '@/lib/erasure/erase'
+import { readUnfinishedErasures } from '@/lib/erasure/unfinished'
+import { erasureFindings } from '@/lib/health/rules'
 import { ERASED_MARKER, ERASED_STORAGE_KEY, looksErased, pseudonymEmail } from '@/lib/erasure/plan'
 import { issueToken } from '@/lib/crypto'
 import { resetEnvCache } from '@/lib/env'
@@ -931,19 +938,48 @@ async function main(): Promise<void> {
     )
 
     // ---- one object refuses to go ----------------------------------------
-    const locked = keys[1]!
+    //
+    // The *second key in destruction order*, not the second one created. The
+    // loop now reads its keys ordered, so locking this one means exactly one
+    // object is destroyed before the refusal — every time, on every run. The
+    // previous version of this section could not say which of the three went,
+    // and said so in a comment.
+    const inDestructionOrder = [...keys].sort()
+    const locked = inDestructionOrder[1]!
     bucket.refuseDeleteOf.add(locked)
 
     const partial = await eraseAccount({ accountId: erin.account.id, actor: owner })
     check('an object that will not delete refuses the erasure', !partial.ok)
     check(
-      'with OBJECT_NOT_DESTROYED, not the no-store refusal',
-      !partial.ok && partial.reason === 'OBJECT_NOT_DESTROYED',
+      'with OBJECTS_PARTIALLY_DESTROYED, because one object had already gone',
+      !partial.ok && partial.reason === 'OBJECTS_PARTIALLY_DESTROYED',
       !partial.ok ? partial.reason : 'it succeeded',
     )
     check(
-      'and the message says the database was not touched',
-      !partial.ok && /Nothing was changed/.test(partial.message),
+      'and the refusal counts the bytes it destroyed on its way to refusing',
+      !partial.ok && partial.objectsDestroyed === 1,
+      !partial.ok ? `${partial.objectsDestroyed}` : '',
+    )
+    check(
+      'the destruction order is fixed, so exactly the first key went',
+      !bucket.objects.has(inDestructionOrder[0]!) &&
+        bucket.objects.has(inDestructionOrder[1]!) &&
+        bucket.objects.has(inDestructionOrder[2]!),
+      [...bucket.objects.keys()].length + ' left in the bucket',
+    )
+    check(
+      'and the message does NOT say nothing was changed, because something was',
+      !partial.ok && !/Nothing was changed/i.test(partial.message),
+      !partial.ok ? partial.message : '',
+    )
+    check(
+      'it says the file is gone and cannot be recovered',
+      !partial.ok && /cannot be recovered/.test(partial.message),
+      !partial.ok ? partial.message : '',
+    )
+    check(
+      'and that the database was not touched, which is the half a reader assumes',
+      !partial.ok && /database was NOT changed/.test(partial.message),
       !partial.ok ? partial.message : '',
     )
     check(
@@ -974,24 +1010,74 @@ async function main(): Promise<void> {
     check('the object that refused is still in the bucket', bucket.objects.has(locked))
 
     /*
-     * **The residue, stated rather than asserted away.**
+     * **The residue, now recorded rather than merely stated.**
      *
-     * `readGraph` does not order its keys, so which of the three the loop
-     * reached before the locked one is not fixed and is not worth pinning. What
-     * is fixed is the shape: whatever was destroyed is gone for good, the rows
-     * still name it, and no audit row anywhere says so. An erasure is not atomic
-     * across the database and the object store, and cannot be — the bytes have
-     * to go first or a failure leaves them behind for ever.
+     * An erasure is not atomic across the database and the object store and
+     * cannot be — the bytes have to go first, or a failure leaves them behind
+     * for ever. The previous version of this section proved the residue exists
+     * and then printed a note saying *"nothing records it"*. This is that note,
+     * turned into two audit rows and a health finding.
      */
     const lostAlready = keys.filter((key) => !bucket.objects.has(key))
-    console.log(
-      `  note  ${lostAlready.length} of 3 objects were destroyed before the refusal; ` +
-        'their rows still name them, and nothing records it. See PROGRESS.md, Uncertain.',
+    check(
+      'exactly one of the three is gone for good',
+      lostAlready.length === 1,
+      `${lostAlready.length} destroyed`,
+    )
+
+    const erasureRows = await db
+      .select({ action: auditEvents.action, metadata: auditEvents.metadata })
+      .from(auditEvents)
+      .where(eq(auditEvents.entityId, erin.account.id))
+    const began = erasureRows.filter((row) => row.action === ERASURE_BEGAN_ACTION)
+    const incomplete = erasureRows.filter((row) => row.action === ERASURE_INCOMPLETE_ACTION)
+
+    check('a line was written before anything was destroyed', began.length === 1)
+    check(
+      'and one recording that it stopped part way through',
+      incomplete.length === 1,
+      `${incomplete.length} rows`,
     )
     check(
-      'the refusal is not silent about being partial in the log it leaves',
-      lostAlready.length <= 2,
-      `${lostAlready.length} destroyed, which would mean the locked one went too`,
+      'which counts what it destroyed and what it left',
+      (incomplete[0]?.metadata as { objectsDestroyed?: number; objectsRemaining?: number })
+        ?.objectsDestroyed === 1 &&
+        (incomplete[0]?.metadata as { objectsRemaining?: number })?.objectsRemaining === 2,
+      JSON.stringify(incomplete[0]?.metadata),
+    )
+    check(
+      'and names no storage key, because the audit log is exported and read on a screen',
+      !JSON.stringify(erasureRows).includes(locked),
+    )
+
+    const unfinished = await readUnfinishedErasures()
+    const mine = unfinished.find((row) => row.accountId === erin.account.id)
+    check('the half-finished erasure is reported as unfinished', mine !== undefined)
+    check('as stopped rather than vanished', mine?.stage === 'INCOMPLETE')
+    check('with the count the row recorded', mine?.objectsDestroyed === 1)
+
+    const finding = erasureFindings({
+      now: new Date(),
+      reminders: {
+        roundOpen: false,
+        scheduleEnabled: false,
+        lastRunCompletedAt: null,
+        stuck: [],
+      },
+      lastMediaCheck: null,
+      unfinishedErasures: unfinished,
+    })[0]
+    check('and it reaches the health report as a fault', finding?.severity === 'WRONG')
+    check(
+      'that tells the reader the record still describes the investor',
+      /database was not touched/i.test(finding?.detail ?? ''),
+      finding?.detail,
+    )
+    check(
+      'and the finding names no address',
+      !/[\w.+-]+@[\w-]+\.[\w.]+/.test(
+        `${finding?.headline} ${finding?.detail} ${finding?.remedy}`,
+      ),
     )
 
     // ---- and it can be run again -----------------------------------------
@@ -1029,6 +1115,18 @@ async function main(): Promise<void> {
       'with every document row carrying the erased marker',
       erinDocsAfter.length === 3 &&
         erinDocsAfter.every((row) => row.key === ERASED_STORAGE_KEY),
+    )
+
+    /*
+     * And the finding clears. A rule that keeps raising a problem after the
+     * remedy has been carried out is one somebody learns to scroll past, which
+     * is worse than not having it.
+     */
+    const stillUnfinished = await readUnfinishedErasures()
+    check(
+      'the second run clears the finding',
+      !stillUnfinished.some((row) => row.accountId === erin.account.id),
+      JSON.stringify(stillUnfinished),
     )
   } finally {
     await bucket.stop()

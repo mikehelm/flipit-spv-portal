@@ -21,6 +21,7 @@ import {
   serviceModeFindings,
   overdueFindings,
   stuckClaimFindings,
+  erasureFindings,
   unattendedFindings,
   withoutAddresses,
   worstOf,
@@ -73,6 +74,7 @@ function healthy(overrides: Partial<HealthFacts> = {}): HealthFacts {
       versioning: 'DISABLED' as const,
       problems: 0,
     },
+    unfinishedErasures: [],
     lastBackupAt: hoursAgo(20),
     contact: { hasOperatorAddress: true, hasStandingAddress: true },
     disabledFlags: [],
@@ -203,6 +205,7 @@ describe('the cheap subset the overview banner is built from', () => {
         stuck: [],
       },
       lastMediaCheck: null,
+      unfinishedErasures: [],
     }
     expect(unattendedFindings(minimal).some((row) => row.severity === 'WRONG')).toBe(true)
   })
@@ -347,6 +350,120 @@ describe('a reminder a run took and never finished with', () => {
       withReminders({ stuck: [{ id: 'rem_1', claimedAt: hoursAgo(9) }] }),
     )[0]!
     expect(finding.detail).toMatch(/timer|expired/i)
+  })
+})
+
+describe('an erasure that started and did not finish', () => {
+  const stopped = {
+    accountId: 'acct_stopped',
+    at: hoursAgo(5),
+    stage: 'INCOMPLETE' as const,
+    objectsDestroyed: 2,
+    objectsRemaining: 1,
+  }
+  const abandoned = {
+    accountId: 'acct_gone',
+    at: hoursAgo(30),
+    stage: 'BEGAN' as const,
+    objectsDestroyed: null,
+    objectsRemaining: null,
+  }
+
+  it('says nothing when every erasure finished', () => {
+    expect(erasureFindings(healthy())).toEqual([])
+  })
+
+  it('is a fault, not a note', () => {
+    // An investor asked to be erased and their data is in a state nobody chose.
+    // Everything else in this file reserves WRONG for something actively
+    // failing; this qualifies on the strictest reading of it.
+    const findings = erasureFindings(healthy({ unfinishedErasures: [stopped] }))
+    expect(findings).toHaveLength(1)
+    expect(findings[0]?.severity).toBe('WRONG')
+  })
+
+  it('says how many files are gone, because that is the part nothing undoes', () => {
+    const finding = erasureFindings(healthy({ unfinishedErasures: [stopped] }))[0]!
+    expect(finding.detail).toContain('2 stored files')
+    expect(finding.detail).toMatch(/cannot be recovered/i)
+  })
+
+  it('says the record still describes the investor in full', () => {
+    /*
+     * The half that a reader will otherwise assume. Every screen in the
+     * application shows an ordinary investor, so a finding that only mentioned
+     * the destroyed bytes would leave somebody believing the record had been
+     * dealt with.
+     */
+    const finding = erasureFindings(healthy({ unfinishedErasures: [stopped] }))[0]!
+    expect(finding.detail).toMatch(/database was not touched/i)
+    expect(finding.detail).toMatch(/name, address/i)
+  })
+
+  it('tells the reader to run it again, and that doing so is safe', () => {
+    const finding = erasureFindings(healthy({ unfinishedErasures: [stopped] }))[0]!
+    expect(finding.remedy).toMatch(/again/)
+    expect(finding.remedy).toMatch(/already gone is not an error/)
+  })
+
+  it('names the account so the row can be found', () => {
+    const finding = erasureFindings(healthy({ unfinishedErasures: [stopped] }))[0]!
+    expect(finding.detail).toContain('acct_stopped')
+  })
+
+  it('reports a run that vanished as a separate finding with a different remedy', () => {
+    /*
+     * They are not the same problem. One knows what it destroyed and needs the
+     * store fixed; the other knows nothing and needs somebody to look at the
+     * record. A single finding with a conditional sentence in it would give the
+     * wrong instruction to one of the two every time.
+     */
+    const findings = erasureFindings(
+      healthy({ unfinishedErasures: [stopped, abandoned] }),
+    )
+    expect(findings).toHaveLength(2)
+    expect(findings[1]?.headline).toMatch(/recorded no outcome/)
+    expect(findings[1]?.remedy).not.toBe(findings[0]?.remedy)
+  })
+
+  it('warns that a vanished run may have left sessions alive', () => {
+    // Sessions are revoked after the transaction. A process killed between the
+    // two leaves an erased record that somebody is still signed in to, and no
+    // other rule anywhere would notice.
+    const finding = erasureFindings(healthy({ unfinishedErasures: [abandoned] }))[0]!
+    expect(finding.detail).toMatch(/sessions and links/i)
+  })
+
+  it('does not report what an abandoned run meant to destroy as what it did', () => {
+    const finding = erasureFindings(healthy({ unfinishedErasures: [abandoned] }))[0]!
+    expect(finding.detail).not.toMatch(/\d+ stored files? had already been destroyed/)
+  })
+
+  it('says "at least" when a row’s counts could not be read', () => {
+    const unreadable = { ...stopped, accountId: 'acct_odd', objectsDestroyed: null }
+    const finding = erasureFindings(
+      healthy({ unfinishedErasures: [stopped, unreadable] }),
+    )[0]!
+    expect(finding.detail).toContain('at least 2')
+  })
+
+  it('reaches the overview banner, not only the health page', () => {
+    /*
+     * The banner is the only surface an owner sees without going looking. A
+     * half-erased investor that appeared solely on `pnpm check:health` would be
+     * visible to a cron job and to nobody else.
+     */
+    const areas = unattendedFindings(healthy({ unfinishedErasures: [stopped] })).map(
+      (row) => row.area,
+    )
+    expect(areas).toContain('Erasure')
+  })
+
+  it('and appears in the full report as well', () => {
+    const areas = buildFindings(healthy({ unfinishedErasures: [stopped] })).map(
+      (row) => row.area,
+    )
+    expect(areas).toContain('Erasure')
   })
 })
 
@@ -789,12 +906,34 @@ describe('a portal section switched off by a flag', () => {
 })
 
 describe('what the report is allowed to say', () => {
-  const facts = withReminders({
-    lastRunCompletedAt: null,
-    dueNow: 3,
-    overdue: 3,
-    stuck: [{ id: 'rem_stuck', claimedAt: hoursAgo(9) }],
-  })
+  const facts: HealthFacts = {
+    ...withReminders({
+      lastRunCompletedAt: null,
+      dueNow: 3,
+      overdue: 3,
+      stuck: [{ id: 'rem_stuck', claimedAt: hoursAgo(9) }],
+    }),
+    // Included so the standing rules below — no address, no amount, always
+    // something to do — are applied to the erasure findings as well. A rule
+    // that only ever sees the findings that existed when it was written stops
+    // being a rule about the report.
+    unfinishedErasures: [
+      {
+        accountId: 'acct_stopped',
+        at: hoursAgo(5),
+        stage: 'INCOMPLETE',
+        objectsDestroyed: 2,
+        objectsRemaining: 1,
+      },
+      {
+        accountId: 'acct_gone',
+        at: hoursAgo(30),
+        stage: 'BEGAN',
+        objectsDestroyed: null,
+        objectsRemaining: null,
+      },
+    ],
+  }
 
   it('never contains an email address', () => {
     // This ends up in a log file on a server. The reminder job prints no

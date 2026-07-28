@@ -10895,3 +10895,213 @@ untouched.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## "Nothing was changed", said over a destroyed document
+
+The last entry left this at the top of its own Uncertain list, twice: *"Nothing
+crashes the process mid-`remove()` loop"* and *"The partial state has no
+report."* The entry before it went further and wrote the defect out in full, in
+a comment inside `verify:erasure`:
+
+> whatever was destroyed is gone for good, the rows still name it, and **no
+> audit row anywhere says so**.
+
+And one line below that comment, a passing check:
+
+    check('and the message says the database was not touched',
+      !partial.ok && /Nothing was changed/.test(partial.message))
+
+Both of those were correct about the database. Neither was correct about the
+bucket, and the bucket is the half that does not come back.
+
+### What the screen said, and what had happened
+
+`eraseAccount` destroys stored bytes in a loop, then opens a transaction. The
+ordering is right and is not what changed here: the reverse leaves a signed
+subscription agreement in a bucket with nothing pointing at it. What follows
+from it is that the two halves cannot be atomic, so the loop can stop with some
+objects destroyed and the record intact.
+
+When it did, the owner read:
+
+> *A stored file could not be destroyed, so the erasure stopped before touching
+> the database. **Nothing was changed.***
+
+On the one action in this application that cannot be undone, the message was
+wrong in the direction of reassurance. And nothing recorded it — no audit row,
+no finding, nothing on any screen. A week later there was no way to discover
+that an investor's record was sitting half erased with some of their documents
+already destroyed.
+
+### What was built
+
+**Three actions instead of one.** `erase_began` is written before the first
+`remove()`. `erased` or `erase_incomplete` resolves it. An account whose most
+recent line is not `erased` is unfinished, and that is one indexed read.
+
+- ***`erase_began` is written for every erasure, not only the ones holding
+  files.*** The byte loop is the irreversible part and it is not the only gap:
+  `revokeAllPortalAccess` and the completion row both run **after** the
+  transaction, so a kill between them leaves a record that is erased in the
+  database with the investor still signed in to it. That state was previously
+  invisible from every screen in the application and is now a finding.
+- ***`OBJECTS_PARTIALLY_DESTROYED`***, a refusal of its own, separated from
+  `OBJECT_NOT_DESTROYED` because the two differ in the only way that matters:
+  one has lost bytes for ever and the other has not. They used to share a reason
+  and with it a sentence.
+- ***`objectsDestroyed` on the failure shape***, not only in the prose. A caller
+  acting on a refusal should not have to read English to discover that the
+  irreversible half already happened.
+- ***Two findings, `Erasure`, both `WRONG`, on the banner as well as the health
+  page.*** Stopped and vanished are separate, because the remedies are: one
+  needs the store fixed and the erasure re-run, the other needs somebody to open
+  the account and find out which half went through. A single finding with a
+  conditional clause would give the wrong instruction to one of them every time.
+- ***A fixed destruction order.*** `readGraph` returned keys in whatever order
+  the `select` produced, so an erasure that stopped half way destroyed a
+  different subset on each attempt. The previous entry's own comment said the
+  subset "is not fixed and is not worth pinning" — it is worth pinning, because
+  the one failure worth investigating was irreproducible. Two `order by`
+  clauses, and `verify:erasure` now asserts *exactly* which object went.
+
+### The message
+
+    1 stored file was destroyed and cannot be recovered, and then the store
+    refused on another — so the erasure stopped there. The database was NOT
+    changed: the record still names every file, including the one that is
+    gone. 2 files remain in the store. This is written to the audit log and
+    the health report will keep raising it. Fix whatever the store is
+    refusing over, then run the erasure again — destroying a file that is
+    already gone is not an error, so a second run finishes the job.
+
+Counts, never a key: it is rendered on a form, and a storage key is a
+capability the image route honours with no session.
+
+### Proved by breaking it
+
+- ***The partial branch reverted to `MESSAGES.OBJECT_NOT_DESTROYED`.*** Every
+  unit test stayed green — they examined the message builder and not its use —
+  and three checks in `verify:erasure` failed. **A test was added for that**, and
+  then the break was repeated to watch it fail. The first version of that test
+  used a window either side of the branch and caught the neighbouring
+  zero-destroyed branch, which legitimately uses the other message; a check that
+  fails on correct code is a check somebody deletes.
+- ***The `erase_began` row removed.*** Three unit tests and one script check.
+- ***The `order by` removed.*** Two unit tests.
+
+`verify:erasure` is **151**, up from 136. The suite is **2681**, up from 2646.
+
+**Decisions.**
+
+- ***`erase_began` for every erasure, not only ones holding files.*** One insert
+  on an action a deployment sees a handful of times, against a gap that had no
+  other detector. The tail of the procedure — revoke, then record — is a real
+  window and nothing else watches it.
+- ***A refusal that destroyed nothing still writes `erase_incomplete`.*** It
+  resolves the `began` line. Leaving the zero case out would mean every clean
+  refusal raised the vanished-run finding for ever.
+- ***An abandoned run reports `null` destroyed, never the figure from its
+  `began` row.*** `objectsToDestroy` is an intention; the process that would
+  have turned it into an outcome is the one that died. Reporting it as the
+  outcome overstates the damage on every abandoned run.
+- ***Ties break towards reporting.*** Two rows in the same microsecond would
+  have to come from opposite ends of a transaction and a network round trip, so
+  the case is theoretical. If it ever happened the less resolved action wins and
+  somebody checks an erasure that was fine. A spurious "check this" costs a
+  minute; a silently half-erased investor is what the file exists for.
+- ***The finding names the account id and nothing else.*** Same footing as the
+  reminder id in a stuck-claim finding. No name, no address, no storage key —
+  and there is a test that the whole report still contains no address.
+- ***`WRONG` for both, not `ATTENTION`.*** Every other rule reserves `WRONG` for
+  something actively failing. An investor has asked to be erased and their data
+  is in a state nobody chose; that qualifies on the strictest reading.
+- ***The metadata schema is optional in every field***, for the third time in
+  this repository and the same reason: a row written by one version and read by
+  another must degrade to "something is here and it will not say how much"
+  rather than to nothing at all.
+
+**Deviations.** None.
+
+**Checklist.** **8**, deliberately and twice: the two new audit rows carry
+counts and an account id, never a key, a title or an address, and the partial
+message is built from two numbers so there is nothing else for it to put in.
+**5** — the findings name an account id, on a report no investor can reach, and
+the standing no-address test was extended to cover them. 1–4, 6, 7 and 9–12
+untouched.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2681**) are green.
+`pnpm verify:erasure` is **151**, `pnpm verify:erasure-bytes` is **24**,
+`pnpm verify:object-store` is **52**, `pnpm verify:account-access` is **81**.
+
+**Uncertain.**
+
+- ***The filesystem store swallows every failure `remove()` can produce.***
+  `rm(file)` inside a `try` with an empty `catch`, commented *"Removing
+  something that is not there is the state we wanted"* — and it also swallows
+  `EACCES`, `EPERM`, `EROFS` and `EISDIR`. On a filesystem deployment an erasure
+  therefore counts a file it failed to delete as destroyed and tells the owner
+  so. The S3 client is careful about exactly this distinction and its
+  `deleteObject` separates absence from refusal; the two implementations of one
+  interface disagree, and the wrong one is the default. **This is the largest
+  open thing in the repository that somebody can fix, it is small, and
+  everything built in this entry is the machinery that would report it.**
+- ***Nothing has actually killed the process mid-erasure.*** The `began` row is
+  proved to be written before the first `remove()` and proved to be read back as
+  a finding, by constructing the row. A real `SIGKILL` between the two, with a
+  fresh process reading the result, has not been run.
+- ***An exception inside the transaction leaves a `began` row unresolved for
+  ever*** until somebody re-runs the erasure. Correct — something did go wrong —
+  but the finding it produces says "the process did not survive", which is not
+  what happened, and there is no third resolution action for it.
+- ***`bucketRetentionFindings` is not in `unattendedFindings`.*** A versioned
+  bucket appears on the health page and never on the overview banner, while
+  `mediaProblemFindings` appears on both. It looks like an oversight rather than
+  a decision and it was not touched here.
+- ***One page, and `atLeast` rather than a total*** for the hidden-version count.
+- ***No real bucket has answered either retention question.*** Unchanged, and
+  still one afternoon with a real endpoint rather than a build.
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***The health finding is still only as fresh as the last `media:check***, and
+  the cron in DEPLOYMENT §8 is weekly. The erasure findings are not — they are
+  read from the audit log on every page load.
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***`DEPLOYMENT.md` §12.5 describes the old refusal.*** It says the erasure
+  "stops before touching the database" and does not mention the two audit rows,
+  the finding, or the sentence the owner now reads. Not updated here.
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is not to build it.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

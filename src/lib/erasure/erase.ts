@@ -15,6 +15,11 @@
  *
  *   1. Refuse early — no such account, already erased, or stored objects that
  *      cannot be reached. A half-finished erasure is worse than none.
+ *   1a. Write a line saying an erasure is starting. Everything after this point
+ *      is destructive and none of it is atomic across the two stores, so this
+ *      is the only record that survives the process being killed in the middle.
+ *      It is resolved by the completion row at the end, or by the incomplete
+ *      row if the store refuses; an unresolved one is a health finding.
  *   2. Destroy the stored bytes. **Before** the database write, because the
  *      keys that name them are about to be overwritten. If this half succeeds
  *      and the transaction then fails, a retry finds the objects already gone
@@ -31,7 +36,7 @@
  * was erased, by whom and when, is squarely that.
  */
 
-import { and, count, eq, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core'
 import { db } from '@/db'
 import {
@@ -167,6 +172,12 @@ async function readGraphs(accountIds: string[]): Promise<Map<string, AccountGrap
       .select({ offerId: documentPackages.offerId, storageKey: documentPackages.storageKey })
       .from(documentPackages)
       .where(inArray(documentPackages.offerId, allOfferIds))
+      // Ordered so that the loop which destroys these reaches them in the same
+      // sequence every time. Without it a `select` may hand them back in any
+      // order, and an erasure that stops part way through destroys a different
+      // subset on each attempt — which makes the one failure that matters
+      // irreproducible, and makes "run it again" a different act each time.
+      .orderBy(asc(documentPackages.storageKey))
     for (const row of docs) {
       if (!row.storageKey || row.storageKey === ERASED_STORAGE_KEY) continue
       const owner = offerOwner.get(row.offerId)
@@ -185,6 +196,7 @@ async function readGraphs(accountIds: string[]): Promise<Map<string, AccountGrap
           isNotNull(participationCertificates.storageKey),
         ),
       )
+      .orderBy(asc(participationCertificates.storageKey))
     for (const row of certificates) {
       if (!row.storageKey) continue
       const owner = offerOwner.get(row.offerId)
@@ -340,6 +352,16 @@ export type ErasureRefusal =
   | 'ALREADY_ERASED'
   | 'MEDIA_STORE_UNREACHABLE'
   | 'OBJECT_NOT_DESTROYED'
+  /**
+   * The store refused, and it had already destroyed something.
+   *
+   * Separate from `OBJECT_NOT_DESTROYED` because the two states differ in the
+   * one way that matters: this one has lost bytes for ever and that one has
+   * not. They used to share a reason and a message, and the message said
+   * *"Nothing was changed"* — which was true of the database and false of the
+   * bucket, on the one action in this application that cannot be undone.
+   */
+  | 'OBJECTS_PARTIALLY_DESTROYED'
 
 export type ErasureResult =
   | {
@@ -350,9 +372,22 @@ export type ErasureResult =
       objectsDestroyed: number
       auditRowsRelabelled: number
     }
-  | { ok: false; reason: ErasureRefusal; message: string }
+  | {
+      ok: false
+      reason: ErasureRefusal
+      message: string
+      /**
+       * How many stored files are gone despite the refusal. Zero on every
+       * refusal that decided before the loop, which is most of them.
+       *
+       * On the failure shape deliberately, rather than only in the message: a
+       * caller that wants to act on this should not have to read English to
+       * discover that the irreversible half already happened.
+       */
+      objectsDestroyed: number
+    }
 
-const MESSAGES: Record<ErasureRefusal, string> = {
+const MESSAGES: Record<Exclude<ErasureRefusal, 'OBJECTS_PARTIALLY_DESTROYED'>, string> = {
   NO_SUCH_ACCOUNT: 'That account could not be found. Nothing was changed.',
   ALREADY_ERASED:
     'That account has already been erased. Nothing was changed, and running it again would ' +
@@ -362,8 +397,71 @@ const MESSAGES: Record<ErasureRefusal, string> = {
     'be destroyed. Nothing was changed. Set MEDIA_STORE and try again.',
   OBJECT_NOT_DESTROYED:
     'A stored file could not be destroyed, so the erasure stopped before touching the ' +
-    'database. Nothing was changed. The store said why in the server log.',
+    'database. Nothing was changed — no file was destroyed and no record was altered. The ' +
+    'store said why in the server log.',
 }
+
+/**
+ * What the owner is told when the erasure destroyed some of the files and then
+ * stopped.
+ *
+ * It says the true thing first. The previous version of this sentence opened
+ * with *"Nothing was changed"*, which described the database and not the bucket
+ * — and the bucket is the half that cannot be put back.
+ *
+ * Counts, never a key: this is rendered on a screen and the key is a capability.
+ */
+export function partiallyDestroyedMessage(destroyed: number, remaining: number): string {
+  return (
+    `${destroyed} stored file${destroyed === 1 ? ' was' : 's were'} destroyed and cannot be ` +
+    'recovered, and then the store refused on another — so the erasure stopped there. ' +
+    'The database was NOT changed: the record still names every file, including the ' +
+    `${destroyed === 1 ? 'one that is' : `${destroyed} that are`} gone. ` +
+    `${remaining} file${remaining === 1 ? '' : 's'} remain${remaining === 1 ? 's' : ''} in the ` +
+    'store. This is written to the audit log and the health report will keep raising it. ' +
+    'Fix whatever the store is refusing over, then run the erasure again — destroying a file ' +
+    'that is already gone is not an error, so a second run finishes the job.'
+  )
+}
+
+// ---------------------------------------------------------------------------
+// The three lines an erasure attempt writes
+// ---------------------------------------------------------------------------
+
+/**
+ * Written before the first byte is destroyed, and resolved by one of the two
+ * below.
+ *
+ * **This is the only thing that survives the process dying.** An erasure runs a
+ * `remove()` loop, then a transaction, then a session revocation, then its own
+ * audit row — and a kill, a restart or a deploy at any point in that sequence
+ * used to leave no trace whatsoever. The record would be half destroyed, or
+ * fully destroyed with live sessions still attached to it, and every screen in
+ * this application would show an ordinary investor.
+ *
+ * A line at the start costs one insert on an action that happens a handful of
+ * times in the life of a deployment, and it turns a silent hole into a finding.
+ *
+ * It carries no address and no name: the metadata sweep inside the transaction
+ * substitutes the old address wherever it appears, and a row written *before*
+ * that sweep with an address in it would be caught by it — which is harmless
+ * and confusing. Counts only, as everything else here is.
+ */
+export const ERASURE_BEGAN_ACTION = 'investor_account.erase_began'
+
+/**
+ * Written when the store refused part way through, whether or not anything was
+ * destroyed first.
+ *
+ * The zero case is recorded too. A refusal that destroyed nothing changed
+ * nothing and still says something worth keeping — that this store would not
+ * delete, on this day — and leaving it out would mean the `began` line above
+ * had no resolution and every clean refusal raised a finding.
+ */
+export const ERASURE_INCOMPLETE_ACTION = 'investor_account.erase_incomplete'
+
+/** Written last, when the whole thing succeeded. */
+export const ERASURE_COMPLETED_ACTION = 'investor_account.erased'
 
 export interface EraseInput {
   accountId: string
@@ -376,12 +474,24 @@ export async function eraseAccount(input: EraseInput): Promise<ErasureResult> {
   const account = await db.query.investorAccounts.findFirst({
     where: eq(investorAccounts.id, accountId),
   })
-  if (!account) return { ok: false, reason: 'NO_SUCH_ACCOUNT', message: MESSAGES.NO_SUCH_ACCOUNT }
+  if (!account) {
+    return {
+      ok: false,
+      reason: 'NO_SUCH_ACCOUNT',
+      message: MESSAGES.NO_SUCH_ACCOUNT,
+      objectsDestroyed: 0,
+    }
+  }
 
   const newEmail = pseudonymEmail(accountId)
   const newName = pseudonymName(accountId)
   if (account.email === newEmail) {
-    return { ok: false, reason: 'ALREADY_ERASED', message: MESSAGES.ALREADY_ERASED }
+    return {
+      ok: false,
+      reason: 'ALREADY_ERASED',
+      message: MESSAGES.ALREADY_ERASED,
+      objectsDestroyed: 0,
+    }
   }
 
   const oldEmail = account.email
@@ -390,27 +500,69 @@ export async function eraseAccount(input: EraseInput): Promise<ErasureResult> {
   const noQa = qaEntryIds.length === 0
 
   // ---- 1. The bytes, first, and only if every one of them can be reached ---
+  //
+  // The no-store refusal is decided before the `began` line is written, so a
+  // deployment with nothing configured records an attempt that could not start
+  // rather than one that started and vanished.
   let objectsDestroyed = 0
-  if (storageKeys.length > 0) {
-    const store = mediaStore()
-    if (!store) {
-      return {
-        ok: false,
-        reason: 'MEDIA_STORE_UNREACHABLE',
-        message: MESSAGES.MEDIA_STORE_UNREACHABLE,
-      }
+  const store = storageKeys.length > 0 ? mediaStore() : null
+  if (storageKeys.length > 0 && !store) {
+    return {
+      ok: false,
+      reason: 'MEDIA_STORE_UNREACHABLE',
+      message: MESSAGES.MEDIA_STORE_UNREACHABLE,
+      objectsDestroyed: 0,
     }
+  }
+
+  // ---- The line that survives the process dying ----------------------------
+  //
+  // Written for every erasure, not only the ones holding files. The byte loop
+  // is the irreversible part, but it is not the only part with a gap in it: the
+  // session revocation and the completion row both happen *after* the
+  // transaction, so a kill between them leaves an erased record that still has
+  // live sessions attached and nothing anywhere saying so.
+  await audit({
+    actor: { kind: 'user', id: actor.id, label: actor.email },
+    entityType: 'investor_account',
+    entityId: accountId,
+    action: ERASURE_BEGAN_ACTION,
+    metadata: {
+      objectsToDestroy: storageKeys.length,
+      offersAffected: offerIds.length,
+      recipientsAffected: recipientIds.length,
+      questionsAffected: qaEntryIds.length,
+      previousStatus: account.status,
+    },
+  })
+
+  if (store) {
     for (const key of storageKeys) {
       try {
         await store.remove(key)
         objectsDestroyed += 1
       } catch {
-        // Deliberately no detail: the key is a capability and the message may
-        // quote it. The store logs its own failure.
+        // Deliberately no detail in the message: the key is a capability and
+        // the store's own error may quote it. The store logs its own failure.
+        const remaining = storageKeys.length - objectsDestroyed
+        await auditErasureIncomplete(actor, accountId, objectsDestroyed, remaining)
+
+        // Nothing destroyed is a clean refusal and says so. Something destroyed
+        // is not, and must not borrow the sentence that says nothing changed.
+        if (objectsDestroyed === 0) {
+          return {
+            ok: false,
+            reason: 'OBJECT_NOT_DESTROYED',
+            message: MESSAGES.OBJECT_NOT_DESTROYED,
+            objectsDestroyed: 0,
+          }
+        }
+
         return {
           ok: false,
-          reason: 'OBJECT_NOT_DESTROYED',
-          message: MESSAGES.OBJECT_NOT_DESTROYED,
+          reason: 'OBJECTS_PARTIALLY_DESTROYED',
+          message: partiallyDestroyedMessage(objectsDestroyed, remaining),
+          objectsDestroyed,
         }
       }
     }
@@ -603,7 +755,7 @@ export async function eraseAccount(input: EraseInput): Promise<ErasureResult> {
     actor: { kind: 'user', id: actor.id, label: actor.email },
     entityType: 'investor_account',
     entityId: accountId,
-    action: 'investor_account.erased',
+    action: ERASURE_COMPLETED_ACTION,
     metadata: {
       pseudonym: newName,
       offersAffected: offerIds.length,
@@ -622,6 +774,40 @@ export async function eraseAccount(input: EraseInput): Promise<ErasureResult> {
     objectsDestroyed,
     auditRowsRelabelled,
   }
+}
+
+/**
+ * The line that resolves the `began` one when the store refused.
+ *
+ * Counts only, and the same three the health report reads back. Not the key,
+ * not the title of the document, not the address — this row is exported and
+ * read on a screen, and it is written at the one moment when the record it
+ * describes is half of what it was.
+ *
+ * Written *before* the return, deliberately: a caller that ignores the result
+ * still leaves the record behind, and the result is the thing most likely to be
+ * ignored, because the only surface that reads it is a form somebody may have
+ * already navigated away from.
+ */
+async function auditErasureIncomplete(
+  actor: AdminIdentity,
+  accountId: string,
+  objectsDestroyed: number,
+  objectsRemaining: number,
+): Promise<void> {
+  await audit({
+    actor: { kind: 'user', id: actor.id, label: actor.email },
+    entityType: 'investor_account',
+    entityId: accountId,
+    action: ERASURE_INCOMPLETE_ACTION,
+    metadata: {
+      objectsDestroyed,
+      objectsRemaining,
+      // What the database looks like now, said plainly, because the row will be
+      // read by somebody deciding what to do about it months later.
+      databaseChanged: false,
+    },
+  })
 }
 
 /** Only for the refused case, so a refusal is as visible as a success. */

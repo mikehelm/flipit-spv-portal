@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { partiallyDestroyedMessage } from './erase'
 
 /**
  * The two properties of the executor that are worth pinning at the source.
@@ -55,8 +56,121 @@ describe('the order of operations', () => {
     // matches actorAccountId and this row is the owner's — but the ordering
     // makes it true by construction rather than by argument.
     const transaction = erase.indexOf('await db.transaction(')
-    const auditRow = erase.indexOf("action: 'investor_account.erased'")
+    const auditRow = erase.indexOf('action: ERASURE_COMPLETED_ACTION')
+    expect(auditRow).toBeGreaterThan(-1)
     expect(auditRow).toBeGreaterThan(transaction)
+  })
+
+  it('the line saying an erasure started is written before anything is destroyed', () => {
+    /*
+     * The whole point of it. An erasure destroys bytes, then writes the
+     * database, then revokes sessions, then records itself — and a kill at any
+     * point in that sequence used to leave nothing behind at all. A row written
+     * after the first `remove()` would miss exactly the failure it exists for.
+     */
+    const began = erase.indexOf('action: ERASURE_BEGAN_ACTION')
+    const remove = erase.indexOf('await store.remove(key)')
+    expect(began).toBeGreaterThan(-1)
+    expect(began).toBeLessThan(remove)
+  })
+
+  it('and after the refusals, so an attempt that could not start is not one that vanished', () => {
+    const began = erase.indexOf('action: ERASURE_BEGAN_ACTION')
+    for (const refusal of [
+      "reason: 'NO_SUCH_ACCOUNT'",
+      "reason: 'ALREADY_ERASED'",
+      "reason: 'MEDIA_STORE_UNREACHABLE'",
+    ]) {
+      expect(erase.indexOf(refusal), refusal).toBeLessThan(began)
+    }
+  })
+
+  it('the incomplete row is written before the refusal returns, not by the caller', () => {
+    // The result is the thing most likely to be dropped: the only surface that
+    // reads it is a form somebody may have navigated away from. The record has
+    // to exist whether or not anybody looks at the return value.
+    const record = erase.indexOf('await auditErasureIncomplete(')
+    const returns = erase.indexOf("reason: 'OBJECTS_PARTIALLY_DESTROYED'")
+    expect(record).toBeGreaterThan(-1)
+    expect(record).toBeLessThan(returns)
+  })
+})
+
+describe('a refusal that already destroyed something says so', () => {
+  it('the partial refusal has a reason of its own', () => {
+    // It used to share OBJECT_NOT_DESTROYED, and with it a message reading
+    // "Nothing was changed" — true of the database and false of the bucket, on
+    // the one action in this application that cannot be undone.
+    expect(erase).toContain("reason: 'OBJECTS_PARTIALLY_DESTROYED'")
+  })
+
+  it('and the partial branch is actually wired to the partial message', () => {
+    /*
+     * Written after breaking it: reverting the branch to
+     * `MESSAGES.OBJECT_NOT_DESTROYED` left every test in this file green,
+     * because they all examined the message builder rather than its use. Three
+     * checks in `pnpm verify:erasure` caught it, which is the right place for
+     * the proof and the wrong place for the only proof.
+     */
+    // Forward from the reason only. A window that reached backwards caught the
+    // neighbouring zero-destroyed branch, which legitimately uses the other
+    // message — a check that fails on correct code is a check that gets deleted.
+    const at = erase.indexOf("reason: 'OBJECTS_PARTIALLY_DESTROYED'")
+    expect(at).toBeGreaterThan(-1)
+    const branch = erase.slice(at, at + 200)
+    expect(branch).toContain('partiallyDestroyedMessage(objectsDestroyed, remaining)')
+    expect(branch).not.toContain('MESSAGES.OBJECT_NOT_DESTROYED')
+  })
+
+  it('and its message does not claim nothing was changed', () => {
+    const message = partiallyDestroyedMessage(2, 1)
+    expect(message).not.toMatch(/Nothing was changed/i)
+    expect(message).toMatch(/cannot be recovered/)
+    expect(message).toMatch(/^2 stored files were destroyed/)
+  })
+
+  it('and it says which half of the erasure did not happen', () => {
+    // "Some files are gone" without "and the record is untouched" leaves the
+    // reader believing the investor has been dealt with.
+    const message = partiallyDestroyedMessage(2, 1)
+    expect(message).toMatch(/database was NOT changed/)
+    expect(message).toMatch(/run the erasure again/)
+  })
+
+  it('and it counts rather than naming, so no storage key can reach a screen', () => {
+    // The key is a capability — the image route serves one with no session —
+    // and this sentence is rendered on a form. The function takes two numbers
+    // and there is nothing else for it to put in.
+    const message = partiallyDestroyedMessage(2, 1)
+    expect(message).not.toMatch(/\b(img|vid|doc)_/)
+  })
+
+  it('and it reads correctly for a single file', () => {
+    const message = partiallyDestroyedMessage(1, 1)
+    expect(message).toMatch(/^1 stored file was destroyed/)
+    expect(message).toContain('the one that is gone')
+    expect(message).toContain('1 file remains')
+  })
+
+  it('every refusal reports how many objects are gone, as a number', () => {
+    // On the shape, not only in the sentence. A caller acting on this should
+    // not have to read English to find out that the irreversible half happened.
+    const refusals = erase.match(/ok: false,/g) ?? []
+    const counts = erase.match(/objectsDestroyed: \d|objectsDestroyed,/g) ?? []
+    expect(refusals.length).toBeGreaterThan(3)
+    expect(counts.length).toBeGreaterThanOrEqual(refusals.length)
+  })
+})
+
+describe('the order the objects are destroyed in', () => {
+  it('is fixed, so a failure part way through is reproducible', () => {
+    /*
+     * Without an `order by`, a `select` may hand the keys back in any order —
+     * so an erasure that stops half way destroys a different subset on each
+     * attempt, and the one failure worth investigating cannot be reproduced.
+     */
+    expect(erase).toContain('orderBy(asc(documentPackages.storageKey))')
+    expect(erase).toContain('orderBy(asc(participationCertificates.storageKey))')
   })
 
   it('sessions and links are revoked, and by the one function that does both', () => {

@@ -272,6 +272,26 @@ So there is now a check that does the real thing. It sets up a working file stor
 
 Two things follow that are worth knowing rather than discovering. **Files reached before the refusal are already gone**, and their records still list them — an erasure cannot be all-or-nothing across two separate systems, and the safe direction is deleting the files first. And **it is safe to simply run it again** once the storage problem is fixed: the second run finishes the job and does not trip over the files that already went. That was checked by locking a file, watching the erasure refuse, unlocking it, and running it again. `DEPLOYMENT.md §12.5` says the same thing in the runbook.
 
+### The sentence that was not true, and the record that was not kept
+
+Read the paragraph above again, and then read what the screen used to say when that happened:
+
+> *"A stored file could not be destroyed, so the erasure stopped before touching the database. **Nothing was changed.**"*
+
+That last sentence was true of the database and false of the storage. Files reached before the refusal were destroyed and are not recoverable, and the person who pressed the button was told nothing had happened. **On the one action in this application that cannot be undone, the message was wrong in the direction of reassurance** — and nothing anywhere recorded it, so a week later there was no way to find out that an investor's record was sitting half-erased.
+
+Three things are different now.
+
+- **The message says what actually happened.** *"1 stored file was destroyed and cannot be recovered, and then the store refused on another — so the erasure stopped there. The database was NOT changed: the record still names every file, including the one that is gone."* It then tells you the remedy, which is unchanged: fix whatever the storage is refusing over, and run it again.
+- **It is written down.** An erasure now writes a line to the audit log **before** it destroys anything, and a second line saying how it ended. You will see `investor_account.erase_began` followed by either `investor_account.erased` or `investor_account.erase_incomplete` — and the incomplete one records how many files went and how many are left.
+- **The health report keeps telling you.** A half-finished erasure appears on **Admin → System health**, and on the banner at the top of the overview, as a fault: *"1 erasure stopped part way through and destroyed files the record still names."* It says which account, what to do, and it clears itself the moment you run the erasure again. There is a check for that too — a rule that keeps complaining after you have done what it asked is one you learn to ignore.
+
+**The other half of this is the one nobody can press a button to cause.** If the application is restarted, killed or redeployed in the middle of an erasure, there is no message at all, because nothing is there to write one. That is what the *first* line is for: an erasure that recorded a beginning and no ending is now itself a fault on the health report, saying in as many words that the process did not survive the attempt and that the record may be in any state — including, and this is the one that matters, erased in the database with the investor still signed in, because sessions are revoked after the record is written.
+
+**One more thing changed with it.** The files were being deleted in whatever order the database happened to return them, so an erasure that stopped half way destroyed a different set each time and the failure could not be reproduced. They are deleted in a fixed order now.
+
+You can watch the whole sequence: `pnpm verify:erasure` is **151 checks** against a real database and a real storage service — it locks a file, watches exactly one of three get destroyed, reads both audit rows, confirms the health report raises it, unlocks the file, runs the erasure again and confirms the fault clears.
+
 **And the one thing none of that could see, which the application now asks about directly.** If the storage bucket has *versioning* switched on — a feature Amazon, Cloudflare and Backblaze all offer, and which some setup templates switch on for you — then deleting a file writes a note saying "deleted" and quietly keeps the file. The storage tells the application the file is gone. Every check described above passes. And every file is still sitting there, recoverable by anyone with access to the storage console: an investor who asked to be erased would not have been.
 
 Nothing that *uses* the storage can tell the difference, so the application stopped trying and simply asks the bucket. **`pnpm media:check` now prints one of three lines every time it runs:**
