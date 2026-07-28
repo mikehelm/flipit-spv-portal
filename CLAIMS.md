@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Branded private-link preview | Codex current task | 2026-07-28 11:25 UTC | `src/app/layout.tsx`, new icon/share-image assets, focused metadata tests, `PROGRESS.md` |
 
 ## Done, so nobody starts it again
 
