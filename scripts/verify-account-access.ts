@@ -77,6 +77,7 @@ import {
 import { issueAdminSetupLink } from '@/lib/auth/bootstrap'
 import { hashPassword } from '@/lib/auth/password'
 import { onScreen } from '@/lib/verify/page-text'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PORT = 3213
 const ORIGIN = `http://127.0.0.1:${PORT}`
@@ -663,7 +664,9 @@ async function erasureScreen(browser: Browser): Promise<void> {
   )
   check(
     'and the other fifteen counts are exactly as they were',
-    ERASURE_COUNTS.filter((row) => row.label !== 'stored files destroyed outright').every((row) =>
+    everyOf(
+      ERASURE_COUNTS.filter((row) => row.label !== 'stored files destroyed outright'),
+      (row) =>
       opened.includes(`${row.n} ${row.label}`),
     ),
     opened.slice(0, 900),
@@ -740,7 +743,8 @@ async function erasureScreen(browser: Browser): Promise<void> {
   check(
     'and neither record moved',
     neitherMoved.length === 2 &&
-      neitherMoved.every(
+      everyOf(
+        neitherMoved,
         (row) => row.email === investorEmail || row.email === second.investorEmail,
       ),
   )
@@ -839,7 +843,7 @@ async function erasureScreen(browser: Browser): Promise<void> {
   )!.n
   check(
     `all ${wantedMessages} messages are redacted, and every one of them`,
-    bodies.length === wantedMessages && bodies.every((row) => !row.body.includes('fixture')),
+    bodies.length === wantedMessages && everyOf(bodies, (row) => !row.body.includes('fixture')),
     `${bodies.filter((row) => row.body.includes('fixture')).length} still hold the fixture text`,
   )
 

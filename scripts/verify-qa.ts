@@ -38,6 +38,7 @@ import {
   setPinned,
   unpublishEntry,
 } from '@/lib/qa/service'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp9-verify'
 
@@ -365,7 +366,7 @@ async function main(): Promise<void> {
   const open = await loadQaQueue('OPEN')
   check(
     'the open filter excludes answered entries',
-    open.every((item) => item.answer === null),
+    everyOf(open, (item) => item.answer === null),
   )
 
   console.log('\nSuspension')

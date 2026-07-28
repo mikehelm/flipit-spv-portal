@@ -1567,6 +1567,54 @@ did not exist when the check was written, added to the page and not the banner:
 
 ---
 
+## Twenty-two more checks that could not fail
+
+The section above describes one check that could not fail, found by accident.
+That raised an obvious question, and asking it properly gave an uncomfortable
+answer: **twenty-two more**, all of the same two shapes.
+
+The first shape is a quirk of the language. Asking "is every one of these
+things true?" about a list with **nothing in it** gives the answer *yes*. That
+is correct arithmetic and wrong for a check, because in these scripts the list
+is almost always the result of a database query — so an empty list does not mean
+"everything passed", it means "there was nothing there to look at".
+
+The clearest example is the check that an erasure did not touch anybody else's
+data. It asks "are the other investor's messages all still intact?". If a bug
+deleted that other investor's messages **entirely**, the list is empty, and the
+check says yes. **The worse the bug, the more likely it was to go unnoticed** —
+which is precisely backwards.
+
+Twenty-one checks were written that way, including the one that proves the
+stored files are actually gone after an erasure, the one that proves the
+neighbour's files survived, the one that proves a suspended investor's screen
+carries nobody's email address, and the one that proves no other investor's
+certificate is visible.
+
+The second shape is an ordering check. A warning about a stuck reminder is
+supposed to tell you to run the lock probe **before** it suggests rescheduling,
+because rescheduling something that is genuinely still in progress is how a
+message gets sent twice. The check compared where the two sentences appeared in
+the text — and if the first sentence is deleted altogether, the comparison still
+comes out in the right order. So the check was satisfied by the advice being
+missing.
+
+All twenty-two now go through a shared helper that treats "nothing to look at"
+as a failure, and there is a check that fails the build if anybody writes the old
+form again — the same guard that already exists to stop a script launching its
+own browser.
+
+**How it was proved.** The lock-probe sentence was deleted from the warning. With
+the new check: one failure, named. With the old check restored and the exact same
+deletion: **nothing failed at all.** Same defect, same run, one form catches it
+and the other does not.
+
+All twenty-five checking commands were run afterwards — **25 passed, 0 failed, 0
+skipped** — so none of the twenty-one had been quietly depending on finding
+nothing.
+
+---
+
 ## Things worth knowing
 
 - The `ENCRYPTION_KEY` and `AUTH_SECRET` in your local `.env` are throwaway development values. Generate fresh ones for anything real.

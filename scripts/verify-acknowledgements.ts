@@ -28,6 +28,7 @@ import {
   recordAcknowledgements,
 } from '@/lib/portal/acknowledgements-data'
 import { forbiddenWordsInAcknowledgement } from '@/lib/portal/acknowledgements'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp-ack-verify'
 
@@ -149,7 +150,7 @@ async function main(): Promise<void> {
     'and it comes back in the configured order',
     activeMine[0]?.id === item.id && activeMine[1]?.id === optional.id,
   )
-  check('every live item starts at revision 1', activeMine.every((row) => row.revision === 1))
+  check('every live item starts at revision 1', everyOf(activeMine, (row) => row.revision === 1))
 
   console.log('\nWhat an investor ticked')
 

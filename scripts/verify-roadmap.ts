@@ -26,6 +26,7 @@ import { db } from '@/db'
 import { investorAccounts, roadmapTiles } from '@/db/schema'
 import { loadPortalView } from '@/lib/portal/data'
 import { ROADMAP_DISCLAIMER, forbiddenWordsInTileLabel } from '@/lib/portal/roadmap'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'RoadmapVerify'
 
@@ -122,7 +123,8 @@ async function main(): Promise<void> {
 
   check(
     'is a constant rather than a row, so no tile edit can remove or reword it',
-    seeded.every((tile) => !tile.label.includes(ROADMAP_DISCLAIMER)) && ROADMAP_DISCLAIMER.length > 0,
+    everyOf(seeded, (tile) => !tile.label.includes(ROADMAP_DISCLAIMER)) &&
+      ROADMAP_DISCLAIMER.length > 0,
   )
 
   console.log('\nHiding is reversible, and the row survives it')
@@ -142,7 +144,12 @@ async function main(): Promise<void> {
   await cleanup()
 
   const remaining = await db.select().from(roadmapTiles)
-  check('verification data is removed', remaining.every((tile) => !tile.label.startsWith(PREFIX)))
+  // A count, not an `every`: none is the *right* answer here, and `everyOf`
+  // would refuse an empty table that is empty because the cleanup worked.
+  check(
+    'verification data is removed',
+    remaining.filter((tile) => tile.label.startsWith(PREFIX)).length === 0,
+  )
   check('and the seeded tiles are exactly as they were', remaining.length === seeded.length)
 
   console.log(`\n${passed} passed, ${failed} failed`)

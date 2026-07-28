@@ -33,6 +33,7 @@ import {
   verifyTotp,
 } from '@/lib/auth/totp'
 import { decrypt, encrypt, hashToken, issueToken } from '@/lib/crypto'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp2fa-verify'
 
@@ -140,7 +141,8 @@ async function main(): Promise<void> {
   check('ten recovery codes are stored', confirmed?.recoveryCodesHashed.length === 10)
   check(
     'none of them is stored in the clear',
-    recovery.plain.every(
+    everyOf(
+      recovery.plain,
       (plain) => !confirmed!.recoveryCodesHashed.includes(plain.replace('-', '')),
     ),
   )
@@ -162,7 +164,7 @@ async function main(): Promise<void> {
     .from(sessions)
     .where(eq(sessions.userId, user!.id))
 
-  check('both sessions start un-elevated', pending.every((s) => s.secondFactorAt === null))
+  check('both sessions start un-elevated', everyOf(pending, (s) => s.secondFactorAt === null))
 
   // Elevate the first one only — by its token hash, the way the action does.
   const elevated = await db
@@ -270,7 +272,7 @@ async function main(): Promise<void> {
   check(
     'no audit entry for this account carries the secret or a recovery code',
     !serialised.includes(enrolment.secret) &&
-      recovery.plain.every((plain) => !serialised.includes(plain)),
+      everyOf(recovery.plain, (plain) => !serialised.includes(plain)),
   )
 
   // -------------------------------------------------------------------------

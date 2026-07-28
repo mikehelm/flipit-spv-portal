@@ -32,6 +32,7 @@ import { loadAdminAccounts } from '@/lib/portal/accounts-data'
 import { claimPortalToken, CLAIM_FAILED_MESSAGE } from '@/lib/portal/claim'
 import { requestSignInLink } from '@/lib/portal/claim'
 import { changeAccountStatus } from '@/lib/portal/lifecycle'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'lifecycle-verify'
 
@@ -377,7 +378,7 @@ async function main(): Promise<void> {
     .where(eq(portalTokens.accountId, claimant!.id))
   check(
     'no token is stored in the clear — only its hash',
-    spentRows.every((row) => row.hash !== fresh.token && row.hash !== raced.token),
+    everyOf(spentRows, (row) => row.hash !== fresh.token && row.hash !== raced.token),
   )
 
   // -------------------------------------------------------------------------
@@ -432,7 +433,7 @@ async function main(): Promise<void> {
     )
     check(
       'and nothing that came from any account',
-      (suspendedView?.contacts ?? []).every((row) => !row.address.includes('alice')),
+      everyOf(suspendedView?.contacts ?? [], (row) => !row.address.includes('alice')),
     )
 
     // §7: once the portal is closing, the operator's address has stopped being

@@ -37,6 +37,7 @@ import {
   pendingEmailChange,
   requestEmailChange,
 } from '@/lib/portal/email-change'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp-emailchange-verify'
 
@@ -274,8 +275,11 @@ async function main(): Promise<void> {
     .from(emailChangeRequests)
     .where(eq(emailChangeRequests.accountId, alex))
     .orderBy(desc(emailChangeRequests.createdAt))
-  check('every request records the address it was made from', rows.every((r) => r.previousEmail !== null))
-  check('no request stores a plaintext token', rows.every((r) => r.tokenHash.length >= 32))
+  check(
+    'every request records the address it was made from',
+    everyOf(rows, (r) => r.previousEmail !== null),
+  )
+  check('no request stores a plaintext token', everyOf(rows, (r) => r.tokenHash.length >= 32))
   check(
     'the confirmed one is the only confirmed one',
     rows.filter((r) => r.confirmedAt !== null).length === 1,

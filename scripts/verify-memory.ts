@@ -47,6 +47,7 @@ import path from 'node:path'
 import { eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { mediaAssets } from '@/db/schema'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PORT = 3211
 const ORIGIN = `http://127.0.0.1:${PORT}`
@@ -310,7 +311,7 @@ async function main(): Promise<void> {
 
     check(
       'four concurrent downloads all complete in full',
-      totals.every((total) => total === OBJECT_BYTES),
+      everyOf(totals, (total) => total === OBJECT_BYTES),
       totals.map(megabytes).join(', '),
     )
 

@@ -30,6 +30,7 @@ import {
   loadRecipientExportRows,
   recordExport,
 } from '@/lib/export/data'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp17-verify'
 let actor: { kind: 'user'; id: string; label: string }
@@ -158,7 +159,8 @@ async function main(): Promise<void> {
 
   check(
     'every amount is an exact decimal string, never a number',
-    [row.proposedAmount, row.committedAmount, row.acceptedAmount, row.receivedAmount].every(
+    everyOf(
+      [row.proposedAmount, row.committedAmount, row.acceptedAmount, row.receivedAmount],
       (value) => typeof value === 'string' && /^\d+\.\d{2}$/.test(value),
     ),
   )
@@ -263,7 +265,7 @@ async function main(): Promise<void> {
   const filtered = await loadAuditRows({ entityType: 'export', limit: 50 })
   check(
     'filtering by entity returns only that entity',
-    filtered.length > 0 && filtered.every((item) => item.entityType === 'export'),
+    everyOf(filtered, (item) => item.entityType === 'export'),
   )
 
   const auditCsv = exportAuditLogCsv({

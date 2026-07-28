@@ -12104,3 +12104,177 @@ changed — this file adds a check and nothing else.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## Twenty-two checks that could not fail
+
+The last entry queued this: *"How many other checks in this repository cannot
+fail? One was found by accident, in a script whose subject was the thing it was
+failing to check."* The answer is twenty-two, they are all the same two shapes,
+and one of them is on the check that proves an erasure did not destroy somebody
+else's data.
+
+### The shape
+
+`Array.prototype.every` returns **true** for an empty array. Correct for the
+language, and wrong for a verification script, where the array is nearly always
+what a query returned and emptiness means *the thing this check is about was not
+there to look at*.
+
+    check("the neighbour's messages are untouched",
+      bobMessages.every((row) => row.body !== ERASED_MARKER))
+
+An erasure bug that destroyed the neighbour's messages **entirely** empties that
+array, and the check written to catch exactly that turns green. **The worse the
+defect, the more likely it is to be invisible**, which is the opposite of what a
+check is for.
+
+Thirty-eight `.every(` call sites across the verification scripts. Sixteen were
+either on an inline array literal — a fixed list written on the spot, which
+cannot be empty by surprise — or already carried a `length` guard beside them.
+**Twenty-one were not.** Among them:
+
+- ***`keys.every((key) => !bucket.objects.has(key))`*** — the check that the
+  stored bytes are gone after an erasure.
+- ***`neighbourKeys.all.every(...)`*** — the check that the neighbour's objects
+  survived it.
+- ***`(suspendedView?.contacts ?? []).every(...)`*** — a suspended investor's view
+  carrying no address. The `?? []` makes the vacuous case *explicit*: if
+  `contacts` is undefined the check passes without looking at anything.
+- ***`otherView!.offers.every((row) => row.certificates.length === 0)`*** — no
+  other investor's certificate is visible. Checklist point 5.
+- ***`recovery.plain.every((plain) => !serialised.includes(plain))`*** — no
+  recovery code reaches a serialised payload.
+
+### And the same defect in a different coat
+
+    stuck.out.indexOf('reminders:lock') < stuck.out.indexOf('reschedule')
+
+The stuck-reminder remedy is supposed to send the reader to the lock probe
+*before* it suggests rescheduling, because rescheduling a reminder a run is
+genuinely still working on is how a message gets sent twice. Delete the lock
+probe from the remedy and `indexOf` returns `-1`, which is less than any real
+index — **the ordering assertion is satisfied by the earlier thing not being
+there at all**, which is exactly what happens when somebody rewords a remedy.
+
+### What was built
+
+- ***`src/lib/verify/vacuous.ts`.*** `everyOf(rows, predicate)` — every row
+  satisfies it, *and there is at least one row*. It takes anything with a length
+  and an `every`, including the `Uint8Array` of bytes a store hands back, which
+  is one of the places this matters most and is not an `Array`.
+  `appearsBefore(text, first, second)` — in that order, *and both present*.
+- ***All twenty-one sites converted***, plus the ordering one. One site was
+  rewritten as a count instead: `verify:roadmap`'s cleanup check, where *none* is
+  the right answer and `everyOf` would refuse an empty table that is empty
+  because the cleanup worked.
+- ***A source-level guard***, in the shape `chromium.test.ts` established: no
+  script in `scripts/` may call `.every(` on anything but an inline array
+  literal, and none may order two `indexOf` results. The failure message names
+  the file, the line, and the two ways out.
+
+The guard is the point. The fix written once and applied to *some* of the places
+that need it is how this repository lost three verification scripts to a browser
+path, and then lost the overview banner to a plural. A twenty-second site added
+next month would have looked exactly like the twenty-one that were fixed.
+
+### Proved by breaking it
+
+- ***The lock probe removed from the stuck-claim remedy in `rules.ts`.*** With
+  `appearsBefore`: **30 passed, 1 failed** — *"and sends the reader to the lock
+  probe first"*. With the old comparison restored and the same mutation applied:
+  **31 passed, 0 failed.** The same defect, caught by one form and silently
+  passed by the other, in the same run.
+- ***A bare `.every(` reintroduced into `verify-qa.ts`.*** The guard failed and
+  quoted the line.
+- ***`everyOf([], () => true)`*** is `false` where `[].every(() => true)` is
+  `true`, asserted side by side so the difference is the test rather than a
+  comment.
+
+**Decisions.**
+
+- ***Empty is a failure, not a warning.*** A check that means *"there are none of
+  these and none is right"* is a count and should be written as one. That is a
+  different sentence and it stays honest when the table is empty on purpose.
+- ***The guard covers `scripts/` and not `src/`.*** In production code `every` on
+  an empty collection is frequently the correct answer — an empty batch is a
+  batch with nothing wrong with it. The defect is specific to assertions.
+- ***An inline array literal is still allowed.*** `[a, b, c].every(...)` cannot be
+  empty by surprise, and rewriting those would have been noise in the diff around
+  the twenty-one that mattered.
+- ***No script's behaviour was changed to make a converted check pass.*** All 25
+  verification commands were run after the conversion: **25 passed, 0 failed, 0
+  skipped**, so none of the twenty-one had been relying on emptiness.
+
+**Deviations.** None.
+
+**Checklist.** Point 5 is strengthened rather than touched: two of the converted
+sites are the checks that no investor-facing view reveals another investor, and
+both could previously have passed by finding nothing. No production code
+changed.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2811**, was 2798) are green.
+`pnpm verify:all` is **25 passed, 0 failed, 0 skipped — 4 minutes**.
+
+**Uncertain.**
+
+- ***`.some(` is the mirror image and has not been looked at.*** `rows.some(bad)`
+  is `false` on an empty collection, so a check written as *"nothing here is
+  bad"* passes when there is nothing here — the same defect with the polarity
+  reversed. Nothing in this package looked for it. **This is the next item.**
+- ***A check whose fixture never reaches the branch it asserts is still
+  invisible.*** That is what the banner defect actually was, and neither the
+  `everyOf` guard nor the `appearsBefore` one would have caught it. The only
+  method that finds those is mutating the thing under test and watching what
+  stays green, and that has now been done to five assertions by hand and to
+  nothing systematically.
+- ***The same trick would work on the health *signal*.*** `summariseHealth`
+  reduces the report for an uptime monitor, and nothing asks whether it and the
+  page agree about what needs a person. A third surface for the same findings,
+  with no parity test.
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved*** and
+  the finding says the process did not survive, which is not what happened.
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

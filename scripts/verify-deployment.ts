@@ -55,6 +55,7 @@ import { jpegWithMetadata, mp4WithLocation, pdfBytes } from '@/lib/media/fixture
 import { ingest } from '@/lib/media/ingest'
 import { mediaStore } from '@/lib/media/store'
 import { EMAIL_BODY_POLICY } from '@/lib/security/csp'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp20-deploy'
 const BASE_PATH = '/SPV'
@@ -617,7 +618,7 @@ async function main(): Promise<void> {
         check('and returns exactly the last four bytes', middleBody.length === 4, String(middleBody.length))
         check(
           'which are the last four bytes of the file',
-          middleBody.every((byte, i) => byte === wholeBody[ingested.sizeBytes - 4 + i]),
+          everyOf(middleBody, (byte, i) => byte === wholeBody[ingested.sizeBytes - 4 + i]),
         )
 
         const past = await fetch(videoUrl, {

@@ -42,6 +42,7 @@ import {
   MEDIA_CHECK_STALE_DAYS,
   RUN_OVERDUE_HOURS,
 } from '@/lib/health/rules'
+import { appearsBefore, everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'health-verify'
 
@@ -263,7 +264,7 @@ async function main(): Promise<void> {
   )
   check(
     'and sends the reader to the lock probe first',
-    stuck.out.indexOf('reminders:lock') < stuck.out.indexOf('reschedule'),
+    appearsBefore(stuck.out, 'reminders:lock', 'reschedule'),
   )
 
   // --- A claim young enough that the run could still be working ------------
@@ -424,10 +425,10 @@ async function main(): Promise<void> {
   )
   check(
     'every finding that is not ok carries something to do about it',
-    resolved.out
-      .split('\n\n')
-      .filter((block) => /^\s{2}(WRONG|note)/.test(block))
-      .every((block) => block.includes('→')),
+    everyOf(
+      resolved.out.split('\n\n').filter((block) => /^\s{2}(WRONG|note)/.test(block)),
+      (block) => block.includes('→'),
+    ),
   )
   check(
     'it says what it checked even when nothing is wrong',

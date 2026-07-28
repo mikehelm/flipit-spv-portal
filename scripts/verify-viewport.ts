@@ -88,6 +88,7 @@ import {
   ERASURE_INCOMPLETE_ACTION,
 } from '@/lib/erasure/erase'
 import { mediaStore } from '@/lib/media/store'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp18-viewport'
 const PORT = 3210
@@ -3095,7 +3096,7 @@ async function verifyTheErrorPage(browser: Browser): Promise<void> {
     )
     check(
       'and every public page still answers, because none of them reads the database',
-      publicPages.every((p) => p.status < 400),
+      everyOf(publicPages, (p) => p.status < 400),
       publicPages.map((p) => `${p.path} ${p.status}`).join(' | '),
     )
 

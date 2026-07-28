@@ -74,6 +74,7 @@ import {
   seedErasureFixture,
   storedKeysFor,
 } from './lib/erasure-fixture'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PORT = 3215
 const ORIGIN = `http://127.0.0.1:${PORT}`
@@ -131,7 +132,7 @@ async function holdsItsOwnBytes(store: MediaStore, key: string): Promise<boolean
   if (!object) return false
   const wanted = bytesFor(key)
   if (object.bytes.byteLength !== wanted.byteLength) return false
-  return object.bytes.every((byte, index) => byte === wanted[index])
+  return everyOf(object.bytes, (byte, index) => byte === wanted[index])
 }
 
 // ---------------------------------------------------------------------------
@@ -267,7 +268,7 @@ async function journey(browser: Browser, store: MediaStore): Promise<void> {
   check(
     'and the store lists them all, so a count taken from it means something',
     !listedBefore.truncated &&
-      [...targetKeys.all, ...neighbourKeys.all].every((key) =>
+      everyOf([...targetKeys.all, ...neighbourKeys.all], (key) =>
         listedBefore.objects.some((object) => object.key === key),
       ),
     `${listedBefore.objects.length} objects listed, truncated=${listedBefore.truncated}`,
@@ -563,7 +564,9 @@ async function journey(browser: Browser, store: MediaStore): Promise<void> {
   )
   check(
     'while the neighbour’s objects are all still listed',
-    neighbourKeys.all.every((key) => listedAfter.objects.some((object) => object.key === key)),
+    everyOf(neighbourKeys.all, (key) =>
+      listedAfter.objects.some((object) => object.key === key),
+    ),
   )
   check(
     'and the store lost exactly the erased investor’s objects and no others',
@@ -594,7 +597,7 @@ async function journey(browser: Browser, store: MediaStore): Promise<void> {
     .where(inArray(documentPackages.offerId, offerIds))
   check(
     'every document row now carries the erased marker rather than a live key',
-    documentRows.length > 0 && documentRows.every((row) => row.key === ERASED_STORAGE_KEY),
+    everyOf(documentRows, (row) => row.key === ERASED_STORAGE_KEY),
     documentRows.map((row) => row.key).join(', '),
   )
 
@@ -604,7 +607,7 @@ async function journey(browser: Browser, store: MediaStore): Promise<void> {
     .where(inArray(participationCertificates.offerId, offerIds))
   check(
     'and every certificate row has had its key cleared',
-    certificateRows.length > 0 && certificateRows.every((row) => row.key === null),
+    everyOf(certificateRows, (row) => row.key === null),
     certificateRows.map((row) => row.key ?? 'null').join(', '),
   )
 
@@ -620,7 +623,7 @@ async function journey(browser: Browser, store: MediaStore): Promise<void> {
   check(
     `the neighbour's ${neighbourKeys.all.length} rows still name their own keys`,
     neighbourAfter.all.length === neighbourKeys.all.length &&
-      neighbourAfter.all.every((key) => neighbourKeys.all.includes(key)),
+      everyOf(neighbourAfter.all, (key) => neighbourKeys.all.includes(key)),
     `${neighbourAfter.all.length} keys after`,
   )
 

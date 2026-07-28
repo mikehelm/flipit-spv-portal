@@ -27,6 +27,7 @@ import {
 } from '@/lib/certificate/issue'
 import { advanceStage, correctStage, recordFundsReceived } from '@/lib/portal/advance'
 import { loadPortalView } from '@/lib/portal/data'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp13-verify'
 let actor: { kind: 'user'; id: string; label: string }
@@ -478,7 +479,7 @@ async function main(): Promise<void> {
   const otherView = await loadPortalView(other!.id)
   check(
     'another investor sees none of them',
-    otherView!.offers.every((row) => row.certificates.length === 0),
+    everyOf(otherView!.offers, (row) => row.certificates.length === 0),
   )
   check(
     "and no certificate id of theirs appears in the other investor's view",

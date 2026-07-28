@@ -80,6 +80,7 @@ import {
   FAKE_S3_REGION,
   FAKE_S3_SECRET,
 } from '@/test/fake-s3'
+import { everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'ErasureVerify'
 
@@ -446,7 +447,10 @@ async function main(): Promise<void> {
     .from(accountStatusEvents)
     .where(eq(accountStatusEvents.accountId, alice.account.id))
   const seeded = statusRows.filter((row) => row.toStatus === 'ACTIVE')
-  check('the seeded status reason is redacted', seeded.every((row) => row.reason === ERASED_MARKER))
+  check(
+    'the seeded status reason is redacted',
+    everyOf(seeded, (row) => row.reason === ERASED_MARKER),
+  )
   check(
     'and a new event records the archiving in fixed words, not anybody’s prose',
     statusRows.some((row) => row.toStatus === 'ARCHIVED' && row.reason.startsWith('Erased at')),
@@ -516,10 +520,10 @@ async function main(): Promise<void> {
     .select()
     .from(conversationMessages)
     .where(eq(conversationMessages.accountId, alice.account.id))
-  check('both message bodies are redacted', messages.every((row) => row.body === ERASED_MARKER))
+  check('both message bodies are redacted', everyOf(messages, (row) => row.body === ERASED_MARKER))
   check(
     'and the Message-IDs that thread back to the mailbox are gone',
-    messages.every((row) => row.emailMessageId === null && row.inReplyTo === null),
+    everyOf(messages, (row) => row.emailMessageId === null && row.inReplyTo === null),
   )
 
   const [commitment] = await db
@@ -656,7 +660,7 @@ async function main(): Promise<void> {
   check('their conversation is intact', bobMessages.length === 2)
   check(
     'and none of it is redacted',
-    bobMessages.every((row) => row.body !== ERASED_MARKER && row.body.includes('bob')),
+    everyOf(bobMessages, (row) => row.body !== ERASED_MARKER && row.body.includes('bob')),
   )
 
   const [bobSnap] = await db
@@ -1005,7 +1009,7 @@ async function main(): Promise<void> {
     }
     check(
       'three objects are in the bucket, over a socket that verified every signature',
-      keys.every((key) => bucket.objects.has(key)),
+      everyOf(keys, (key) => bucket.objects.has(key)),
       `${bucket.objects.size} objects, ${bucket.requests} requests`,
     )
 
@@ -1077,7 +1081,7 @@ async function main(): Promise<void> {
       .where(eq(documentPackages.offerId, erin.offer.id))
     check(
       'and all three document rows still name their own keys',
-      erinDocs.length === 3 && erinDocs.every((row) => keys.includes(row.key!)),
+      erinDocs.length === 3 && everyOf(erinDocs, (row) => keys.includes(row.key!)),
     )
     check('the object that refused is still in the bucket', bucket.objects.has(locked))
 
@@ -1170,7 +1174,7 @@ async function main(): Promise<void> {
     )
     check(
       'the bucket holds none of them',
-      keys.every((key) => !bucket.objects.has(key)),
+      everyOf(keys, (key) => !bucket.objects.has(key)),
     )
     const erinErased = await db.query.investorAccounts.findFirst({
       where: eq(investorAccounts.id, erin.account.id),
@@ -1186,7 +1190,7 @@ async function main(): Promise<void> {
     check(
       'with every document row carrying the erased marker',
       erinDocsAfter.length === 3 &&
-        erinDocsAfter.every((row) => row.key === ERASED_STORAGE_KEY),
+        everyOf(erinDocsAfter, (row) => row.key === ERASED_STORAGE_KEY),
     )
 
     /*
