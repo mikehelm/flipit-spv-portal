@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Guided release mobile acceptance blockers | root-goal-viewport | 2026-07-28 09:43 | `src/components/text-size-control.tsx`, `src/components/account-curl-menu.tsx`, `src/lib/portal/demo-preview.test.ts`, `scripts/verify-viewport.ts`, `GUIDED_RELEASE_RECEIPT.md`, `PROGRESS.md`, `CLAIMS.md` |
 
 ## Done, so nobody starts it again
 
