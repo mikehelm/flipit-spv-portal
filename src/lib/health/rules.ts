@@ -516,13 +516,27 @@ export function serviceModeFindings(facts: HealthFacts): Finding[] {
  * says which URL it is actually configured with rather than just "refused".
  */
 export function deploymentFindings(facts: HealthFacts): Finding[] {
-  if (facts.appUrl === facts.productionAppUrl) {
+  // Keep this comparison identical to `env().isProductionDeployment`, which is
+  // the value the send guard consumes. Health must never describe a deployment
+  // as refused when the transport will treat it as production.
+  const normaliseUrl = (value: string) => value.replace(/\/+$/, '').toLowerCase()
+  const isProduction =
+    normaliseUrl(facts.appUrl) === normaliseUrl(facts.productionAppUrl)
+
+  if (isProduction) {
+    const detail =
+      facts.appUrl === facts.productionAppUrl
+        ? `APP_URL is ${facts.appUrl}, which matches PRODUCTION_APP_URL.`
+        : `APP_URL is ${facts.appUrl}; PRODUCTION_APP_URL is ${facts.productionAppUrl}. ` +
+          'After the same case and trailing-slash normalization used by the send guard, ' +
+          'they identify the same production deployment.'
+
     return [
       {
         area: 'Deployment',
         severity: 'OK',
         headline: 'This deployment is the one permitted to send real invitations.',
-        detail: `APP_URL is ${facts.appUrl}, which matches PRODUCTION_APP_URL.`,
+        detail,
         remedy: 'Nothing to do.',
       },
     ]

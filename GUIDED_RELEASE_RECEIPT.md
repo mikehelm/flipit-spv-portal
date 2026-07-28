@@ -101,3 +101,14 @@ Phase 4 commit: `c407947`
 - Focused lint, 18 focused tests, typecheck and diff validation passed.
 
 Phase 5 AI-cap commit: pending
+
+## Phase 7 safety fix — normalized deployment truth
+
+- Deployment health now normalizes URL case and trailing slashes exactly like
+  the environment/send guard before reporting permitted or refused.
+- Added focused trailing-slash and URL-case cases.
+- Existing transport and environment behavior is unchanged.
+- Focused lint, 137 health/environment/transport-guard tests, typecheck and
+  diff validation passed.
+
+Health-truth commit: pending

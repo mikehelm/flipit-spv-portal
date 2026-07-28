@@ -452,6 +452,26 @@ describe('the base-URL guard', () => {
     expect(findings[0]?.headline).toMatch(/permitted to send/i)
   })
 
+  it('matches the send guard when APP_URL has a trailing slash', () => {
+    const findings = deploymentFindings({
+      ...healthy(),
+      appUrl: 'https://spv.flipit.com/',
+    })
+    expect(findings[0]?.severity).toBe('OK')
+    expect(findings[0]?.headline).toMatch(/permitted to send/i)
+    expect(findings[0]?.detail).toMatch(/trailing-slash normalization/i)
+  })
+
+  it('matches the send guard when URL case differs', () => {
+    const findings = deploymentFindings({
+      ...healthy(),
+      appUrl: 'https://SPV.FLIPIT.COM',
+    })
+    expect(findings[0]?.severity).toBe('OK')
+    expect(findings[0]?.headline).toMatch(/permitted to send/i)
+    expect(findings[0]?.detail).toMatch(/same production deployment/i)
+  })
+
   it('names both URLs when they disagree', () => {
     const findings = deploymentFindings({
       ...healthy(),

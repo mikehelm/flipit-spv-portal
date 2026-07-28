@@ -35,7 +35,6 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Normalized deployment health truth | codex-guided-health-20260728 | 2026-07-28 09:30 UTC | `src/lib/health/rules.ts`; `src/lib/health/rules.test.ts` |
 
 ## Done, so nobody starts it again
 
