@@ -1,21 +1,26 @@
 'use client'
 
 /**
- * The two controls that sit above everything else: which view, and whether the
- * pencil is on.
+ * The controls that sit above everything else: which view, and — on paper —
+ * whether the pencil is on.
  *
  * Both are real buttons with pressed/checked state rather than a styled
  * checkbox, because both change what the page *is* rather than what will be
  * submitted, and neither belongs to a form.
  */
 
-export type ReviewView = 'PAPER' | 'TECHNICAL'
+export type ReviewView = 'GUIDED' | 'PAPER' | 'TECHNICAL'
 
 const VIEWS: ReadonlyArray<{
   id: ReviewView
   label: string
   hint: string
 }> = [
+  {
+    id: 'GUIDED',
+    label: 'Guided review',
+    hint: 'One recorded change at a time',
+  },
   {
     id: 'PAPER',
     label: 'Paper review',

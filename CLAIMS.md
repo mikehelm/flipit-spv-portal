@@ -35,7 +35,6 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Guided email review | codex-guided-email-review-20260728 | 2026-07-28 09:24 UTC | `src/components/email-review-workspace.tsx`; `src/components/email-review/view-switch.tsx`; `src/lib/email-review/boundary.test.ts`; optional `src/components/email-review/guided-review.test.tsx` |
 
 ## Done, so nobody starts it again
 

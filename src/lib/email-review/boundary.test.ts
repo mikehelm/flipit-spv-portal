@@ -82,6 +82,25 @@ describe('David’s private email-review boundary', () => {
     )
   })
 
+  it('adds a local guided view without creating a second review authority', () => {
+    const workspace = read('src/components/email-review-workspace.tsx')
+    const switcher = read('src/components/email-review/view-switch.tsx')
+
+    expect(switcher).toContain("export type ReviewView = 'GUIDED' | 'PAPER' | 'TECHNICAL'")
+    expect(switcher).toContain("id: 'GUIDED'")
+    expect(workspace).toContain("useState<ReviewView>('GUIDED')")
+    expect(workspace).toContain("const inspectedUnit = view === 'GUIDED' ? guidedUnit : selected")
+    expect(workspace).toContain('aria-label="Guided email review"')
+    expect(workspace).toContain('Local review progress only')
+    expect(workspace).toContain('Change {guidedIndex + 1} of {guidedUnits.length}')
+    expect(workspace).toContain('Previous')
+    expect(workspace).toContain('Next')
+    expect(workspace).toContain('View proposal status')
+    expect(workspace).toContain("setTab(")
+    expect(workspace).not.toContain('guidedReviewAction')
+    expect(workspace).not.toContain('guidedCompleteAction')
+  })
+
   it('puts no source email text in the reusable client JavaScript', () => {
     const workspace = read('src/components/email-review-workspace.tsx')
     expect(workspace).toContain('import type')

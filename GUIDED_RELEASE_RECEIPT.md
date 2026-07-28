@@ -68,4 +68,21 @@ Phase 2 commit: `b399671f883a3b41696f47f279c7361a221325b2`
   action/store semantics are unchanged.
 - Focused lint, 22 focused tests, typecheck and diff validation passed.
 
-Phase 3 commit: pending
+Phase 3 commit: `541d8f0`
+
+## Phase 4 — Guided email review
+
+- Base claim: `a9e47b8`
+- Scope stayed inside the existing review workspace, its view switch, and the
+  boundary test.
+- Guided review is now the default and presents one recorded change at a time.
+  Paper and Technical remain one click away.
+- The displayed change, evidence, editable section, proposal lookup, and
+  context action derive from the same inspected unit.
+- Existing inspector tabs remain the only evidence, AI, proposal and review
+  tools. No new action or authority was added.
+- Viewer proposal practice remains browser-only; traversal is explicitly not
+  approval, compliance or send readiness.
+- Focused lint, 26 focused tests, typecheck and diff validation passed.
+
+Phase 4 commit: pending

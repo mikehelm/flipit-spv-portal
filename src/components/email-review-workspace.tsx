@@ -402,21 +402,28 @@ export function EmailReviewWorkspace({
   const [selectedId, setSelectedId] = useState<string | null>(firstChanged?.id ?? null)
   const [filter, setFilter] = useState<ChangeFilter>('CHANGED')
   const [tab, setTab] = useState<InspectorTab>('CHANGES')
-  // Paper is the default. The technical comparison is unchanged and one click
-  // away; nothing about the selection, the evidence record or the proposal
-  // flow depends on which of the two is on screen.
-  const [view, setView] = useState<ReviewView>('PAPER')
+  // Guided is the calm first experience. The complete paper and mechanical
+  // comparison remain unchanged and one click away; all three views share the
+  // same selection, evidence record and protected proposal flow.
+  const [view, setView] = useState<ReviewView>('GUIDED')
   const [markup, setMarkup] = useState(true)
   const [aiScope, setAiScope] = useState<'SELECTION' | 'DOCUMENT'>('SELECTION')
   const [practiceProposal, setPracticeProposal] =
     useState<PracticeProposal | null>(null)
   const selected =
     workspace.diffUnits.find((unit) => unit.id === selectedId) ?? firstChanged
+  const guidedUnits = workspace.diffUnits.filter((unit) => unit.kind !== 'UNCHANGED')
+  const guidedIndex = Math.max(
+    0,
+    guidedUnits.findIndex((unit) => unit.id === selected?.id),
+  )
+  const guidedUnit = guidedUnits[guidedIndex] ?? firstChanged
+  const inspectedUnit = view === 'GUIDED' ? guidedUnit : selected
   const selectedClauses = document.clauses.filter((clause) =>
-    selected?.clauseIds.includes(clause.id),
+    inspectedUnit?.clauseIds.includes(clause.id),
   )
   const selectedSection = workspace.sections.find(
-    (section) => section.id === selected?.editableSectionId,
+    (section) => section.id === inspectedUnit?.editableSectionId,
   )
   const editableSections = workspace.sections.filter((section) => section.editable)
   const [proposalSectionId, setProposalSectionId] = useState(
@@ -461,6 +468,9 @@ export function EmailReviewWorkspace({
         'UNVERIFIED',
     )
   })
+  const selectedProposal = selectedSection
+    ? workspace.proposals.find((proposal) => proposal.sectionId === selectedSection.id)
+    : null
 
   function chooseUnit(
     unit: EmailDiffUnit,
@@ -481,6 +491,13 @@ export function EmailReviewWorkspace({
         })
       })
     }
+  }
+
+  function chooseView(next: ReviewView) {
+    if (next === 'GUIDED' && selected?.kind === 'UNCHANGED' && firstChanged) {
+      chooseUnit(firstChanged)
+    }
+    setView(next)
   }
 
   function rehearseProposal(event: FormEvent<HTMLFormElement>) {
@@ -545,7 +562,7 @@ export function EmailReviewWorkspace({
     <div className="space-y-4">
       <ReviewViewSwitch
         view={view}
-        onView={setView}
+        onView={chooseView}
         markup={markup}
         onMarkup={setMarkup}
       />
@@ -598,7 +615,19 @@ export function EmailReviewWorkspace({
           }`}
         >
           {renderToolTabs()}
-          <header className="border-b hairline p-4">
+          {view === 'GUIDED' ? (
+            <div className="p-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.17em] text-orange">
+                Guided review
+              </p>
+              <p className="mt-2 text-xs leading-6 text-dim">
+                Work through one recorded change at a time. This position exists only
+                in this browser tab and is not approval or permission to send.
+              </p>
+            </div>
+          ) : (
+            <>
+              <header className="border-b hairline p-4">
             <p className="text-[10px] font-bold uppercase tracking-[0.17em] text-orange">
               Change map
             </p>
@@ -639,7 +668,7 @@ export function EmailReviewWorkspace({
             ))}
           </div>
 
-          <nav aria-label="Document changes" className="p-2">
+              <nav aria-label="Document changes" className="p-2">
             <ol className="space-y-1">
               {visibleUnits.map((unit) => {
                 const clauses = document.clauses.filter((clause) =>
@@ -691,11 +720,144 @@ export function EmailReviewWorkspace({
                 )
               })}
             </ol>
-          </nav>
+              </nav>
+            </>
+          )}
         </aside>
 
         <div className="order-2 min-w-0 lg:col-start-2 lg:row-start-1">
-          {view === 'PAPER' ? (
+          {view === 'GUIDED' ? (
+            guidedUnit ? (
+            <section
+              aria-label="Guided email review"
+              className="overflow-hidden rounded-sm border hairline bg-paper"
+            >
+              <header className="flex flex-wrap items-center justify-between gap-3 border-b hairline p-4">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-orange">
+                    Change {guidedIndex + 1} of {guidedUnits.length}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
+                    Local review progress only — not approval or send readiness.
+                  </p>
+                </div>
+                <span className="rounded-full border hairline px-3 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-dim">
+                  {KIND_STYLE[guidedUnit.kind].label}
+                </span>
+              </header>
+
+              <div className="grid grid-cols-1 gap-px bg-edge/40 sm:grid-cols-2">
+                <article className="bg-paper p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-warn">
+                    David&rsquo;s original
+                  </p>
+                  <div className="mt-3 space-y-3 text-sm leading-7 text-dim">
+                    {guidedUnit.original.length > 0 ? (
+                      guidedUnit.original.map((paragraph, index) => (
+                        <p key={`${guidedUnit.id}-guided-original-${index}`}>{paragraph}</p>
+                      ))
+                    ) : (
+                      <p className="italic text-muted">No equivalent in the original.</p>
+                    )}
+                  </div>
+                </article>
+                <article className="bg-paper p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-ok">
+                    Current invitation
+                  </p>
+                  <div className="mt-3 space-y-3 text-sm leading-7 text-ftext">
+                    {guidedUnit.current.length > 0 ? (
+                      guidedUnit.current.map((paragraph, index) => (
+                        <p key={`${guidedUnit.id}-guided-current-${index}`}>{paragraph}</p>
+                      ))
+                    ) : (
+                      <p className="italic text-muted">Removed from the current invitation.</p>
+                    )}
+                  </div>
+                </article>
+              </div>
+
+              <div className="border-t hairline p-4">
+                {selectedClauses.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedClauses.map((clause) => (
+                      <article key={clause.id} className="rounded-sm border hairline p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h2 className="text-xs font-bold text-ftext">{clause.title}</h2>
+                          <EvidenceBadge kind={clause.evidenceKind} />
+                        </div>
+                        <p className="mt-3 text-xs leading-6 text-dim">{clause.reason}</p>
+                        <p className="mt-2 text-[10px] leading-5 text-muted">
+                          {clause.evidence}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs leading-6 text-dim">
+                    This mechanical change has no separate recorded rationale.
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTab(
+                      selectedProposal
+                        ? 'REVIEW'
+                        : selectedSection
+                          ? 'PROPOSE'
+                          : selectedClauses.length > 0
+                            ? 'EVIDENCE'
+                            : 'AI',
+                    )
+                  }
+                  className="mt-4 min-h-11 w-full rounded-sm border border-orange/35 px-4 text-xs font-bold text-orange"
+                >
+                  {selectedProposal
+                    ? 'View proposal status'
+                    : selectedSection
+                      ? testMode
+                        ? 'Practice wording for this change'
+                        : 'Propose wording for this change'
+                      : selectedClauses.length > 0
+                        ? 'Inspect the recorded evidence'
+                        : 'Ask about this change'}
+                </button>
+              </div>
+
+              <footer className="grid grid-cols-2 gap-3 border-t hairline p-4">
+                <button
+                  type="button"
+                  disabled={guidedIndex === 0}
+                  onClick={() => chooseUnit(guidedUnits[guidedIndex - 1])}
+                  className="min-h-11 rounded-sm border hairline px-3 text-xs font-bold text-dim disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  disabled={guidedIndex >= guidedUnits.length - 1}
+                  onClick={() => chooseUnit(guidedUnits[guidedIndex + 1])}
+                  className="min-h-11 rounded-sm border hairline px-3 text-xs font-bold text-dim disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </footer>
+            </section>
+            ) : (
+              <section
+                aria-label="Guided email review"
+                className="rounded-sm border hairline bg-paper p-6"
+              >
+                <p className="text-sm font-bold text-ftext">No recorded changes</p>
+                <p className="mt-2 text-xs leading-6 text-dim">
+                  The two versions currently have no changed passages to walk through.
+                  This is not an approval or permission to send.
+                </p>
+              </section>
+            )
+          ) : view === 'PAPER' ? (
             <PaperReview
               diffUnits={workspace.diffUnits}
               clauses={document.clauses}
