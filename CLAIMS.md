@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Guided David onboarding | codex-guided-onboarding-20260728 | 2026-07-28 09:23 UTC | `src/app/(admin)/admin/onboarding/page.tsx`; `src/app/(admin)/admin/onboarding/page.test.tsx`; optional `src/lib/auth/onboarding-guidance.ts`; optional `src/lib/auth/onboarding-guidance.test.ts` |
 
 ## Done, so nobody starts it again
 
