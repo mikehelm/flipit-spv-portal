@@ -51,4 +51,21 @@ Checkpoint commit: `22eb17ce0072a5ace129e0a4aebeba797fbe6b5e`
 - Typecheck — passed.
 - Diff validation — passed.
 
-Phase 2 commit: pending
+Phase 2 commit: `b399671f883a3b41696f47f279c7361a221325b2`
+
+## Phase 3 — Guided David onboarding
+
+- Base claim: `0746367`
+- Scope stayed inside the claimed onboarding page, focused page test, and
+  guidance helper/test.
+- David sees one personal `Needs you` action in canonical order while saved
+  answers remain quietly reopenable.
+- Shared SMTP is shown separately as `Waiting` with Mike named in prose; no
+  configure, test, disconnect, credential, role or guard control moved to
+  David.
+- Finish setup requires the existing `canComplete`, live mail `HEALTHY`, and
+  not already complete. This is a stricter presentation gate; the protected
+  action/store semantics are unchanged.
+- Focused lint, 22 focused tests, typecheck and diff validation passed.
+
+Phase 3 commit: pending
