@@ -12616,3 +12616,157 @@ that demonstrates itself failing. Nothing in the application changed.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## Thirteen claims, and the one the harness found
+
+The last entry queued this: *"Eight of the twelve checklist points have no
+mutation … Point 3 is the one where a mutation would be most informative. This
+is the next item."*
+
+Six more mutations, taking the sweep from seven to thirteen and the checklist
+from four points covered to ten. **One of them survived**, and what it found is
+the reason the harness exists.
+
+### The six
+
+| Claim | Checklist | Broken by |
+| --- | --- | --- |
+| No send path bypasses the compliance approval | 2 | the `NO_APPROVAL` branch made unreachable |
+| A jurisdiction block stops one recipient, never the batch | 3 | the pre-flight step made to enforce a failure |
+| Claim and sign-in tokens are hashed at rest | 6 | `hashToken` returning the token |
+| Suspension refuses a new link as well as revoking the old | 7 | `issueLink: true` for a suspended account |
+| No route but the verification page is indexable | 9 | `disallow` emptied in the robots policy |
+| A published Q&A entry carries nothing identifying | 10 | the anonymity guard removed from the projection |
+
+Point 3's mutation is the one worth reading. The pre-flight step that names
+recipients in countries the approval does not cover is `ATTESTED`, and its
+wording ends *"Everybody else is unaffected."* Making it `FAIL` when anybody is
+blocked is a one-line change that looks like tightening a check and is in fact
+the whole of the defect the checklist asks about: one recipient in the wrong
+country, and nobody gets an invitation.
+
+### The one that survived
+
+    FAIL  a published Q&A entry carries nothing identifying — MUTANT SURVIVED
+
+`publishBlock` is enforced **twice**, on purpose. `recordAnswer` refuses to
+publish an investor's question that has not been rewritten into a general form,
+and `toPublicEntry` refuses to *render* one. The comment above the second says
+why: *"the query is a filter a future caller can forget to write; this is the
+projection every caller has to go through."*
+
+The braces were tested. **The belt was not.** Removing the guard from
+`toPublicEntry` left all 51 checks in `verify:qa` green, because nothing in that
+file can put a row into the state the guard exists for — the service refuses to
+write it.
+
+So the fixture now writes it directly: a published entry, with an answer, asked
+by an investor, with the public rewrite set to null — exactly the row a hand-run
+`UPDATE`, a migration, or a future code path that forgets the service would
+leave behind. Three checks, and they are checklist point 10 at the level it is
+actually asked at:
+
+- the shared page refuses the row, rather than only the form refusing to create
+  it;
+- **not a word of the original wording** reaches the page;
+- and the properly rewritten entries are still there, so the refusal is a filter
+  and not an empty page.
+
+With that written, the mutant is caught. **The harness found a real untested
+defence on its second run**, which is the argument for it stated better than the
+last entry managed.
+
+**Decisions.**
+
+- ***The gap was closed rather than the mutation removed.*** Deleting a mutation
+  that survives is the one thing that would make this file worse than not having
+  it. It is written down here because that temptation is the failure mode.
+- ***The fixture bypasses the service deliberately.*** Every other check in
+  `verify:qa` goes through the real path, and that is right for them. This one
+  cannot: the state being defended against is one the real path will not
+  produce, which is exactly why the defence had never been exercised.
+- ***Point 3's mutation goes at the pre-flight rather than at
+  `isJurisdictionApproved`.*** Making the predicate always false blocks
+  everybody, which is a different defect — the checklist asks whether *one*
+  block stops *everybody*, and the pre-flight is where that could happen.
+
+**Deviations.** None.
+
+**Checklist.** Ten of the twelve now have a mutation that demonstrates the check
+catching it: 1, 2, 3, 4, 5, 6, 7, 9, 10 and 12. Point 10 also gained a real new
+check in `verify:qa`.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2817**) are green.
+`pnpm verify:all` is **26 passed, 0 failed, 0 skipped**.
+`pnpm verify:mutants` is **26 passed, 0 failed**; `pnpm verify:qa` is now 54.
+
+**Uncertain.**
+
+- ***Points 8 and 11 have no mutation.*** 8 — *does any log line contain a token,
+  an email body, or the OpenAI key* — is the harder of the two and the more
+  valuable: it is a property of every log statement in the repository rather
+  than of one function, so there is no single line to break. 11 — *can the AI
+  path change a calculated figure* — has an obvious target in
+  `normaliseProposal` and was left only for time. **11 is the next item, and it
+  is cheap.**
+- ***The Q&A defence had a partner and it has not been looked for.*** `data.ts`
+  filters withdrawn entries in SQL *and* `toPublicEntry` filters them again. That
+  second filter is the same shape as the one just found untested, and nothing has
+  driven it either.
+- ***Every mutation is a single edit to a single file.*** The defects this
+  repository has actually shipped were omissions — a rule missing from a list, a
+  fix applied to two files of five. A generator that *deletes* rather than
+  rewrites would find a different class.
+- ***Nothing mutates the verification scripts themselves.*** The banner defect was
+  in a script, not in `src/`.
+- ***`.filter(...).length === 0` has not been looked at***, the third coat of the
+  empty-collection defect.
+- ***The six negated checks without controls are recorded, not solved.***
+- ***The same trick would work on the health *signal*.*** `summariseHealth` is a
+  third surface for the findings and has no parity test.
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved.***
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

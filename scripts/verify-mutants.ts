@@ -180,6 +180,64 @@ const MUTATIONS: readonly Mutation[] = [
     noticedBy: 'verify:updates',
     says: /nobody else sees it/,
   },
+  {
+    // Checklist 2. §8.2 item 1 — "No approval, no send."
+    claim: 'no send path bypasses the compliance approval',
+    file: 'src/lib/compliance/gate.ts',
+    find: "  if (!approval || drift.state === 'NO_APPROVAL') {",
+    replace: "  if (false) {",
+    noticedBy: 'vitest run src/lib/compliance/gate.test.ts',
+  },
+  {
+    // Checklist 3. The pre-flight step that names the excluded recipients is
+    // ATTESTED and says "Everybody else is unaffected". Making it enforce a
+    // failure turns one recipient in a country the approval does not cover
+    // into a batch that cannot be sent at all.
+    claim: 'a jurisdiction block stops one recipient, never the whole batch',
+    file: 'src/lib/sending/preflight.ts',
+    find: "    ...attestationState('JURISDICTIONS_IDENTIFIED', input.attestations, null),",
+    replace:
+      "    ...attestationState('JURISDICTIONS_IDENTIFIED', input.attestations, null),\n" +
+      "    state: jurisdictionBlocks.length === 0 ? ('PASS' as const) : ('FAIL' as const),",
+    noticedBy: 'vitest run src/lib/sending/preflight.test.ts',
+  },
+  {
+    // Checklist 6. A token stored as the token is a token in a database dump.
+    claim: 'claim and sign-in tokens are hashed at rest',
+    file: 'src/lib/crypto.ts',
+    find: "  return createHash('sha256').update(token).digest('base64url')",
+    replace: '  return token',
+    noticedBy: 'vitest run src/lib/crypto.test.ts',
+  },
+  {
+    // Checklist 7. Suspension has to do both halves: revoke what exists and
+    // refuse to issue anything new. Issuing a new link to a suspended account
+    // is the half that is easy to lose in a refactor.
+    claim: 'suspension refuses a new link as well as revoking the old ones',
+    file: 'src/lib/portal/access.ts',
+    find:
+      "      return { capability: 'NONE', issueLink: false, allowClaim: false, notice: 'SUSPENDED' }",
+    replace:
+      "      return { capability: 'NONE', issueLink: true, allowClaim: false, notice: 'SUSPENDED' }",
+    noticedBy: 'verify:lifecycle',
+  },
+  {
+    // Checklist 9. §15 — nothing but the anti-phishing page may be indexed.
+    claim: 'no route but the verification page is indexable',
+    file: 'src/lib/verify/robots.ts',
+    find: "      disallow: withBasePath('/'),",
+    replace: '      disallow: [],',
+    noticedBy: 'vitest run src/lib/verify/robots.test.ts',
+  },
+  {
+    // Checklist 10. `publishBlock` is what refuses to publish an entry whose
+    // wording still identifies the person who asked it.
+    claim: 'a published Q&A entry carries nothing identifying',
+    file: 'src/lib/qa/anonymity.ts',
+    find: '  if (publishBlock(entry) !== null) return null',
+    replace: '  if (false) return null',
+    noticedBy: 'verify:qa',
+  },
 ]
 
 /** What a run of one check produced. */

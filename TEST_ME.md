@@ -1683,6 +1683,32 @@ It is careful with your files: it reads the original before writing anything,
 puts it back afterwards, reads it again to confirm, and restores if you press
 Ctrl-C. It never uses git to undo, so uncommitted work of your own is safe.
 
+**It now holds thirteen promises, and ten of the twelve items on the release
+checklist have one.** Among the newer ones: no send can skip the compliance
+approval; one investor in a country the approval does not cover must not stop
+everybody else's invitation; sign-in links are stored scrambled rather than as
+themselves; a suspended investor cannot be issued a fresh link; and no page but
+the anti-phishing one may be indexed by a search engine.
+
+### And it immediately found something
+
+One promise was **not** caught: *a published question and answer carries nothing
+that identifies who asked it.*
+
+That rule is enforced in two places on purpose — once when the answer is saved,
+and again when the shared page is drawn. The first was thoroughly checked. The
+second had never been checked at all, because nothing in the existing tests
+could produce the situation it guards against: the save refuses to create it.
+
+So a row was written into the database directly, the way a hand-run correction
+or a future piece of code might: published, answered, asked by an investor, with
+no rewritten public version. The shared page must refuse it — and it does. There
+are now three checks saying so, including one that the investor's original
+wording does not appear anywhere on the page.
+
+That is the mutation command earning its place on its second run: it found a
+real defence that nothing had ever tested.
+
 **How it was proved.** One promise was deliberately paired with a check that
 could not possibly see it: *"MUTANT SURVIVED — the check reported success"*. And
 one of the code snippets it looks for was misspelled: *"NOT APPLIED"* — so a

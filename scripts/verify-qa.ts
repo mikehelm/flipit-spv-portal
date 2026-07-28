@@ -291,6 +291,56 @@ async function main(): Promise<void> {
       !JSON.stringify(bobAfter.shared).includes('Alice'),
   )
 
+  // --- The belt, with the braces cut ---------------------------------------
+  //
+  // `publishBlock` is enforced twice on purpose. `recordAnswer` refuses to
+  // publish an investor's question that has not been rewritten — the checks
+  // above drive that — and `toPublicEntry` refuses to *render* one, which its
+  // own comment calls "a filter a future caller can forget to write".
+  //
+  // Nothing tested the second one, and `pnpm verify:mutants` is what said so:
+  // the guard inside `toPublicEntry` was removed and every check in this file
+  // still passed, because nothing here can put a row into the state that guard
+  // exists for. The service will not write it.
+  //
+  // So this writes it directly. A published entry, with an answer, asked by an
+  // investor, with no public rewrite — exactly the row a hand-run UPDATE, a
+  // migration, or a future code path that forgets the service could leave
+  // behind. The shared page must still refuse it, and must not carry a word of
+  // the original wording.
+  const smuggled = await createSeededEntry({
+    question: `${PREFIX} A seeded question that will be tampered with.`,
+    answer: 'An answer that is perfectly publishable on its own.',
+    publish: true,
+    actor,
+    actorUserId: null,
+  })
+  if (!smuggled.ok) throw new Error('could not seed the tampering fixture')
+
+  await db
+    .update(qaEntries)
+    .set({
+      askedByAccountId: alice!.id,
+      questionOriginal: `${PREFIX} As we discussed on Tuesday, can I go above my allocation?`,
+      questionPublic: null,
+    })
+    .where(eq(qaEntries.id, smuggled.entryId))
+
+  const tampered = await loadSharedQa()
+  check(
+    'a published row with no rewrite is refused by the page, not only by the form',
+    !tampered.some((item) => item.id === smuggled.entryId),
+    JSON.stringify(tampered.map((item) => item.id)),
+  )
+  check(
+    'and not a word of the original wording reaches it',
+    !JSON.stringify(tampered).includes('As we discussed on Tuesday'),
+  )
+  check(
+    'while the entries that are properly rewritten are still there',
+    tampered.some((item) => item.id === asked.entryId),
+  )
+
   console.log('\nOrdering and unpublishing')
 
   const seeded = await createSeededEntry({
