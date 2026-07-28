@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Viewer AI usage cap | codex-guided-ai-cap-20260728 | 2026-07-28 09:29 UTC | `src/actions/email-review.ts`; `src/lib/email-review/boundary.test.ts`; optional `src/lib/email-review/viewer-limit.ts`; optional `src/lib/email-review/viewer-limit.test.ts` |
 
 ## Done, so nobody starts it again
 
