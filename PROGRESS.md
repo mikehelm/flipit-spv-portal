@@ -9971,3 +9971,147 @@ both pass.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## Two forms, and which account each one is wired to
+
+Straight off the last entry's Uncertain list, and it was right to be near the
+top of it:
+
+> ***The second card is only ever read in its blocked state.*** It is never
+> unblocked, so nothing checks that two *forms* on one page carry their own
+> confirmation fields and their own hidden account ids. That is the next
+> crossing-shaped thing, and it is a real one: the form posts an `accountId`.
+
+**Built.** `scripts/verify-account-access.ts`. Both fixtures are unblocked at
+phase two, so the page carries two live erasure forms, and six checks were added
+about telling them apart. No application file changed.
+
+`pnpm verify:account-access` is **81 checks**, up from 75.
+
+### The failure, which is one line and as bad as anything here
+
+What a person reads on the card is the name and the sixteen counts. What the
+server acts on is `hidden={{ accountId }}`. Both are produced by the same
+`.map()` over the same array, and until this entry nothing had asked whether
+they agree — because with one form on the page there was nothing to disagree
+with.
+
+A hidden field carrying the wrong id means somebody reads the right name, types
+the right address, and erases a different investor. **Typing the address
+correctly does not save them**, and that is the part worth being clear about:
+the confirmation is compared with the address on the account the *action* loads,
+which is the account the hidden field named. Both halves of the safeguard read
+from the same wrong id and agree with each other.
+
+### What was built
+
+Three checks from the inside — that the two forms carry different ids, that each
+id is the account whose name is on that card, and that the second form draws its
+own fifteen remaining counts above it — and three from the outside: the first
+investor's address is typed into the *second* investor's form, which must be
+refused, must refuse without repeating the address back, and must leave both
+records where they were.
+
+The outside pair is the one that would survive a rewrite of the component,
+because it makes the claim in the only terms that matter: this form is not that
+person's.
+
+**It was checked by breaking it.** The last character of the id passed to
+`EraseInvestorForm` was changed, which is the smallest possible version of the
+fault. Three checks failed at once:
+
+    FAIL  and each id is the account whose name is on that card
+          — wo_…Gz should be wo_…GA; 92Y…3z should be 92Y…3A
+    FAIL  one investor’s address typed into another investor’s form is refused
+          — That account could not be found. Nothing was changed.
+    FAIL  a wrong address is refused, and says so on the screen
+          — That account could not be found. Nothing was changed.
+
+The third is the interesting one. It is an *older* check, and under the break it
+failed for a new reason — the action could not find the account at all — which
+is the shape of a check that was measuring the right thing and had never been
+given a wrong id to measure. The application's refusal was correct throughout:
+an unknown id is *"That account could not be found. Nothing was changed."*, and
+nothing was.
+
+**Decisions.**
+
+- ***The second card is unblocked at phase two rather than kept blocked.*** The
+  previous entry kept it blocked deliberately, to render two cards in different
+  states. Two live forms is worth more: the different-states claim was about
+  rendering, and this one is about what a button does. The blocked state is
+  still read first, so nothing is lost — the second card is read blocked in
+  phase one and with its form in phase three.
+- ***The cross-submit uses the first investor's address, not a made-up one.***
+  A made-up address proves the form refuses strangers, which is already checked.
+  A *real* address belonging to a real account on the same page is the case the
+  hidden field decides, and it is the only one that fails when the wiring is
+  wrong.
+- ***The refusal is checked not to repeat the address back.*** It is somebody
+  else's address on somebody else's card, and an error message that echoes it
+  puts one investor's address inside another investor's card in the DOM.
+- ***`inputValue()` on the hidden field, rather than reading the served HTML.***
+  It is what the browser will actually post, which is the thing the claim is
+  about.
+
+**Deviations.** None.
+
+**Checklist.** **5**, again and more sharply. The administrative form now proves
+it acts on the investor it is drawn under, and refuses an address belonging to
+another investor on the same page without naming it. 1–4 and 6–12 are untouched.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (2597) are green.
+`pnpm verify:account-access` is **81** and `pnpm verify:viewport` is **542**, and
+both pass.
+
+**Uncertain.**
+
+- ***Two forms are not forty.*** The same limit as the last entry, one level
+  down: the ids are proved distinct and correct for two cards, and a page of
+  forty is still only argued for.
+- ***Nothing submits the *right* address into the second form.*** The second
+  investor is never erased — the journey erases the first and then reads the
+  second — so the second form is proved to refuse and never proved to work. That
+  is deliberate (one erasure per run keeps the finished-state checks
+  unambiguous) and it is a gap.
+- ***A crossing of the register-entry line is still undetectable***, because
+  `interest_register_entries.account_id` is unique and that count is 1 for
+  everybody.
+- ***The blocked layout is measured only on a run with no media store.***
+- ***The bytes are still never destroyed through a browser.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***`verify:viewport` still opens exactly one card.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step, and after
+  four entries on this screen it is worth saying plainly: the erasure feature is
+  as proved as a build can make it. What is left on item 12 is advice.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

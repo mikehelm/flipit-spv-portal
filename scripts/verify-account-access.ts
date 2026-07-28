@@ -644,6 +644,9 @@ async function erasureScreen(browser: Browser): Promise<void> {
     await db.select({ id: offers.id }).from(offers).where(eq(offers.accountId, account.id))
   ).map((row) => row.id)
   await clearStoredFiles(account.id)
+  // The second one too, so that phase three below has *two* live forms on one
+  // page to tell apart. Its blocked state has already been read.
+  await clearStoredFiles(second.account.id)
 
   await land(page, '/investors')
   const opened = await openSection()
@@ -668,6 +671,78 @@ async function erasureScreen(browser: Browser): Promise<void> {
   check(
     'and there is no reason box, which is the deliberate part',
     (await section.locator('textarea').count()) === 0,
+  )
+
+  /*
+   * ---- two live forms, and which account each one is wired to --------------
+   *
+   * The count list is what a person reads; the hidden `accountId` is what the
+   * server acts on. They are produced by the same `.map()` over the same array
+   * and nothing had ever checked that they agree, because until this entry
+   * there was never more than one form on the page to disagree with.
+   *
+   * The failure is small to write and as bad as anything in this application:
+   * a hidden field carrying the wrong id means a person reads the right name,
+   * types the right address, and erases somebody else. The confirmation check
+   * would not save them — it compares the typed address with the account the
+   * *action* loads, which is the one the hidden field named.
+   *
+   * So: two forms, two different ids, each equal to the account whose name is
+   * on the card. And then the same claim made from the outside, by typing the
+   * first investor's address into the second investor's form — which must be
+   * refused, because that form is not theirs.
+   */
+  const secondOpened = await openOne(secondSection, 'a form')
+  const idOnFirst = await section.locator('input[name="accountId"]').first().inputValue()
+  const idOnSecond = await secondSection.locator('input[name="accountId"]').first().inputValue()
+  check(
+    'each card’s form carries its own account id, not the same one twice',
+    idOnFirst !== idOnSecond,
+    `${idOnFirst} / ${idOnSecond}`,
+  )
+  check(
+    'and each id is the account whose name is on that card',
+    idOnFirst === account.id && idOnSecond === second.account.id,
+    `${idOnFirst} should be ${account.id}; ${idOnSecond} should be ${second.account.id}`,
+  )
+  check(
+    'and the second form draws its own sixteen counts above it',
+    linesMissingFrom(
+      secondOpened,
+      ERASURE_COUNTS_SECOND.filter((row) => row.label !== 'stored files destroyed outright'),
+    ).length === 0,
+    secondOpened.slice(0, 900),
+  )
+
+  const secondForm = secondSection.locator('form')
+  await secondForm.locator('input[name="confirmation"]').fill(investorEmail)
+  const secondAcknowledge = secondForm.locator('input[name="acknowledged"]')
+  if (!(await secondAcknowledge.isChecked())) await secondAcknowledge.check()
+  await secondForm.locator('button[type="submit"]').click()
+  const crossBanner = secondSection.locator('[role="alert"]').first()
+  await crossBanner.waitFor({ state: 'visible', timeout: 20_000 })
+  const crossRefusal = (await crossBanner.innerText()).replace(/\s+/g, ' ')
+  check(
+    'one investor’s address typed into another investor’s form is refused',
+    /does not match the account/.test(crossRefusal),
+    crossRefusal.slice(0, 400),
+  )
+  check(
+    'and it refuses without naming the address that was typed',
+    !crossRefusal.includes(investorEmail),
+    crossRefusal.slice(0, 400),
+  )
+
+  const neitherMoved = await db
+    .select({ id: investorAccounts.id, email: investorAccounts.email })
+    .from(investorAccounts)
+    .where(inArray(investorAccounts.id, [account.id, second.account.id]))
+  check(
+    'and neither record moved',
+    neitherMoved.length === 2 &&
+      neitherMoved.every(
+        (row) => row.email === investorEmail || row.email === second.investorEmail,
+      ),
   )
 
   /*
@@ -924,8 +999,11 @@ async function erasureScreen(browser: Browser): Promise<void> {
    * make it: the card next to the one just erased, read again, with its own
    * sixteen numbers still on it and nothing of the erased investor in it.
    */
-  const secondAfter = await openOne(secondSection, 'no form')
-  const stillMissing = linesMissingFrom(secondAfter, ERASURE_COUNTS_SECOND)
+  const secondAfter = await openOne(secondSection, 'a form')
+  const stillMissing = linesMissingFrom(
+    secondAfter,
+    ERASURE_COUNTS_SECOND.filter((row) => row.label !== 'stored files destroyed outright'),
+  )
   check(
     'the other investor’s card is exactly as it was, count for count',
     stillMissing.length === 0,
@@ -939,9 +1017,10 @@ async function erasureScreen(browser: Browser): Promise<void> {
     secondAfter.slice(0, 300),
   )
   check(
-    'and is still offered the refusal rather than a form, which is its own state',
-    /no media store is configured/.test(secondAfter) &&
-      (await secondSection.locator('input[name="confirmation"]').count()) === 0,
+    'and still offers its own form, still wired to its own account',
+    (await secondSection.locator('input[name="confirmation"]').count()) === 1 &&
+      (await secondSection.locator('input[name="accountId"]').first().inputValue()) ===
+        second.account.id,
     secondAfter.slice(0, 300),
   )
 
