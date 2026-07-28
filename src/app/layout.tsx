@@ -2,9 +2,44 @@ import type { Metadata } from 'next'
 import { TextSizeControl } from '@/components/text-size-control'
 import './globals.css'
 
+const shareTitle = 'Flipit Global SPV — Private Review'
+const shareDescription =
+  'Invitation-only workspace for organized review and collaboration.'
+
 export const metadata: Metadata = {
-  title: 'Private access',
-  description: 'Private access by invitation.',
+  metadataBase: new URL(process.env.APP_URL ?? 'https://spv.flipit.ltd'),
+  title: {
+    default: shareTitle,
+    template: '%s | Flipit Global SPV',
+  },
+  description: shareDescription,
+  icons: {
+    icon: [
+      { url: '/icon.png', type: 'image/png', sizes: '512x512' },
+      { url: '/favicon.ico', type: 'image/x-icon' },
+    ],
+    apple: [{ url: '/icon.png', type: 'image/png', sizes: '512x512' }],
+  },
+  openGraph: {
+    type: 'website',
+    siteName: 'Flipit Global SPV',
+    title: shareTitle,
+    description: shareDescription,
+    images: [
+      {
+        url: '/opengraph-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Private document review workspace',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: shareTitle,
+    description: shareDescription,
+    images: ['/opengraph-image.png'],
+  },
   // Every route is noindex. The verification page (WP14) opts back in
   // deliberately and is the only exception. BUILD_SPEC §15, §15.1.
   robots: { index: false, follow: false, nocache: true },

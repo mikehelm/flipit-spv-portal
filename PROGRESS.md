@@ -7652,3 +7652,39 @@ explicit fill.
 
 - Graham still needs to enter the password he chose; the application cannot
   recover or display it.
+
+## 2026-07-28 — Branded private-link preview
+
+**Built.**
+
+- Pasted portal links now advertise a privacy-safe Flipit Global SPV title,
+  concise private-review description and large branded preview image.
+- A matching high-resolution app icon gives browser tabs, saved links and
+  mobile shortcuts a coherent identity.
+- The artwork uses the portal's navy, white, orange, gold and curled-document
+  visual language without names, addresses, amounts or investor information.
+
+**Decisions.**
+
+- The social card carries no recipient-specific content. The secret link
+  identifies its recipient; public preview metadata must not.
+- The share artwork is 1200×630 and the icon master is 512×512, covering the
+  dimensions used by common messaging and mobile surfaces.
+- Existing noindex, nofollow and nocache rules remain unchanged.
+
+**Deviations.**
+
+- None.
+
+**Checklist.**
+
+1. *Does the rendered page publish Open Graph and large-card metadata?* Yes.
+2. *Are the generated assets present at their declared dimensions?* Yes.
+3. *Does metadata expose a person, email or offer?* No.
+4. *Focused verification?* TypeScript, focused ESLint and three metadata checks
+   passed; the running page emitted the expected absolute image URL.
+
+**Uncertain.**
+
+- Messaging applications cache link previews. A previously pasted URL may
+  retain its older preview until that application's cache refreshes.
