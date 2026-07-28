@@ -11587,3 +11587,138 @@ and was already covered by the no-address and no-amount tests.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The runbook that went stale in the way it had predicted
+
+§12.1 of `DEPLOYMENT.md` says, of the column map in `plan.ts`:
+
+> a test fails on the commit that adds a table nobody has an opinion about, **so
+> that file cannot go stale the way this document once did.**
+
+The document had gone stale once, was noticed, was rewritten, and the fix was
+applied to the *plan* and not to the *runbook*. Three entries later the runbook
+went stale in exactly the predicted way, and this session is what made it stale.
+
+§12.5 read, of a store that refuses part way through:
+
+> the store was reached and said no. **Nothing was changed.** … **Some bytes may
+> already be gone.** … **Nothing records that**
+
+Every clause of that stopped being true two entries ago. The paragraph already
+argued with itself — *nothing was changed*, then *some bytes may already be
+gone*, two lines apart — in a document somebody reads once, under pressure, on
+the day an investor has asked to be erased. Nothing failed, because prose fails
+nothing.
+
+### What was built
+
+- ***§12.5 rewritten.*** The clean refusal and the partial one are separate
+  bullets, because they differ in the only way that matters. The partial one
+  quotes the sentence the owner will actually read, says the database was not
+  changed, and lists the three places the state is now recorded — the audit row,
+  the health report, `media:check` — rather than telling the reader that nothing
+  records it. A third bullet covers the run that recorded no outcome at all,
+  with the remedy that depends on what the record looks like now: **if the name
+  is already a pseudonym, suspend and unsuspend to revoke the sessions**, which
+  is the one consequence of a mid-erasure kill that nothing else on the page
+  would lead somebody to.
+- ***§12.6 rewritten*** with the count, both halves of the demonstration, and a
+  table of which pair of audit rows means what.
+- ***`src/lib/erasure/runbook.test.ts`.*** Ten checks that the runbook names the
+  three audit actions that exist, quotes the distinctive clause of the real
+  refusal message, gives the remedy and says it is safe, covers the vanished
+  run, and still describes both halves of what `verify:erasure` drives.
+
+It cannot tell whether a paragraph is good advice. It can tell whether the
+identifiers and the quoted wording are the ones that exist, which is precisely
+the half that rots silently while somebody reads the other half and believes it.
+
+### Proved by breaking it
+
+- ***The quoted sentence reworded in `DEPLOYMENT.md`.*** Two failed.
+- ***`ERASURE_INCOMPLETE_ACTION` renamed in `erase.ts` and the runbook left
+  alone.*** One failed, naming the new action — which is the direction that
+  matters, because that is the change somebody makes without opening the
+  runbook at all.
+
+**Decisions.**
+
+- ***The section is flattened before matching.*** The sentences are wrapped at
+  whatever column they reached, so a phrase check would pass or fail on where a
+  line break landed. A test that fails on a reflow is one somebody deletes.
+- ***The check count is not pinned.*** It changes whenever the script grows, and
+  a test demanding the prose be updated to say "161" would be noise. What is
+  pinned is that §12.6 still describes both stores and the retry — a section
+  that stopped mentioning one would be describing an older script.
+- ***An action is matched with or without its `investor_account.` prefix***, so
+  the runbook may write `erase_incomplete` in a table where the full string
+  would not fit.
+
+**Deviations.** None.
+
+**Checklist.** None of the twelve is touched.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2722**) are green.
+
+**Uncertain.**
+
+- ***The partial-erasure findings have not been read on a screen.*** Proved
+  through the rule and the reader, not by opening `/admin/health` or the overview
+  banner with a half-erased investor in the database. `verify:viewport` runs now
+  and already drives both surfaces. **This is the next item.**
+- ***`erasureFindings` is on the banner and no test says the banner and the page
+  agree about it*** the way the storage one now does.
+- ***No other section of `DEPLOYMENT.md` has a test.*** §12 has one because this
+  session made it wrong. §1, §8 and §12.5's neighbours are prose against code in
+  exactly the same way, and the three cron lines in §8 are the ones most likely
+  to drift next.
+- ***`TEST_ME.md` has no test at all***, and it is now the longest coordinating
+  document in the repository. It is written for a non-technical reader, so most
+  of it could not be checked mechanically — but the command names and the check
+  counts in it could.
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved*** and
+  the finding says the process did not survive, which is not what happened.
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is not to build it.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

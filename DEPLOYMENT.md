@@ -737,15 +737,43 @@ cannot be written to by accident.
   with `pnpm media:check`, and try again. An erasure that leaves the documents
   behind is not an erasure, which is why this refuses rather than doing most of
   the job.
-- *"a stored file could not be destroyed"* — the store was reached and said no.
-  Nothing was changed. This is a store problem: check credentials and the bucket
-  policy, then try again. **Some bytes may already be gone.** The objects are
-  destroyed one at a time before the database is touched, so the ones reached
-  before the failure are destroyed and their rows still name them. Nothing
-  records that, and it is not a state to leave: fix the store and run the
-  erasure again. Running it again is safe — an object already destroyed is not
-  an error, and the second run completes the job (`pnpm verify:erasure` proves
-  exactly this, with an object that refuses to delete and a retry after).
+- *"a stored file could not be destroyed... Nothing was changed"* — the store
+  was reached and said no, **before it had destroyed anything**. No file was
+  destroyed and no record was altered. This is a store problem: check
+  credentials and the bucket policy, then try again.
+- *"N stored files were destroyed and cannot be recovered, and then the store
+  refused on another"* — the same store problem, reached later. **This message
+  is the important one on this page.** The objects are destroyed one at a time
+  before the database is touched, so the ones reached before the failure are
+  gone for good and their rows still name them. The database was *not* changed:
+  the investor's name, address and every line of free text are still there and
+  every screen shows an ordinary record.
+
+  It is not a state to leave, and it does not depend on anybody remembering:
+
+  - The audit log holds an `investor_account.erase_incomplete` row saying how
+    many objects were destroyed and how many are left.
+  - **Admin → System health** and the banner on every admin page carry a fault:
+    *"1 erasure stopped part way through and destroyed files the record still
+    names."* It names the account and it does not go away on its own.
+  - `pnpm media:check` lists the destroyed files as missing.
+
+  Fix whatever the store is refusing over — an object lock, a legal hold, or a
+  key pair that can read and put but not delete are the usual three — then run
+  the erasure again from the investors page. Running it again is safe: an object
+  already destroyed is not an error, so the second run finishes the job and the
+  fault clears. `pnpm verify:erasure` proves exactly this, twice — once against
+  a bucket with an object that refuses to delete, once against a disk with a
+  file that will not go — including that the fault clears on the retry.
+- **An erasure that recorded no outcome at all.** If the application is
+  restarted, killed or redeployed part way through one, there is no message,
+  because nothing is left running to write one. The health report raises this
+  separately: *"1 erasure began and recorded no outcome."* Open the account on
+  `/investors`. **If the name is already a pseudonym**, the database half went
+  through and the sessions may not have been revoked — suspend and unsuspend the
+  account, which revokes every session and link. **If the name is still the
+  investor's**, run the erasure again; it is safe to repeat. `pnpm media:check`
+  says which stored files are already gone.
 - *"already been erased"* — it is done. Running it again would produce exactly
   what is already there, so it refuses rather than writing a second audit row
   suggesting it happened twice.
@@ -758,19 +786,31 @@ cannot be written to by accident.
 pnpm verify:erasure
 ```
 
-A hundred and nineteen checks against a real database, with a **second investor
+A hundred and sixty checks against a real database, with a **second investor
 present throughout** — every check on the erased one is paired with the same
 check on the other, because an erasure that quietly took a neighbour's
 conversation with it would pass every unit test in the repository.
 
 It also stands up a real filesystem store, gives a third investor a real file,
-erases them and confirms the bytes are gone; and takes the store away from a
-fourth to confirm the refusal changes nothing at all. It cleans up after itself,
-including the temporary store directory. It is part of `pnpm verify:all`.
+erases them and confirms the bytes are gone; takes the store away from a fourth
+to confirm the refusal changes nothing at all; and drives a half-finished
+erasure twice — once against a real object-store socket with an object that
+refuses to delete, once against a disk with a file that will not go — checking
+the message, both audit rows, the health finding, and that a retry finishes the
+job and clears the finding. It cleans up after itself, including the temporary
+store directory. It is part of `pnpm verify:all`.
 
-For a specific past erasure, the audit log holds an `investor_account.erased`
-row: who ran it, when, how many offers and stored files were affected, and the
-pseudonym. That row is what you show somebody who asks.
+An erasure attempt writes up to two rows, and which pair you find tells you what
+happened:
+
+| Rows | What it means |
+| --- | --- |
+| `erase_began` then `erased` | It completed. The second row is what you show somebody who asks: who ran it, when, how many offers and stored files were affected, and the pseudonym. |
+| `erase_began` then `erase_incomplete` | The store refused. The second row counts what was destroyed and what was left. See §12.5. |
+| `erase_began` alone | The process did not survive the attempt. See §12.5. |
+
+Neither of the last two clears itself, and both appear on the health report
+until the erasure is run again successfully.
 
 ### 12.7 The question that is still open
 
