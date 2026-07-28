@@ -133,6 +133,7 @@ const VERIFICATIONS: readonly Verification[] = [
   { name: 'deployment', proves: 'every route, link and header under a base path', needs: ['BUILD'] },
   { name: 'account-access', proves: 'who can reach what, driven in a browser', needs: ['BUILD', 'BROWSER'] },
   { name: 'uploads', proves: 'every upload limit, from a browser, at its real size', needs: ['BUILD', 'BROWSER'] },
+  { name: 'erasure-bytes', proves: 'an erasure destroying real bytes, pressed in a browser', needs: ['BUILD', 'BROWSER'] },
   { name: 'recorder', proves: 'the video recorder, recording and playing back', needs: ['BUILD', 'BROWSER', 'CAMERA'] },
   { name: 'viewport', proves: 'every screen at 375px, in a real browser', needs: ['BUILD', 'BROWSER', 'CAMERA'] },
 ]

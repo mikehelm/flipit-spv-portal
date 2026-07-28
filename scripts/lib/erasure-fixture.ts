@@ -441,3 +441,49 @@ export async function clearStoredFiles(accountId: string): Promise<void> {
     .set({ storageKey: null })
     .where(inArray(participationCertificates.offerId, offerIds))
 }
+
+/**
+ * The storage keys this fixture actually put on the record, read back.
+ *
+ * `seedErasureFixture` mints them with `newStorageKey()` and does not return
+ * them, because until now nothing needed them: every script either had no media
+ * store or took the keys away with `clearStoredFiles` above. A script that
+ * destroys real bytes through a browser needs to know which bytes, before and
+ * after.
+ *
+ * **The query is written out rather than borrowed from `readGraph()` in
+ * `erase.ts`.** That function is the thing under test — it decides which keys an
+ * erasure destroys — and a check that asked it what to expect would agree with
+ * it however wrong it was. This asks the two tables directly, and the rule it
+ * applies is the schema's: a document's key is `notNull` and is set to
+ * `ERASED_STORAGE_KEY` rather than removed; a certificate's is nullable and is
+ * cleared. Anything else on either column is a key that names real bytes.
+ */
+export async function storedKeysFor(
+  accountId: string,
+): Promise<{ documents: string[]; certificates: string[]; all: string[] }> {
+  const offerIds = (
+    await db.select({ id: offers.id }).from(offers).where(eq(offers.accountId, accountId))
+  ).map((row) => row.id)
+  if (offerIds.length === 0) return { documents: [], certificates: [], all: [] }
+
+  const documents = (
+    await db
+      .select({ key: documentPackages.storageKey })
+      .from(documentPackages)
+      .where(inArray(documentPackages.offerId, offerIds))
+  )
+    .map((row) => row.key)
+    .filter((key): key is string => key !== null && key !== ERASED_STORAGE_KEY)
+
+  const certificates = (
+    await db
+      .select({ key: participationCertificates.storageKey })
+      .from(participationCertificates)
+      .where(inArray(participationCertificates.offerId, offerIds))
+  )
+    .map((row) => row.key)
+    .filter((key): key is string => key !== null && key !== ERASED_STORAGE_KEY)
+
+  return { documents, certificates, all: [...documents, ...certificates] }
+}

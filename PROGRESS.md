@@ -10115,3 +10115,212 @@ both pass.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The bytes, destroyed through a browser
+
+Straight off the last two entries' Uncertain lists, where it had sat at the top
+of the buildable half for four sessions running:
+
+> ***The bytes are still never destroyed through a browser.***
+
+**Built.** `scripts/verify-erasure-bytes.ts`, `pnpm verify:erasure-bytes`, **24
+checks**, wired into `verify:all` and into `package.json`. One helper added to
+the shared fixture — `storedKeysFor()`. **No application file changed.**
+
+### What was actually missing, which is narrower and worse than it sounds
+
+An erasure pseudonymises rows and destroys bytes. The rows can be argued about;
+`store.remove()` cannot, and it runs *before* the transaction, so it is the one
+step of the journey that has already happened by the time anything else is
+decided. Two scripts circled it and neither landed:
+
+- `verify:erasure` destroys **one** real object under a real key, by calling
+  `eraseAccount()` from Node. That proves the service. It presses nothing.
+- `verify:account-access` presses the button, in Chromium, with two investors on
+  the page — and pins `MEDIA_STORE` empty, then takes the storage keys away by
+  hand so the form appears at all. **Every browser-driven erasure in this
+  repository has therefore run against a record holding no bytes.**
+
+So the gap was the join: the form a person submits, on a deployment that has
+somewhere to delete from, against a record that holds files. Three things follow
+and none of them was visible anywhere else.
+
+**1. The unblocked card with stored files on it had never been rendered.**
+`previewErasure` sets `blockedBy` only when the record holds files *and*
+`mediaStore()` is null. Every run so far was in one of the other two states:
+blocked, or unblocked because the keys had been removed — where
+`verify:account-access` asserts the line *"stored files destroyed outright"* is
+**absent**. The screen a real owner meets, with the count present and the form
+offered, was a component branch nothing had drawn.
+
+**2. A refusal had never been asked whether it destroyed anything.** In
+`src/actions/erasure.ts` the confirmation comparison and the call to
+`eraseAccount()` are eleven lines apart. The order is right today. Nothing here
+could have told you if it stopped being right, because no other check of a
+refusal has bytes to lose — and a deletion that happens before a refusal leaves
+a screen saying *"Nothing was changed"* over a destroyed subscription agreement.
+
+**3. The neighbour's files had never been counted afterwards.** Row isolation is
+proved column by column by `verify:erasure`. The store is a flat namespace of
+unguessable keys with no notion of an owner, and a `remove()` loop handed the
+wrong graph destroys another investor's documents with no error, no audit row,
+and a screen that correctly reports success.
+
+### It was checked by breaking it, four ways
+
+Twenty-four checks green on the first run means nothing until they can fail.
+
+- **The bytes are not destroyed** — `store.remove()` skipped, the counter still
+  incremented. Three failed: *7 survived*, *7 orphaned objects*, *34 before, 34
+  after*.
+- **The graph is not scoped to the account** — the `where` on `readGraphs`
+  neutered. **Nothing failed, and that is the finding.** The scoping is guarded
+  twice: the query filters by `offers.accountId`, and the roll-up independently
+  credits each key to `offerOwner.get(row.offerId)`. A key belonging to an
+  account nobody asked about lands on `graphs.get(owner)`, which is `undefined`,
+  and is dropped. One line of that pair can be removed with no effect.
+- **The roll-up broken too** — every key credited to every graph. Five failed,
+  including both cards reading *"31 stored files destroyed outright"* — the same
+  crossed total on two cards — and *24 [of the neighbour's] were destroyed or
+  altered*. The crossing is caught on the screen and in the store, separately.
+- **The confirmation no longer guards the erasure.** Two failed: *it was not
+  refused — the form went away*, and ***7 were destroyed by a refusal***. That
+  is the sentence this script exists to be able to print.
+
+### Two faults found in the checking, both fixed here
+
+**A script that crashes instead of reporting.** The first version waited for the
+outcome it expected — a banner for a refusal, the form unmounting for a success.
+Under the fourth break the refusal never came, Playwright timed out after twenty
+seconds, and the run died **before reaching the byte check** — the one asking
+whether a refusal had destroyed an investor's documents. A byte check skipped by
+the exact fault it exists to catch is the worst outcome available to this file.
+Both outcomes are now watched at once and the third possibility, *neither*, is
+named. The same applies to a blocked card: the script reads it and reports,
+rather than hanging on a form that will never appear.
+
+**A false failure that accused the application.** With that fixed, a run where
+the erasure was entirely correct reported *"the right address is accepted"* as
+FAILED, quoting the wrong-address refusal. `ActionForm` holds the previous
+outcome in `useActionState`, so the refusal banner stays on the card until the
+*next* action returns. Polling straight after the second submit reads the first
+submit's verdict on an erasure still in flight. Each submit now reloads first.
+
+**What a person sees is unchanged and is worth writing down: after typing the
+right address, the wrong-address refusal is still on screen until the server
+answers.** It is not wrong — it is the last completed outcome, and it is
+replaced. It is recorded because a destructive form whose stale refusal is
+visible while the destruction runs is a screen somebody could misread, and this
+is the first time anything has looked at it.
+
+**Decisions.**
+
+- ***A new script rather than a phase inside `verify:account-access`.*** That
+  script pins `MEDIA_STORE` empty on purpose and writes down why: the blocked
+  card is its first phase and inheriting the variable made its result depend on
+  a line in a file it does not own. This one needs the opposite pin. Restarting
+  a server mid-journey to have both would have made the *blocked* card, which is
+  proved today, depend on machinery neither claim needs. Two scripts, opposite
+  pins, the same note in each explaining the other.
+- ***The store lives in `mkdtemp`, never in `MEDIA_DIR` from `.env`.*** This
+  script writes objects and then deletes them. An inherited `MEDIA_DIR` is
+  somebody's real media library.
+- ***Every object holds bytes naming its own key.*** A store filled with one
+  repeated string cannot tell a correct erasure from one that deleted seven
+  arbitrary objects and left seven others. The neighbour's files are checked
+  content-for-content, not merely present.
+- ***`store.list()` is read before and after.*** Every other read starts from a
+  row and asks whether the object it names is still there, which cannot see an
+  object that no row names — and after an erasure, bytes surviving a redacted
+  row are exactly that shape. The difference in the listing is asserted to be
+  exactly the erased investor's count.
+- ***`storedKeysFor()` queries the two tables directly rather than calling
+  `readGraph()`.*** `readGraph` decides which keys an erasure destroys; a check
+  that asked it what to expect would agree with it however wrong it was.
+- ***The neighbour keeps `ERASURE_COUNTS_SECOND`, so it holds 27 files to the
+  target's 7.*** Two different numbers, so a crossed total is a visibly wrong
+  number rather than a coincidence.
+
+**Deviations.** None. No application file changed. The only edit outside the new
+script is an added export on `scripts/lib/erasure-fixture.ts`.
+
+**Checklist.** **5**, in the place it is hardest to see. The administrative
+mirror of "no investor-facing page reveals that another investor exists" is that
+no administrative action may reach another investor's data — and the media store
+is the one surface in this application with no notion of an owner at all, where
+a mistake is silent and permanent. It is now checked, content-for-content, on
+the only path that destroys anything. 1–4 and 6–12 are untouched: no money is
+computed, no send path exists here, no gate is read or written, no token is
+issued, no log line is added.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2598**, up one — the new script
+is picked up by `scripts-are-runnable.test.ts`) are green.
+`pnpm verify:erasure-bytes` is **24**, `pnpm verify:erasure` is **119** and
+`pnpm verify:account-access` is **81**, and all three pass.
+
+**Uncertain.**
+
+- ***The filesystem store is the only store these bytes are destroyed from.***
+  `remove()` on the object store is a `DELETE` against a real socket in
+  `verify:object-store`, and an erasure has never run against one. The failure
+  available there and not here is a delete that returns 204 without deleting —
+  a bucket policy, a versioned bucket where a delete writes a marker and the
+  object remains. **A versioned bucket would make every check in this script
+  pass and leave every byte recoverable**, and that is a deployment question as
+  much as a code one: `DEPLOYMENT.md` should say the bucket must not be
+  versioned, and it does not.
+- ***One erasure, one neighbour.*** Thirty-four objects. A store holding
+  thousands, where `list(1000)` truncates, is not measured — and the two listing
+  checks assert `truncated === false`, so they would fail loudly rather than
+  quietly, which is the right direction and is not the same as being tested.
+- ***Nothing interrupts an erasure part way through the `remove()` loop.*** The
+  code destroys bytes before it opens a transaction, so a crash after the third
+  of seven leaves four objects, seven intact rows, and no record that anything
+  happened. That is a deliberate ordering — the alternative leaves bytes behind
+  — and it has never been driven.
+- ***The stale refusal banner is recorded, not decided.*** See above. It may
+  deserve clearing the banner when the form is resubmitted.
+- ***A crossing of the register-entry line is still undetectable***, because
+  `interest_register_entries.account_id` is unique and that count is 1 for
+  everybody.
+- ***`clearStoredFiles` is now used by one script rather than two***, and the
+  hand-clear it performs is a simulation of an erasure that a real erasure now
+  proves. Worth considering whether `verify:account-access` should keep it.
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***`verify:viewport` still opens exactly one card, and its media store is
+  configured for a different reason.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step. With this
+  entry the erasure is as proved as a build can make it, bytes included. What is
+  left on item 12 is advice.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is not to build it.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*
