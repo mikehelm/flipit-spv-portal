@@ -7561,3 +7561,62 @@ explicit fill.
   local preview is running at `http://127.0.0.1:3010/admin/email-review`.
 - This candidate is not deployed; deployment remains a separate owner-approved
   release action.
+
+## 2026-07-28 — Guided mobile and viewer acceptance blockers
+
+**Built.**
+
+- The floating text-size control now grows inward from the lower-right edge,
+  keeps its hidden controls out of layout/accessibility measurement, and uses
+  44×44px adjustment buttons.
+- The Audit date range stacks at phone width, and long action/entity IDs wrap
+  instead of widening the document.
+- The account-access browser verifier now covers the actual Graham rehearsal:
+  guided email review, one bounded selected-change AI question, browser-only
+  proposal creation, zero proposal rows, disappearance on reload, John Doe,
+  Investors, Round, Questions, refusals, and signed-out redirects.
+- The viewport verifier now recognizes the Guided review that replaced the
+  older always-visible “Unknown means unknown” text.
+
+**Decisions.**
+
+- A clipped control is still an overflow and an undersized target even when it
+  is transparent. Hidden adjustment buttons therefore use `visibility` until
+  hover or keyboard focus, while the focusable Text control remains visible.
+- Graham's production setup link was not consumed. The complete technical
+  rehearsal used a disposable database restored from the pre-cutover backup
+  and an obvious synthetic viewer account.
+- No legal wording, source email, role, transport, credential, schema,
+  production data, or investor record changed.
+
+**Deviations.**
+
+- The headless Chromium on this Mac returns `NotSupportedError` for its fake
+  camera device. The browser simultaneously reports no Permissions-Policy
+  violation and the response still serves `camera=(self)`. This is recorded as
+  a harness limitation, not treated as a product failure or hidden by weakening
+  the assertion.
+
+**Checklist.**
+
+1. *All tested routes fit at 375×812?* Yes: no horizontal scroll or overflowing
+   element remains.
+2. *All non-prose interactive targets reach 44px?* Yes.
+3. *Contrast, CSP and console clean?* Yes across all 384 product checks.
+4. *Email review visible and populated?* Yes.
+5. *Viewer AI works?* Yes; one selected-clause answer returned without logging
+   its content.
+6. *Practice proposal persists?* No database row was written, and reload removed
+   the card.
+7. *Viewer authority remains bounded?* Yes; 49/49 isolated account and role
+   journey checks passed.
+8. *Focused checks?* ESLint, TypeScript, 16 focused tests, production build and
+   diff validation passed.
+
+**Uncertain.**
+
+- The corrected commit still needs its own immutable release, scheduler/service
+  repoint, live smoke, and rollback proof before it replaces the current guided
+  release.
+- Graham and David still need to supply their subjective human feedback after
+  opening their private setup links.

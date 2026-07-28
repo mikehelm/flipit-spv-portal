@@ -140,8 +140,8 @@ export default async function AuditPage({
               </select>
             </label>
 
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block min-w-0">
                 <span className="block text-xs font-semibold uppercase tracking-wider text-silver2">
                   From
                 </span>
@@ -152,7 +152,7 @@ export default async function AuditPage({
                   className="mt-2 w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext"
                 />
               </label>
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="block text-xs font-semibold uppercase tracking-wider text-silver2">
                   To
                 </span>
@@ -243,7 +243,9 @@ export default async function AuditPage({
               {rows.map((row) => (
                 <li key={row.id} className="rounded-sm border hairline bg-paper p-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <p className="font-mono text-xs text-ftext">{row.action}</p>
+                    <p className="min-w-0 break-all font-mono text-xs text-ftext">
+                      {row.action}
+                    </p>
                     <p className="text-xs tabular-nums text-muted">
                       {row.createdAt.toISOString().slice(0, 19).replace('T', ' ')} UTC
                     </p>
@@ -252,7 +254,9 @@ export default async function AuditPage({
                     <Pill tone="neutral">{row.entityType}</Pill>{' '}
                     <span className="ml-2">{row.actorLabel}</span>
                     {row.entityId ? (
-                      <span className="ml-2 font-mono text-muted">{row.entityId}</span>
+                      <span className="ml-2 break-all font-mono text-muted">
+                        {row.entityId}
+                      </span>
                     ) : null}
                   </p>
                   {describe(row.metadata) ? (

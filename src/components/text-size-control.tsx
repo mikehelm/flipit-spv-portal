@@ -46,18 +46,12 @@ export function TextSizeControl() {
       data-testid="text-size-control"
     >
       <div className="flex items-center gap-1.5">
-        <span className="whitespace-nowrap px-2 text-[12px] font-bold uppercase tracking-[0.12em] text-orange">
-          Text{' '}
-          <output className="tabular-nums" aria-live="polite">
-            {Math.round(scale * 100)}%
-          </output>
-        </span>
-        <div className="flex max-w-0 items-center gap-1 overflow-hidden opacity-0 transition-all duration-200 group-hover:max-w-24 group-hover:opacity-100 group-focus-within:max-w-24 group-focus-within:opacity-100">
+        <div className="invisible flex max-w-0 items-center gap-1 overflow-hidden opacity-0 transition-all duration-200 group-hover:visible group-hover:max-w-28 group-hover:opacity-100 group-focus-within:visible group-focus-within:max-w-28 group-focus-within:opacity-100">
           <button
             type="button"
             onClick={() => choose(TEXT_SCALES[Math.max(0, currentIndex - 1)])}
             disabled={currentIndex <= 0}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border hairline text-[13px] font-semibold text-ftext transition-colors hover:border-orange disabled:cursor-not-allowed disabled:opacity-35"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border hairline text-[13px] font-semibold text-ftext transition-colors hover:border-orange disabled:cursor-not-allowed disabled:opacity-35"
             aria-label="Make text smaller"
           >
             A−
@@ -68,12 +62,18 @@ export function TextSizeControl() {
               choose(TEXT_SCALES[Math.min(TEXT_SCALES.length - 1, currentIndex + 1)])
             }
             disabled={currentIndex >= TEXT_SCALES.length - 1}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border hairline text-[16px] font-semibold text-ftext transition-colors hover:border-orange disabled:cursor-not-allowed disabled:opacity-35"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border hairline text-[16px] font-semibold text-ftext transition-colors hover:border-orange disabled:cursor-not-allowed disabled:opacity-35"
             aria-label="Make text larger"
           >
             A+
           </button>
         </div>
+        <span className="whitespace-nowrap px-2 text-[12px] font-bold uppercase tracking-[0.12em] text-orange">
+          Text{' '}
+          <output className="tabular-nums" aria-live="polite">
+            {Math.round(scale * 100)}%
+          </output>
+        </span>
       </div>
     </aside>
   )

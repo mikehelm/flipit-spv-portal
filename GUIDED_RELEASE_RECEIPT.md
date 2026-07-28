@@ -151,3 +151,33 @@ It is not cleared for real invitations.
 
 Durable operational receipt:
 `/Users/otto/Documents/spv-releases/DEPLOYMENT-20260728-guided-review-4f303e5.md`
+
+## Phase 9 — Real mobile and viewer acceptance
+
+- The first real 375×812 pass found that the floating text-size buttons were
+  36px high and their clipped, visually hidden boxes extended off-screen on
+  every route. It also found audit-log wrapping and a stale email-review
+  content assertion.
+- The text-size control now expands left, hides its controls from layout and
+  accessibility calculations until hover/focus, and exposes 44×44px targets.
+- Audit filters stack on a phone and long action/entity identifiers break
+  safely.
+- The email-review viewport assertion now checks the actual Guided review
+  surface.
+- Final real-browser viewport result: 384 product checks passed. Every tested
+  public, investor and administrator route passed 375px width, overflow,
+  tap-target, contrast, CSP, inline-style, and console checks.
+- One harness-only media-device probe remains unsupported by the installed
+  headless Chromium (`NotSupportedError`). The served policy is still
+  `camera=(self)`, and the separate browser console assertion reports no
+  Permissions-Policy violation.
+- The isolated viewer journey passed 49/49 checks against a disposable restored
+  database. It covered first password, clear read-only status, direct server
+  refusals, David email review, one selected-clause `gpt-5.6-sol` answer,
+  browser-only proposal rehearsal, zero proposal rows, disappearance after
+  reload, John Doe, Investors, Round, Questions, and signed-out redirects.
+- No setup token was consumed, no investor or production row changed, and no
+  email path was exercised.
+
+The corrected candidate must replace the first guided immutable release before
+this phase is complete.
