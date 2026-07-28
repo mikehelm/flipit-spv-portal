@@ -143,6 +143,18 @@ model from the one the rest of this application uses.
 else. It is never logged, never written to the database and never returned to a
 browser.
 
+**The bucket must not be versioned, and this one is easy to miss.** With
+versioning on — S3, R2 and B2 all offer it and some templates turn it on by
+default — a `DELETE` writes a marker and keeps the object. Every check in this
+repository still passes: the store reports the object as absent, `media:check`
+is clean, and `pnpm verify:erasure` is green, because the application asked for
+a delete and was told it happened. What has actually happened is that an
+investor who asked to be erased still has a signed subscription agreement in
+object storage, recoverable by anyone with console access. **Turn versioning
+off, or set a lifecycle rule that expires non-current versions immediately.**
+The same applies to object locks, legal holds and any retention policy on the
+bucket: they are the one class of failure an erasure cannot see.
+
 **The bucket does not travel with `pnpm backup`, and `pnpm media:check` is how
 you find out.** The backup covers the database, which holds the rows that *name*
 the objects. Moving deployments means
@@ -698,7 +710,13 @@ cannot be written to by accident.
   the job.
 - *"a stored file could not be destroyed"* — the store was reached and said no.
   Nothing was changed. This is a store problem: check credentials and the bucket
-  policy, then try again.
+  policy, then try again. **Some bytes may already be gone.** The objects are
+  destroyed one at a time before the database is touched, so the ones reached
+  before the failure are destroyed and their rows still name them. Nothing
+  records that, and it is not a state to leave: fix the store and run the
+  erasure again. Running it again is safe — an object already destroyed is not
+  an error, and the second run completes the job (`pnpm verify:erasure` proves
+  exactly this, with an object that refuses to delete and a retry after).
 - *"already been erased"* — it is done. Running it again would produce exactly
   what is already there, so it refuses rather than writing a second audit row
   suggesting it happened twice.

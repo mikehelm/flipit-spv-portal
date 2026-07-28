@@ -10324,3 +10324,200 @@ is picked up by `scripts-are-runnable.test.ts`) are green.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## An object store, and one object that will not delete
+
+The top two items on the previous entry's Uncertain list, and they needed each
+other:
+
+> ***The filesystem store is the only store these bytes are destroyed from.***
+> ***Nothing interrupts an erasure part way through the `remove()` loop.***
+
+**Built.** A section in `scripts/verify-erasure.ts` — **136 checks**, up from
+119 — and one addition to `src/test/fake-s3.ts`: `refuseDeleteOf`, a set of keys
+whose `DELETE` is answered 403 however often it is asked. Plus two paragraphs in
+`DEPLOYMENT.md` and four lines in `.env.example` that are the most important
+thing in this entry. **No application file changed.**
+
+### Why the two go together
+
+Every erasure that has ever destroyed a byte in this repository has destroyed it
+from a directory. `verify:erasure`'s media section pins `MEDIA_STORE=filesystem`
+and so does yesterday's `verify:erasure-bytes`. **The object store is what
+`.env.example` recommends for any deployment without a disk that survives a
+restart — which is every serverless one — and no erasure had ever issued a
+`DELETE` to a bucket.** `verify:object-store` proves the client puts, gets,
+lists and pages; the delete an erasure depends on appears there only in cleanup.
+
+And a bucket is where the second thing happens. `eraseAccount` removes objects
+in a loop and returns `OBJECT_NOT_DESTROYED` on the first that throws, before
+the transaction opens. That refusal had been reached with **no store at all**,
+which fails before the loop starts. It had never been reached *inside* the loop
+— an object lock, a legal hold, a key that can read and put but not delete.
+
+So: a real socket, signatures verified on every request, three objects on one
+investor, and the middle one refusing to go.
+
+### What it found, which is a fact about the design rather than a defect
+
+**An erasure is not atomic across the database and the object store, and cannot
+be.** The bytes go first — the alternative is a committed erasure over files
+that could not be deleted, which is worse. So a failure mid-loop leaves objects
+already destroyed, rows that still name them, and **nothing anywhere recording
+that it happened**. The run prints which case it got:
+
+    note  1 of 3 objects were destroyed before the refusal; their rows still
+          name them, and nothing records it.
+
+`readGraph` does not order its keys, so *which* were lost is not fixed and is
+not worth pinning. What is asserted is the shape: the refusal is
+`OBJECT_NOT_DESTROYED`, it says the database was not touched, it does not quote
+the storage key — which is a capability — and the record is **exactly** as it
+was, name, address, status and all three document rows still naming their own
+keys.
+
+**And then it is run again, which is the check that matters most.** With the
+lock lifted the erasure succeeds, destroys all three including the ones already
+gone, and finishes the record. That works because both stores treat an absent
+object as the state that was wanted — `rm` swallowing `ENOENT`, `deleteObject`
+returning on a 404 whose code is an absence. **A `remove()` that threw on an
+object already destroyed would mean an erasure that failed half way could never
+be completed**: every retry would fail on the first key for ever, and the only
+way out would be somebody editing the database by hand. That property was
+inherited rather than designed, it is one line in each store, and until now
+nothing depended on it visibly.
+
+### Proved by breaking it, three ways
+
+- **Carry on past an object that will not delete** — `eraseAccount`'s `return`
+  replaced with a shrug. Eleven failed, starting at *"an object that will not
+  delete refuses the erasure"* and running through every claim that the record
+  was untouched.
+- **A 403 swallowed by the S3 client** — the same eleven, from one layer down,
+  which is what shows the checks reach through to the HTTP status rather than to
+  a boolean in the store.
+- **A store that reports absence, and a client that does not tolerate it** —
+  both edited together, because it takes both. Exactly five failed, all of them
+  the retry: *"with the lock lifted, running it again succeeds —
+  OBJECT_NOT_DESTROYED"*. That is the two-line fault that strands a half-erased
+  record for ever, and it is now the only thing those five checks are about.
+
+### The documentation, which is the part that could actually bite
+
+Two things went into `DEPLOYMENT.md` and `.env.example`:
+
+**A versioned bucket defeats every check in this repository.** S3, R2 and B2 all
+offer versioning and some templates turn it on by default. With it on, a
+`DELETE` writes a marker and keeps the object. The store then reports the object
+as absent, `media:check` is clean, `verify:erasure` is green, and
+`verify:erasure-bytes` — which asks the store itself for a listing — is green
+too, because the marker is what a listing shows. **The application asked for a
+delete and was told it happened.** What has actually happened is that an
+investor who asked to be erased still has a signed subscription agreement in
+object storage, recoverable from the console. Object locks, legal holds and
+retention policies are the same class. It is the one failure an erasure cannot
+see from inside, so it is a line in the runbook instead.
+
+**And what to do about a partial failure**, which the runbook's list of refusal
+messages did not say: some bytes may already be gone, nothing records it, and
+the fix is to repair the store and run it again — which is safe, and now proved
+to be.
+
+**Decisions.**
+
+- ***`refuseDeleteOf` on the fake rather than a queued failure status.***
+  `failures` is a queue served to the next request whatever it is, which cannot
+  express "the third delete". One *object* that will not go is both easier to
+  aim and closer to the real thing: a bucket policy applies to a key, not to an
+  ordinal.
+- ***A 403, not a 500.*** A refused delete on a real bucket is `AccessDenied`.
+  A 500 would be tested by the existing `failures` queue and is the retryable
+  case; this is the one that does not clear on its own.
+- ***The residue is printed as a note and not asserted to a number.*** Which of
+  the three was lost depends on an unordered query. Asserting it would be
+  asserting the query planner. What is asserted is that the locked object is
+  still there and that at most two went, so a run where the locked one was
+  destroyed anyway fails.
+- ***Extended `verify:erasure` rather than writing a fourth erasure script.***
+  It already owns the media-store section, the seeded owner and the cleanup.
+  This is the same claim about the same seam with a different store behind it.
+- ***The versioning warning went in the runbook, not into a check.*** A check
+  cannot see it: the store answers the way a working store answers. Writing it
+  down where somebody configures the bucket is the only place it can land.
+
+**Deviations.** None. No application file changed.
+
+**Checklist.** **5** again, from the store side: an erasure that fails part way
+must not leave a record half-described, and it does not — the database is not
+touched at all. Nothing else moves. 1–4 and 6–12 untouched: no money, no send
+path, no gate, no token, and the refusal is explicitly checked not to quote the
+storage key, which is item **8**'s rule applied to a return value rather than to
+a log line.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (2598) are green.
+`pnpm verify:erasure` is **136**, `pnpm verify:erasure-bytes` is **24** and
+`pnpm verify:account-access` is **81**, and all three pass.
+
+**Uncertain.**
+
+- ***The bucket is still a fake.*** It verifies every signature over a real
+  socket, which is what makes the client's requests well-formed rather than
+  merely accepted — but AWS has not agreed with any of it. That is the standing
+  limit of `verify:object-store` and this section inherits it.
+- ***A versioned bucket is now written down and still undetectable.*** It might
+  not have to be: `media:check` could `PUT` a scratch object, delete it, and ask
+  for it back **with a version id** — or simply report what the provider says
+  about the bucket's versioning if the API exposes it. That is a real feature
+  and it is not built. **This is the largest thing this entry leaves open.**
+- ***Nothing crashes the process mid-loop.*** A refused delete is a clean
+  refusal with a return value. A machine losing power between the third object
+  and the fourth leaves the same residue with no return value at all and nobody
+  told. The retry is the same answer, but nothing makes anybody run it.
+- ***Nothing counts the requests the loop makes.*** Forty objects is forty
+  round trips, serially, inside a server action with no progress indication.
+  That is a slow button, not a wrong one, and it is unmeasured.
+- ***The partial state has no report.*** `media:check` finds rows whose objects
+  are missing, which is exactly what a half-finished erasure leaves — but
+  nothing connects the two, and nobody is told to run it after a failed erasure.
+  The runbook now says to retry; it does not say how to see what is outstanding.
+- ***One erasure, one neighbour, thirty-four objects*** — unchanged from the
+  last entry, and `list(1000)` truncating is still unmeasured.
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable***, because
+  `interest_register_entries.account_id` is unique.
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step. The erasure
+  is now as proved as a build can make it — through a browser, against two
+  stores, with a store that refuses. What is left on item 12 is advice.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10, where the
+  recommendation is not to build it.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

@@ -30,6 +30,17 @@ export class FakeS3 {
    * supposed to refuse this, and there is a test that it does.
    */
   ignoreRanges = false
+  /**
+   * Keys whose `DELETE` is answered 403, however many times it is asked.
+   *
+   * Not the same as `failures`, which is a queue of statuses served once each
+   * to the next request whatever it is. This is one *object* that will not go —
+   * a bucket policy, an object lock, a legal hold, a key the credentials can
+   * read and put but not delete. It is the shape a partial failure takes in a
+   * real bucket: the deletes before it succeed, this one does not, and the
+   * caller is left half way through.
+   */
+  readonly refuseDeleteOf = new Set<string>()
   /** The most keys one listing response will carry. Real S3's ceiling is 1000. */
   maxPageSize = 1000
   requests = 0
@@ -187,6 +198,10 @@ export class FakeS3 {
         })
         .end()
     } else if (method === 'DELETE') {
+      if (this.refuseDeleteOf.has(key!)) {
+        response.writeHead(403).end('<Error><Code>AccessDenied</Code></Error>')
+        return
+      }
       this.objects.delete(key!)
       response.writeHead(204).end()
     } else {

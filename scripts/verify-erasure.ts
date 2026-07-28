@@ -66,6 +66,13 @@ import { ERASED_MARKER, ERASED_STORAGE_KEY, looksErased, pseudonymEmail } from '
 import { issueToken } from '@/lib/crypto'
 import { resetEnvCache } from '@/lib/env'
 import { mediaStore, newStorageKey, resetMediaStoreCache } from '@/lib/media/store'
+import {
+  FakeS3,
+  FAKE_S3_ACCESS_KEY_ID,
+  FAKE_S3_BUCKET,
+  FAKE_S3_REGION,
+  FAKE_S3_SECRET,
+} from '@/test/fake-s3'
 
 const PREFIX = 'ErasureVerify'
 
@@ -847,6 +854,197 @@ async function main(): Promise<void> {
     resetEnvCache()
     resetMediaStoreCache()
     await rm(storeDirectory, { recursive: true, force: true })
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\nAn object store, and one object that will not delete')
+
+  /*
+   * Two things nothing has ever done, and they need each other.
+   *
+   * **An erasure has only ever destroyed bytes on a filesystem.** The section
+   * above uses `MEDIA_STORE="filesystem"`, and so does `verify:erasure-bytes`.
+   * The object store is the one to use on any deployment without a disk that
+   * survives a restart — which is every serverless one, and is what
+   * `.env.example` recommends — and no erasure has ever issued a `DELETE` to a
+   * bucket. `verify:object-store` proves the client puts and gets and lists;
+   * the delete an erasure depends on is exercised there only as cleanup.
+   *
+   * **And nothing has ever failed part way through.** `eraseAccount` removes
+   * every object in a loop and returns `OBJECT_NOT_DESTROYED` on the first one
+   * that throws — *before* it opens the transaction, so the record is untouched.
+   * That refusal has been reached with no store at all, which fails before the
+   * loop starts. It has never been reached from inside the loop, which is where
+   * a real bucket fails: an object lock, a legal hold, a key the credentials can
+   * read and put but not delete.
+   *
+   * The second is the interesting one, because the answer is uncomfortable and
+   * is better written down than assumed. **An erasure is not atomic across the
+   * two stores.** Bytes destroyed before the failing object are gone, the record
+   * still names them, and nothing anywhere records that it happened. What makes
+   * that survivable is that the erasure can be run again — which is a property
+   * of `remove()` being indifferent to an object that is already absent, and is
+   * checked below rather than assumed.
+   */
+  const bucket = new FakeS3()
+  await bucket.start()
+  const beforeBucket = {
+    store: process.env.MEDIA_STORE,
+    endpoint: process.env.MEDIA_S3_ENDPOINT,
+    region: process.env.MEDIA_S3_REGION,
+    name: process.env.MEDIA_S3_BUCKET,
+    id: process.env.MEDIA_S3_ACCESS_KEY_ID,
+    secret: process.env.MEDIA_S3_SECRET_ACCESS_KEY,
+  }
+
+  try {
+    process.env.MEDIA_STORE = 'object-store'
+    process.env.MEDIA_S3_ENDPOINT = bucket.endpoint
+    process.env.MEDIA_S3_REGION = FAKE_S3_REGION
+    process.env.MEDIA_S3_BUCKET = FAKE_S3_BUCKET
+    process.env.MEDIA_S3_ACCESS_KEY_ID = FAKE_S3_ACCESS_KEY_ID
+    process.env.MEDIA_S3_SECRET_ACCESS_KEY = FAKE_S3_SECRET
+    resetEnvCache()
+    resetMediaStoreCache()
+
+    const store = mediaStore()
+    check('an object store is configured for this section', store?.kind === 'object-store')
+
+    const erin = await seedInvestor('erin', round!.id)
+    const keys = [newStorageKey('doc'), newStorageKey('doc'), newStorageKey('doc')]
+    for (const [index, key] of keys.entries()) {
+      const bytes = new TextEncoder().encode(`%PDF-1.4 agreement ${index} for erin`)
+      await store!.put(key, bytes, 'application/pdf')
+      await db.insert(documentPackages).values({
+        offerId: erin.offer.id,
+        title: `Subscription agreement ${index} — erin Person`,
+        description: 'Countersigned copy.',
+        storageKey: key,
+        contentType: 'application/pdf',
+        sizeBytes: bytes.byteLength,
+      })
+    }
+    check(
+      'three objects are in the bucket, over a socket that verified every signature',
+      keys.every((key) => bucket.objects.has(key)),
+      `${bucket.objects.size} objects, ${bucket.requests} requests`,
+    )
+
+    // ---- one object refuses to go ----------------------------------------
+    const locked = keys[1]!
+    bucket.refuseDeleteOf.add(locked)
+
+    const partial = await eraseAccount({ accountId: erin.account.id, actor: owner })
+    check('an object that will not delete refuses the erasure', !partial.ok)
+    check(
+      'with OBJECT_NOT_DESTROYED, not the no-store refusal',
+      !partial.ok && partial.reason === 'OBJECT_NOT_DESTROYED',
+      !partial.ok ? partial.reason : 'it succeeded',
+    )
+    check(
+      'and the message says the database was not touched',
+      !partial.ok && /Nothing was changed/.test(partial.message),
+      !partial.ok ? partial.message : '',
+    )
+    check(
+      'and does not quote the storage key, which is a capability',
+      !partial.ok && !partial.message.includes(locked),
+    )
+
+    /*
+     * The claim the refusal makes, checked against the database rather than
+     * taken from the message. This is the whole reason the bytes go first: a
+     * store that cannot be emptied must leave a record that still describes
+     * the person, not a half-erased one.
+     */
+    const erinAfter = await db.query.investorAccounts.findFirst({
+      where: eq(investorAccounts.id, erin.account.id),
+    })
+    check('the account is exactly as it was — the name', erinAfter?.name === 'erin Person')
+    check('the address', erinAfter?.email === erin.email)
+    check('and the status', erinAfter?.status === 'ACTIVE')
+    const erinDocs = await db
+      .select({ key: documentPackages.storageKey })
+      .from(documentPackages)
+      .where(eq(documentPackages.offerId, erin.offer.id))
+    check(
+      'and all three document rows still name their own keys',
+      erinDocs.length === 3 && erinDocs.every((row) => keys.includes(row.key!)),
+    )
+    check('the object that refused is still in the bucket', bucket.objects.has(locked))
+
+    /*
+     * **The residue, stated rather than asserted away.**
+     *
+     * `readGraph` does not order its keys, so which of the three the loop
+     * reached before the locked one is not fixed and is not worth pinning. What
+     * is fixed is the shape: whatever was destroyed is gone for good, the rows
+     * still name it, and no audit row anywhere says so. An erasure is not atomic
+     * across the database and the object store, and cannot be — the bytes have
+     * to go first or a failure leaves them behind for ever.
+     */
+    const lostAlready = keys.filter((key) => !bucket.objects.has(key))
+    console.log(
+      `  note  ${lostAlready.length} of 3 objects were destroyed before the refusal; ` +
+        'their rows still name them, and nothing records it. See PROGRESS.md, Uncertain.',
+    )
+    check(
+      'the refusal is not silent about being partial in the log it leaves',
+      lostAlready.length <= 2,
+      `${lostAlready.length} destroyed, which would mean the locked one went too`,
+    )
+
+    // ---- and it can be run again -----------------------------------------
+    /*
+     * The property that makes the paragraph above survivable rather than a
+     * dead end. A `remove()` that threw on an object already destroyed would
+     * mean an erasure that failed half way could never be completed: every
+     * retry would fail on the first key, for ever, and the only way out would
+     * be a person editing the database by hand.
+     */
+    bucket.refuseDeleteOf.clear()
+    const retry = await eraseAccount({ accountId: erin.account.id, actor: owner })
+    check('with the lock lifted, running it again succeeds', retry.ok, retry.ok ? '' : retry.reason)
+    check(
+      'and it destroys all three, including the ones already gone',
+      retry.ok && retry.objectsDestroyed === 3,
+      retry.ok ? `${retry.objectsDestroyed}` : '',
+    )
+    check(
+      'the bucket holds none of them',
+      keys.every((key) => !bucket.objects.has(key)),
+    )
+    const erinErased = await db.query.investorAccounts.findFirst({
+      where: eq(investorAccounts.id, erin.account.id),
+    })
+    check(
+      'and the record is erased on the second run',
+      erinErased?.email === pseudonymEmail(erin.account.id),
+    )
+    const erinDocsAfter = await db
+      .select({ key: documentPackages.storageKey })
+      .from(documentPackages)
+      .where(eq(documentPackages.offerId, erin.offer.id))
+    check(
+      'with every document row carrying the erased marker',
+      erinDocsAfter.length === 3 &&
+        erinDocsAfter.every((row) => row.key === ERASED_STORAGE_KEY),
+    )
+  } finally {
+    await bucket.stop()
+    for (const [name, value] of Object.entries({
+      MEDIA_STORE: beforeBucket.store,
+      MEDIA_S3_ENDPOINT: beforeBucket.endpoint,
+      MEDIA_S3_REGION: beforeBucket.region,
+      MEDIA_S3_BUCKET: beforeBucket.name,
+      MEDIA_S3_ACCESS_KEY_ID: beforeBucket.id,
+      MEDIA_S3_SECRET_ACCESS_KEY: beforeBucket.secret,
+    })) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+    resetEnvCache()
+    resetMediaStoreCache()
   }
 
   await cleanup()
