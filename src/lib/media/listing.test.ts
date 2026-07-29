@@ -222,9 +222,28 @@ describe('listing a real bucket over a socket', () => {
   const fake = new FakeS3()
   let client: S3ObjectClient
 
+  /**
+   * The bucket these tests read, filled once.
+   *
+   * It used to be filled by the *first test in the file*, and every test below
+   * it depended on that having run first. Nothing said so, and nothing enforced
+   * the order — vitest runs the tests in a file in source order by default, so
+   * it worked, invisibly, until the suite was run with `--sequence.shuffle` for
+   * the first time and `stops at the caller's limit even mid-walk` read an
+   * empty bucket and reported `[]`.
+   *
+   * A fixture built inside a test is a fixture the tests after it inherit. This
+   * is the only place in this file where that mattered, and it is the reason
+   * shuffling was worth doing at all.
+   */
   beforeAll(async () => {
     await fake.start()
     client = new S3ObjectClient(fake.config())
+
+    for (let n = 0; n < 25; n += 1) {
+      const key = `img_PAGE${String(n).padStart(2, '0')}PAGEPAGEPAGEPA`
+      await client.putObject(key, new Uint8Array(n + 1), 'image/png')
+    }
   })
 
   afterAll(async () => {
@@ -232,11 +251,6 @@ describe('listing a real bucket over a socket', () => {
   })
 
   it('walks every page rather than reporting the first one', async () => {
-    for (let n = 0; n < 25; n += 1) {
-      const key = `img_PAGE${String(n).padStart(2, '0')}PAGEPAGEPAGEPA`
-      await client.putObject(key, new Uint8Array(n + 1), 'image/png')
-    }
-
     fake.requests = 0
     const listed = await client.listObjects(1000)
 

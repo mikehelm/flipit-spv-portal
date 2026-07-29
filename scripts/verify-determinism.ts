@@ -240,6 +240,60 @@ async function main(): Promise<void> {
     )
   }
 
+  if (only.length === 0) {
+    /*
+     * The unit suite, in an order nobody chose.
+     *
+     * Vitest runs the tests in a file in source order, so a fixture built
+     * inside a test is silently inherited by every test after it — and reads as
+     * a passing suite forever. That is not hypothetical here. The first
+     * shuffled run this repository has ever done failed immediately:
+     * `listing.test.ts` filled its fake bucket in its *first test*, and five
+     * tests below depended on it having run first. Under a shuffle one of them
+     * read an empty bucket and reported `[]`.
+     *
+     * The seed varies, so this samples rather than repeats — which is the
+     * honest answer to "two runs is repeatability, not a flakiness measure".
+     * It is printed, because a sampled failure that cannot be reproduced is a
+     * rumour: `pnpm vitest run --sequence.shuffle --sequence.seed=<it>`.
+     */
+    console.log('\nThe unit suite, in an order nobody chose')
+
+    const seed = Date.now() % 100_000
+    console.log(`  seed ${seed} — reproduce with \`pnpm vitest run --sequence.shuffle --sequence.seed=${seed}\``)
+
+    const shuffled = await new Promise<Run>((resolve) => {
+      const child = spawn(
+        'pnpm',
+        ['vitest', 'run', '--sequence.shuffle', `--sequence.seed=${seed}`],
+        { cwd: process.cwd(), env: process.env },
+      )
+      let out = ''
+      child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString()))
+      child.stderr.on('data', (chunk: Buffer) => (out += chunk.toString()))
+      child.on('close', (code) => resolve({ code: code ?? 1, out }))
+    })
+
+    const counted = /Tests +(\d+) passed \((\d+)\)/.exec(shuffled.out)
+
+    // The control. A run that collected nothing exits zero and prints a tidy
+    // summary, and would report a suite with no order dependence because it
+    // ran no tests.
+    check(
+      'the shuffled run collected the whole suite',
+      counted !== null && Number(counted[2]) > 2500,
+      counted ? `${counted[2]} tests` : 'no count in the output',
+    )
+    check(
+      `the suite passes in shuffled order (seed ${seed})`,
+      shuffled.code === 0,
+      // The last few lines, because a failure here is a rumour without them and
+      // the seed alone may not reproduce it — the shuffled run happens after
+      // twenty-eight database verifications, and that is part of the state.
+      `exit ${shuffled.code}\n${shuffled.out.trimEnd().split('\n').slice(-12).join('\n')}`,
+    )
+  }
+
   console.log('\nA run that never reached its cleanup')
 
   for (const name of INTERRUPTED.filter(wanted)) {

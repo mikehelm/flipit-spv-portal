@@ -13919,3 +13919,162 @@ building unauthenticated, against the output the real rules produce.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The suite in an order nobody chose, and an environment nobody chose either
+
+Two named items: *the unit suite is not run twice, and not shuffled*, and *two
+runs is repeatability, not a flakiness sample*. Shuffling answers both — the
+seed varies, so it samples — and it found two real defects on its first run and
+its third.
+
+### The first shuffled run ever done here failed immediately
+
+`src/lib/media/listing.test.ts` filled its fake S3 bucket **inside its first
+test**, and the five tests below it depended on that having run first. Vitest
+runs a file's tests in source order, so it worked, invisibly, for as long as
+nobody asked a different question. Under a shuffle, *stops at the caller's limit
+even mid-walk* read an empty bucket and reported `[]`.
+
+***A fixture built inside a test is a fixture every test after it inherits.***
+The bucket is filled in `beforeAll` now, and the first test keeps the assertion
+that was actually its own — that twenty-five objects take one request.
+
+### The third run failed for a better reason
+
+Six tests failed inside `verify:determinism` that pass from a bare shell, and the
+seed printed to reproduce them reproduced nothing. The order was never the cause.
+
+`src/test/setup.ts` says *"set before any module reads it, so unit tests never
+depend on a developer's local `.env`"*, and every line under that sentence was
+`??=` — **fill it in if nobody else has**. That reads as a courtesy and is the
+exact opposite of what the sentence promises: the suite uses whatever is already
+in the environment. `verify:determinism` does `import 'dotenv/config'` for its
+own database connection, so the suite it spawned inherited
+`APP_URL=http://localhost:3000` and six assertions about production links failed.
+
+***The same six would fail for anybody who exports `APP_URL` in their shell
+profile, with no hint as to why.***
+
+And `DATABASE_URL` was on that list. Under `??=`, **a developer with their real
+connection string exported ran the unit suite against their real database.**
+Nothing in the suite should reach a database at all; it now points at a name
+that does not exist, so anything that tries fails loudly.
+
+Every line is an assignment now, and `src/test/setup.test.ts` holds the rule
+against `??=` coming back, with a control: the source-level check that the
+assignments are *written* is satisfied by a file that is never *loaded*, so the
+values actually in force are asserted too.
+
+### What `verify:determinism` gained
+
+A third phase. One shuffled run of the whole suite, with a **varying seed that
+is printed** — a sampled failure that cannot be reproduced is a rumour. On a
+failure it prints the last twelve lines as well, because the seed alone is not
+always enough: the shuffled run happens after twenty-eight database
+verifications, and that is part of the state, which is exactly how the second
+defect was found.
+
+The control on it is a floor: the run must have collected more than 2500 tests.
+A run that collected nothing exits zero, prints a tidy summary, and reports a
+suite with no order dependence because it ran nothing.
+
+**Decisions.**
+
+- ***The seed varies, and that makes `verify:all` sampled rather than fixed.***
+  This is a deliberate trade and it is the point: a fixed seed proves one order
+  works forever. A varying one samples the space and will occasionally find
+  something on a run where nothing changed. **A failure here is a real defect in
+  the suite, not a flake — and the printed seed and output tail are what make
+  that a claim somebody can check rather than an assertion.**
+- ***One shuffled run, not two.*** Ninety seconds each; two would put
+  `verify:all` past ten minutes. It runs the whole suite, so one run samples
+  3045 tests' worth of ordering.
+- ***The shuffled run is skipped when a filter is given.*** `pnpm
+  verify:determinism qa` is for the mutation table and takes fifteen seconds.
+- ***`setup.ts` assigns rather than defers, and a test that needs something else
+  sets it itself.*** Several do, after setup has run, and put it back. A
+  deliberate act inside a test is a different thing from an ambient value nobody
+  chose.
+
+**Deviations.** None.
+
+**Checklist.** No point changes hands, but point 8's neighbour is worth noting:
+the unit suite can no longer be pointed at a real database by an exported
+variable.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**3045**, 134 files) are green.
+`pnpm verify:all` is **27 passed, 0 failed, 0 skipped** — eight minutes.
+`pnpm verify:mutants` is **62 passed, 0 failed**.
+
+**Uncertain.**
+
+- ***Nothing mutates `setup.ts` back to `??=` in `verify:mutants`.*** The new
+  test would catch it, and that pairing is unproven. **Cheap, and the next
+  item.**
+- ***One shuffled run per `verify:all`, at a random seed, is a thin sample.***
+  Two defects in three runs says the space is not empty. Nobody knows how many
+  more orders are bad, and nothing accumulates the seeds that have been tried.
+- ***`verify:all` is now eight minutes.*** It was five this morning. Three
+  minutes of that is `determinism`, and most of that is the shuffled suite.
+- ***An earlier Uncertain entry was wrong and is withdrawn.*** It claimed
+  `unattendedFindings` had no completeness check. It has one — *"the banner
+  never says something the page does not"* in `banner-parity.test.ts` asserts
+  every banner finding is on the page. **Recorded rather than quietly deleted,
+  because a wrong entry in this list costs the next session a wasted package.**
+- ***The three expensive worlds are three.***
+- ***Nothing drives `unavailableSignal` through a real failure.***
+- ***Ordering between scripts is still untested in `verify:determinism`.***
+- ***The five build-and-browser verifications are not repeated.***
+- ***Choosing between `existsInCode` and a raw regex is a judgement per rule, and
+  getting it wrong is silent.***
+- ***The camera flag rests on a comment.***
+- ***The regex-or-division heuristic is still a heuristic.***
+- ***`emptyBeside` has no weak default.***
+- ***Thirty-odd other `.length === 0` sites were read by eye and left alone.***
+- ***The log sweep reads names, not values.***
+- ***The six negated checks without controls are recorded, not solved.***
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***An exception inside the transaction leaves a `began` row unresolved.***
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

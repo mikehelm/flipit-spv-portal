@@ -2004,6 +2004,40 @@ prove it: **thirty-one promises**.
 
 ---
 
+## Running the tests in a random order, which found two real faults
+
+Tests normally run in the order they are written in the file. That means a test
+which quietly *sets something up* can be relied on by every test below it,
+forever, without anybody noticing — and the day somebody reorders the file, or
+runs them in parallel, it breaks for reasons nobody can explain.
+
+The whole suite of 3045 tests is now run once in a **shuffled order** as part of
+`pnpm verify:determinism`, with the shuffle order printed so any failure can be
+reproduced exactly.
+
+The very first shuffled run failed, and it was right to. One test file filled its
+test storage bucket inside its *first test*, and five tests below it depended on
+that having happened. Under a shuffle, one of them ran first and read an empty
+bucket. That is fixed.
+
+The third run failed for a better reason. Six tests failed inside the command and
+passed from a normal terminal, and the printed order reproduced nothing — because
+the order was never the cause.
+
+**The suite was using whatever settings happened to be in the environment.** The
+file that sets up the test environment said, in as many words, that tests never
+depend on your local settings file — and then it filled in each value *only if
+one was not already there*. So the suite gave different answers depending on who
+ran it and from where.
+
+The one that mattered: the database address was on that list. **Anyone with their
+real database address set in their shell was running the entire test suite
+against their real database.** It now always points at a name that does not
+exist, so anything that tries to reach a database fails loudly. Every value is
+now set outright, and there is a check that stops the old behaviour coming back.
+
+---
+
 ## Things worth knowing
 
 - The `ENCRYPTION_KEY` and `AUTH_SECRET` in your local `.env` are throwaway development values. Generate fresh ones for anything real.
