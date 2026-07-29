@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Selected simplification package: Start, five-destination navigation, People/readiness, Follow-up, plain language and staged records | Codex `/root` | 2026-07-29 16:37 UTC | `src/components/admin/admin-nav.tsx`, `src/components/admin/guided-start.tsx`, `src/app/(admin)/admin/page.tsx`, `src/app/(admin)/recipients/**`, `src/app/(admin)/follow-up/**`, `src/app/(admin)/more/**`, and focused tests for those surfaces |
 
 ## Done, so nobody starts it again
 
