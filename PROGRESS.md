@@ -13443,3 +13443,159 @@ proving it cannot lose an entry quietly.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The classifier's own contract, and two detectors that were reading prose
+
+The head of the last queue: *the classifier has no test of its own; it is now
+load-bearing for seven rules across three files, and it is the single point at
+which all of them fail together.*
+
+### `source.test.ts`
+
+Twenty-two checks naming what `classify`, `codeWithoutStrings` and
+`existsInCode` promise. The shape properties first — same length, newlines where
+they were, since every caller indexes into the mask by position and every
+failure message names a line. Then what counts as the inside of a string:
+escapes, template holes, a nested brace inside an interpolation, a regular
+expression with quotation marks in it, a character class containing a slash, and
+division told apart from a pattern.
+
+Two of them are the mistakes that were live in this working tree an hour apart,
+written down as tests rather than as prose:
+
+- ***reading too little*** — the regex whose quotation marks opened a string that
+  never closed;
+- ***reading too much*** — `codeWithoutStrings` applied to an import rule, which
+  turns `from 'playwright'` into `from ''` and makes every browser-driven script
+  invisible.
+
+And the last group points the classifier at the real repository: the mutation
+table's broken code reads as data, `scripts/lib/browser.ts` — which really does
+launch a browser — still reads as code, and `verify-deployment.ts` is at least
+sixty per cent code by character, which is the blunt way to notice an unclosed
+string swallowing it again.
+
+**Two mutations**, one in each direction, both of them the real mistakes:
+`startsARegex` made to always say no, and `existsInCode` made to count a match
+inside a string.
+
+### And `existsInCode` was reading comments
+
+Writing the contract found a defect in it: a rule asking *does this file import
+Playwright* was answered `true` by a **comment** saying it deliberately does not.
+It now matches against the comment-blanked text, which preserves every position,
+so the mask still lines up.
+
+That fix broke two more of the runner's prerequisite detectors, and the reason is
+the useful part.
+
+***`existsInCode` is the wrong tool for two of the four, and for the opposite
+reason it was right for the other two.***
+
+- *"Does this script start a server"* is answered by
+  `spawn('node_modules/.bin/next', ['start', …])` — and the name of the binary
+  is a **string**. Reading only code, the detector concluded `verify:memory`
+  starts no server.
+- *"Does this script open a camera"* is answered, in `verify-recorder.ts`, by a
+  **comment**. The call happens inside the page rather than in the script, so the
+  only occurrence in the file is prose.
+
+Both now read the raw text, with the reason written beside them. So of four
+detectors doing the same job, two must read strings and comments and two must
+not — and getting it wrong fails silently in both directions.
+
+***Hence a control on all four***, which is the third time this session a control
+has been the thing that caught a rule going quiet: *at least four scripts start a
+server, at least four import Playwright, at least one opens a camera, exactly one
+uses `pg_restore`.* A detector matching nothing satisfies an equality for every
+script that declares nothing, and it does it by agreeing with a table that
+happens to be right.
+
+**Decisions.**
+
+- ***Comments count as evidence for the camera flag, and that is recorded rather
+  than fixed.*** The alternative is a hand-maintained list of which scripts need
+  a camera, which is the thing this audit exists to replace. Deleting that
+  comment would make the flag look wrong; the control would still hold, and the
+  equality would fail loudly.
+- ***`existsInCode` blanks comments as well as strings.*** A rule about what a
+  file does must not be answerable by a sentence about what it does not do.
+- ***No attempt to unify the four detectors.*** They ask genuinely different
+  questions of genuinely different evidence. What they now share is a control
+  each.
+
+**Deviations.** None.
+
+**Checklist.** No point changes hands.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2872**, 132 files) are green.
+`pnpm verify:all` is **26 passed, 0 failed, 0 skipped**.
+`pnpm verify:mutants` is **56 passed, 0 failed** — twenty-eight claims.
+
+**Uncertain.**
+
+- ***Choosing between `existsInCode` and a raw regex is still a judgement per
+  rule, and getting it wrong is silent.*** Seven rules, four of which need one
+  answer and three the other, decided by hand each time. The controls catch it
+  *afterwards*; nothing makes the choice at the point of writing. **A single
+  helper that took the question rather than the tool — `mentionsInEvidence` vs
+  `doesInCode` — is the shape of an answer and it is not obviously worth it.
+  Next session's judgement.**
+- ***The camera flag rests on a comment.***
+- ***The regex-or-division heuristic is still a heuristic.*** `source.test.ts`
+  pins the cases this repository contains, not the language.
+- ***The flake was found by luck.*** `verify:all` has now run green five times in
+  a row. That is evidence, not a measurement, and nothing measures whether the
+  suite is deterministic. **This is the largest purely-technical item left.**
+- ***`emptyBeside` has no weak default.***
+- ***Thirty-odd other `.length === 0` sites were read by eye and left alone.***
+- ***The sweep reads names, not values.***
+- ***The six negated checks without controls are recorded, not solved.***
+- ***The same trick would work on the health *signal*.*** `summariseHealth` is a
+  third surface for the findings and has no parity test.
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved.***
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

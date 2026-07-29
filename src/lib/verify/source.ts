@@ -232,10 +232,14 @@ export function codeWithoutStrings(source: string): string {
  * text start inside a string, and do not count.
  */
 export function existsInCode(source: string, pattern: RegExp): boolean {
-  const { inString } = classify(source)
+  // Against the comment-blanked text, not the raw source: a rule asking *does
+  // this file import Playwright* must not be answered by a comment explaining
+  // that it deliberately does not. Blanking preserves every position, so the
+  // mask still lines up.
+  const { code, inString } = classify(source)
   const search = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`)
   let match: RegExpExecArray | null
-  while ((match = search.exec(source)) !== null) {
+  while ((match = search.exec(code)) !== null) {
     if (!inString[match.index]) return true
     if (match.index === search.lastIndex) search.lastIndex += 1
   }

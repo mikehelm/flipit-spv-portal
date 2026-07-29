@@ -1888,6 +1888,22 @@ green while examining nothing at all. That is the same failure in the opposite
 direction, it lasted about ten minutes, and there is now a check whose only job
 is to notice it.
 
+That one piece of code now has **twenty-two checks of its own**, because seven
+different rules stand on it and they would all go wrong together and quietly.
+Two more entries in the break-it-on-purpose command break it deliberately, one
+in each direction.
+
+Writing those checks found a real fault in it: a rule asking *does this file use
+the shared browser code* was being answered **yes** by a comment saying it
+deliberately does not. Fixing that in turn revealed that two of the four
+questions the release command asks about each check — *does it start a server*,
+*does it open a camera* — are legitimately answered by quoted text and by a
+comment, and so must be read the other way round. Four questions, two needing
+one method and two the other, each of which fails silently if it gets the wrong
+one. So all four now carry a control: *at least four checks start a server, at
+least one opens a camera, exactly one uses the database restore tool*. A
+question that matches nothing agrees with any answer.
+
 ---
 
 ## One command that fails on a fresh copy, and why it is not a fault

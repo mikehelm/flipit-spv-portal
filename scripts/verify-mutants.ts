@@ -445,6 +445,40 @@ const MUTATIONS: readonly Mutation[] = [
     replace: "    file: 'src/app/api/health/route.ts',\n    calls: 0,",
     noticedBy: 'vitest run src/lib/security/logging.test.ts',
   },
+
+  // -------------------------------------------------------------------------
+  // The classifier, which seven rules stand on.
+  //
+  // `src/lib/verify/source.ts` decides what counts as code and what counts as
+  // quoted text. When it is wrong, seven source-level rules are wrong **at
+  // once and quietly** — not one loud failure but seven checks reporting
+  // success about a repository they have stopped reading properly.
+  //
+  // Both of the mutations below are drawn from mistakes that were live in this
+  // working tree, an hour apart, in opposite directions.
+  // -------------------------------------------------------------------------
+  {
+    // Reading too little. Stop recognising a regular expression and the
+    // quotation marks inside `/(?:href|src)="([^"]+)"/g` open a string that
+    // never closes — five hundred lines of `verify-deployment.ts` stop being
+    // scanned, and the log sweep reports a cleaner repository than the truth.
+    claim: 'a quotation mark inside a regular expression is not the start of a string',
+    file: 'src/lib/verify/source.ts',
+    find: "    if (c === '/' && next !== '/' && next !== '*' && startsARegex(i)) {",
+    replace: "    if (false) {",
+    noticedBy: 'vitest run src/lib/verify/source.test.ts',
+  },
+  {
+    // Reading too much, in the other half. `existsInCode` counting a match
+    // inside a string turns the mutation table — which holds broken code as
+    // data — into a file that launches its own browser and drives Playwright
+    // without the launcher.
+    claim: 'code held as a string in the mutation table is data, not code',
+    file: 'src/lib/verify/source.ts',
+    find: '    if (!inString[match.index]) return true',
+    replace: '    if (true) return true',
+    noticedBy: 'vitest run src/lib/verify/chromium.test.ts',
+  },
 ]
 
 /** What a run of one check produced. */

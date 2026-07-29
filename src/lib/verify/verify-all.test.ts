@@ -116,7 +116,13 @@ describe('verify:all', () => {
   it('marks every script that starts a server as needing a build', () => {
     for (const entry of declared) {
       const source = sourceOf(entry.name)
-      const startsAServer = existsInCode(source, /\[\s*'start'/) && existsInCode(source, /next/)
+      // Raw text, deliberately. The evidence that a script starts a server is
+      // `spawn('node_modules/.bin/next', ['start', …])` — and the name of the
+      // binary is a **string**. `existsInCode` is the right tool for an import
+      // and the wrong one here: it reported that `verify:memory` starts no
+      // server, because the only occurrence of `next` outside a comment is
+      // inside the path it spawns.
+      const startsAServer = /\[\s*'start'/.test(source) && /next/.test(source)
       expect(entry.needs.includes('BUILD'), `${entry.name}: BUILD flag`).toBe(startsAServer)
     }
   })
@@ -138,7 +144,13 @@ describe('verify:all', () => {
     // refusing rather than the browser being unable.
     for (const entry of declared) {
       const source = sourceOf(entry.name)
-      const opensACamera = existsInCode(source, /getUserMedia/)
+      // Raw text, and this one is weaker than it looks: `verify-recorder.ts`
+      // mentions `getUserMedia` only in a comment, because the call itself
+      // happens inside the *page* rather than in the script. The flag is
+      // therefore justified by prose. Recorded rather than tightened — the
+      // alternative is a hand-maintained list of which scripts need a camera,
+      // which is the thing this audit exists to avoid.
+      const opensACamera = /getUserMedia/.test(source)
       expect(entry.needs.includes('CAMERA'), `${entry.name}: CAMERA flag`).toBe(opensACamera)
     }
   })
@@ -158,6 +170,21 @@ describe('verify:all', () => {
       .join('\n')
     expect(code).toContain('getUserMedia({ video: true })')
     expect(code).not.toContain('typeof navigator.mediaDevices')
+  })
+
+  it('detects at least one script in each category — the control', () => {
+    /*
+     * Every rule above is an equality between a declared flag and a detector,
+     * and a detector that matches nothing satisfies it for every script that
+     * declares nothing. Three of these four went briefly quiet when the
+     * detectors were switched to `existsInCode`, and they went quiet by
+     * agreeing with a table that happened to be right.
+     */
+    const sources = declared.map((entry) => sourceOf(entry.name))
+    expect(sources.filter((source) => /\[\s*'start'/.test(source) && /next/.test(source)).length).toBeGreaterThan(3)
+    expect(sources.filter((source) => existsInCode(source, /from 'playwright'/)).length).toBeGreaterThan(3)
+    expect(sources.filter((source) => /getUserMedia/.test(source)).length).toBeGreaterThan(0)
+    expect(sources.filter((source) => existsInCode(source, /from '\.\/backup'/)).length).toBe(1)
   })
 
   it('marks the one that shells out to pg_restore', () => {
