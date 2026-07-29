@@ -35,7 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
-| Unify the visible “Made by Make with Mike” credit and project-color styling | Codex `/root` | 2026-07-29 16:57 UTC | `src/components/{maker-credit-text,site-footer,public-maker-credit,account-curl-menu}.tsx`, `src/lib/attribution.test.ts` |
+| Unify the visible “Made by Make with Mike” credit and project-color styling | Codex `/root` | 2026-07-29 16:57 UTC | `src/components/{maker-credit-text,site-footer,public-maker-credit,account-curl-menu}.tsx`, `src/app/(admin)/admin/settings/page.tsx`, `src/lib/attribution.test.ts` |
 
 ## Done, so nobody starts it again
 
