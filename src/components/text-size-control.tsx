@@ -6,6 +6,25 @@ import { useEffect, useState } from 'react'
 const STORAGE_KEY = 'flipit-text-scale-v2'
 const TEXT_SCALES = [1, 1.25, 1.5, 1.75, 2] as const
 const DEFAULT_TEXT_SCALE = 1.5
+const COMBINED_PANEL_PREFIXES = [
+  '/access-requests',
+  '/admin',
+  '/audit',
+  '/compliance',
+  '/follow-up',
+  '/health',
+  '/import',
+  '/investors',
+  '/more',
+  '/portal',
+  '/questions',
+  '/recipients',
+  '/register',
+  '/reminders',
+  '/round',
+  '/templates',
+  '/updates',
+] as const
 
 function applyTextScale(scale: number) {
   document.documentElement.style.setProperty('--user-text-scale', String(scale))
@@ -89,8 +108,9 @@ export function TextSizeButtons() {
 export function TextSizeControl() {
   const pathname = usePathname()
   const [minimized, setMinimized] = useState(false)
-  const usesCombinedPanel =
-    pathname.startsWith('/admin') || pathname.startsWith('/portal')
+  const usesCombinedPanel = COMBINED_PANEL_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  )
 
   if (usesCombinedPanel) return null
 
