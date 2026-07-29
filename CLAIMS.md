@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Combine Current view and text sizing into one bottom-left utility panel | Codex `/root` | 2026-07-29 18:42 UTC | `src/components/{text-size-control,portal-preview-switch}.tsx`, `src/lib/portal/demo-preview.test.ts` |
 
 ## Done, so nobody starts it again
 
