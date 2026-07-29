@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Development-only single-use David login link | Codex `/root` | 2026-07-29 18:51 UTC | `src/lib/auth/development-login.ts`, `src/app/api/auth/development-login/route.ts`, `src/lib/auth/development-login.test.ts` |
 
 ## Done, so nobody starts it again
 
