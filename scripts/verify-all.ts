@@ -136,6 +136,11 @@ const VERIFICATIONS: readonly Verification[] = [
   { name: 'erasure-bytes', proves: 'an erasure destroying real bytes, pressed in a browser', needs: ['BUILD', 'BROWSER'] },
   { name: 'recorder', proves: 'the video recorder, recording and playing back', needs: ['BUILD', 'BROWSER', 'CAMERA'] },
   { name: 'viewport', proves: 'every screen at 375px, in a real browser', needs: ['BUILD', 'BROWSER', 'CAMERA'] },
+  // Second to last, and for the same reason as the entry below it: it kills
+  // scripts mid-run on purpose, so the run it interrupts reaches no cleanup
+  // either. Its own follow-up run clears the residue, but only for the script
+  // it interrupted.
+  { name: 'determinism', proves: 'that a second run of a verification matches the first' },
   // Last, and that is not cosmetic. It runs other verifications with the code
   // deliberately broken, so those runs *fail on purpose* — and a script that
   // fails part way through may not reach its own cleanup, leaving fixture rows

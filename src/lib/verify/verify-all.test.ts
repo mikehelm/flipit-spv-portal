@@ -201,6 +201,29 @@ describe('verify:all', () => {
   // The two decisions that make the runner honest
   // -------------------------------------------------------------------------
 
+  it('runs the mutation table last, and that is not cosmetic', () => {
+    /*
+     * The repair for the one flake this repository has seen. `verify:mutants`
+     * runs other verifications **with the code deliberately broken**, so those
+     * runs fail on purpose — and a script that fails part way through may not
+     * reach its own cleanup. It used to sit sixteenth, which put its wreckage
+     * in front of ten scripts that had not run yet, and `verify:all` failed
+     * once in three runs.
+     *
+     * The fix was to move it to the end. The entry recording that said the
+     * reasoning was written in a comment "so that a later tidy-up that sorts
+     * the list alphabetically does not quietly bring the problem back" — and a
+     * comment is not a check. This is the check. Alphabetical order would put
+     * `mutants` fourteenth of twenty-seven.
+     */
+    expect(declared[declared.length - 1]!.name).toBe('mutants')
+
+    // And the one that runs verifications twice is second to last, for the
+    // same reason with a smaller blast radius: it kills scripts mid-run on
+    // purpose, and the run it kills reaches no cleanup either.
+    expect(declared[declared.length - 2]!.name).toBe('determinism')
+  })
+
   it('a skip is not a pass', () => {
     // A machine without Chromium would otherwise report success while four
     // scripts — including every screen at 375px — never ran. This is the one

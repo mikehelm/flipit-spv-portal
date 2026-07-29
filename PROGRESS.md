@@ -13599,3 +13599,168 @@ happens to be right.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The flake, measured
+
+The largest purely-technical item on the last four queues: ***the flake was
+found by luck.*** One run in three. `verify:all` had by then run green five
+times in a row, and that is evidence rather than a measurement.
+
+### `pnpm verify:determinism`, the twenty-seventh verification
+
+The flake had two halves, and this measures both.
+
+***Twice, back to back.*** Fourteen database-backed verifications — every one
+that needs no build and no browser — run twice in succession, with the two
+**tallies** compared rather than the two exit codes. Two runs that both exit
+zero while checking different numbers of things is precisely what a fixture
+leaking between runs looks like. Each pair also carries the control that both
+tallies were readable at all, because `null` compares equal to `null`.
+
+***A run that never reached its cleanup.*** This is the half that matters, and
+it tests a sentence rather than a script.
+
+The repair for the flake — moving `verify:mutants` to the end of the list —
+is only sufficient because of a stated invariant: *every script clears its own
+prefix on the way in, so residue only bites a script that has not run yet.*
+That sentence is load-bearing for the whole ordering decision, and **nothing
+tested it.**
+
+So five scripts are started, watched until their own output shows fixtures
+written and checks running, `SIGKILL`ed, and then run again to completion. No
+cleanup ran; their rows are still there; the second run must pass anyway. All
+five do. `SIGKILL` and not `SIGTERM` deliberately — a shutdown handler that
+tidies up is a different mechanism, and the invariant names this one.
+
+That also closes a separate queue item: *nothing has actually killed the
+process mid-erasure.* Something has now, five times, and `erasure` is one of the
+five.
+
+### Two things it found immediately
+
+- ***`verify:2fa` does not run `scripts/verify-2fa.ts`.*** It runs
+  `verify-second-factor.ts`. The first draft assumed the obvious mapping and
+  failed three checks on one of twenty-six — the ratio that makes an assumption
+  dangerous rather than obviously broken. It now reads `package.json`, which is
+  where the mapping actually lives.
+- ***A filter that matches nothing is a failure, not a clean run.*** `pnpm
+  verify:determinism nonesuch` would otherwise print `0 passed, 0 failed` and
+  exit zero — a clean bill of health for a run that did not happen. It names the
+  available scripts and exits 1.
+
+### And the ordering comment is now a check
+
+The entry that moved `verify:mutants` last wrote the reasoning into a comment
+"so that a later tidy-up that sorts the list alphabetically does not quietly
+bring the problem back". **A comment is not a check.** `verify-all.test.ts` now
+asserts that `mutants` is last and `determinism` second to last. Alphabetical
+order would put `mutants` fourteenth of twenty-seven.
+
+### Proved by breaking it
+
+`await cleanup()` removed from the *start* of `verify-qa.ts`, leaving the one at
+the end. `pnpm verify:determinism qa` fails at *runs clean over its own
+leftovers*. It is a permanent mutation, filtered to one script so it costs
+fifteen seconds rather than five minutes — a five-minute mutation is a mutation
+somebody deletes.
+
+**Decisions.**
+
+- ***Tallies, not exit codes.*** The failure being looked for is a run that
+  checks *fewer* things, and that exits zero.
+- ***The five build-and-browser verifications are not repeated.*** Fourteen to
+  eighty seconds each; doubling all five would put this past four minutes and
+  out of the habit of being run. A bounded gap, stated in the file's header
+  rather than implied by its absence.
+- ***Killed on the script's own output, never on a timer.*** A fixed delay either
+  lands before the first fixture — proving nothing, because there is no residue
+  — or after a fast script has finished and cleaned up. The kill waits for three
+  `ok` lines, and the check that it *was* killed mid-run with fixtures already
+  written is separate from the check that the next run is clean.
+- ***The whole process group is killed.*** `pnpm` spawns `tsx`; killing the
+  parent alone leaves the child running against the database this is about to
+  reuse.
+- ***`determinism` sits second to last*** for the same reason `mutants` is last,
+  and both positions are now asserted.
+
+**Deviations.** None.
+
+**Checklist.** No point changes hands.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2874**) are green.
+`pnpm verify:all` is **27 passed, 0 failed, 0 skipped** — six minutes.
+`pnpm verify:mutants` is **58 passed, 0 failed** — twenty-nine claims.
+
+**Uncertain.**
+
+- ***Two runs is not a measurement of flakiness, it is a measurement of
+  repeatability.*** The flake appeared one run in three; a defect appearing one
+  run in twenty would pass this comfortably. What this actually proves is the
+  invariant the ordering fix rests on, which is the sharper claim and is worth
+  more than a rerun count. **Nothing samples.**
+- ***Ordering between scripts is still untested.*** Each script is proved to
+  survive *its own* leftovers. Nothing proves `verify:export` survives
+  `verify:qa`'s, which is the shape the flake actually took. A pass that ran the
+  fourteen in a shuffled order and compared tallies would test that, and would
+  cost another five minutes. **This is the next item and it is a judgement about
+  cost.**
+- ***The unit suite is not run twice, and not shuffled.*** 2874 tests in ninety
+  seconds; vitest can shuffle file and test order with a seed, and order
+  dependence is the commonest hidden non-determinism there is. Untouched.
+- ***The five build-and-browser verifications are not repeated.***
+- ***Choosing between `existsInCode` and a raw regex is a judgement per rule, and
+  getting it wrong is silent.***
+- ***The camera flag rests on a comment.***
+- ***The regex-or-division heuristic is still a heuristic.***
+- ***`emptyBeside` has no weak default.***
+- ***Thirty-odd other `.length === 0` sites were read by eye and left alone.***
+- ***The sweep reads names, not values.***
+- ***The six negated checks without controls are recorded, not solved.***
+- ***The same trick would work on the health *signal*.*** `summariseHealth` is a
+  third surface for the findings and has no parity test. **The largest untouched
+  item that is not about the checking machinery.**
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***An exception inside the transaction leaves a `began` row unresolved.***
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

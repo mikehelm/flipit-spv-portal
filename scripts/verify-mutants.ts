@@ -479,6 +479,26 @@ const MUTATIONS: readonly Mutation[] = [
     replace: '    if (true) return true',
     noticedBy: 'vitest run src/lib/verify/chromium.test.ts',
   },
+  {
+    // The invariant the `verify:all` ordering fix rests on.
+    //
+    // `verify:mutants` runs last because the runs it breaks fail on purpose and
+    // may not reach their own cleanup — and residue only bites a script that
+    // has not run yet, *because every script clears its own prefix on the way
+    // in*. That sentence is the entire reason moving one entry to the end of a
+    // list is a sufficient repair, and until `verify:determinism` existed
+    // nothing tested it.
+    //
+    // Take the entry-time cleanup out of one script and the interrupted-run
+    // check has to notice. Filtered to `qa`, because a five-minute mutation is
+    // a mutation somebody deletes.
+    claim: 'a verification clears its own fixtures on the way in, not only on the way out',
+    file: 'scripts/verify-qa.ts',
+    find: 'async function main(): Promise<void> {\n  await cleanup()',
+    replace: 'async function main(): Promise<void> {',
+    noticedBy: 'verify:determinism qa',
+    says: /runs clean over its own leftovers/,
+  },
 ]
 
 /** What a run of one check produced. */

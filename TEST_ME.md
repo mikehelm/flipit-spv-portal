@@ -1927,6 +1927,43 @@ says the same thing where you would be configuring it.
 
 ---
 
+## A twenty-seventh command: is the second run the same as the first?
+
+There is one thing in this project that ever went wrong intermittently. The
+release command failed once, in the middle of three runs that passed. The cause
+was found and fixed — but it was found **by luck**, one run in three, and
+nothing was measuring it.
+
+`pnpm verify:determinism` measures it now, in two ways.
+
+**Twice, back to back.** Fourteen of the checks run twice in a row, and the two
+*totals* are compared — not just whether they passed. Two runs that both succeed
+while checking different numbers of things is exactly what leftover test data
+looks like.
+
+**A run that was killed part way through.** This is the important half. The fix
+for that flake only works because of a promise every check makes: *it clears its
+own test data on the way in, not just on the way out.* Nothing had ever tested
+that promise. So five of the checks are now started, watched until they are
+demonstrably in the middle of working, **killed outright**, and then run again.
+Their leftover data is still in the database and they have to run clean over it.
+All five do.
+
+That also answers something else that had been open: nothing had ever killed the
+application mid-erasure. Something has now, five times, and the erasure check is
+one of the five.
+
+**How it was proved.** The clean-up-on-the-way-in step was removed from one
+check, and the interrupted-run test failed at exactly the right line. It is now a
+permanent entry in the break-it-on-purpose command — twenty-nine promises.
+
+One more thing came out of writing it: the reasoning for the ordering fix had
+been written down as a *comment*, warning that sorting the list alphabetically
+would quietly bring the problem back. A comment is not a check. It is a check
+now.
+
+---
+
 ## Things worth knowing
 
 - The `ENCRYPTION_KEY` and `AUTH_SECRET` in your local `.env` are throwaway development values. Generate fresh ones for anything real.
