@@ -59,7 +59,7 @@ describe('John Doe investor preview', () => {
     expect(portal).toContain('Demo preview — no investor session has been created.')
   })
 
-  it('conceals every account beneath the curl and keeps the rocker low-left', () => {
+  it('conceals every account beneath the curl and keeps the utility panel low-left', () => {
     const portal = read('src/app/portal/page.tsx')
     const admin = read('src/app/(admin)/layout.tsx')
     const menu = read('src/components/account-curl-menu.tsx')
@@ -75,8 +75,10 @@ describe('John Doe investor preview', () => {
     expect(menu).toContain('onPointerEnter={() => setHovered(true)}')
     expect(menu).toContain('hidden={!visible}')
     expect(menu).toContain("event.key === 'Escape'")
-    expect(switcher).toContain('fixed bottom-4 left-14')
-    expect(switcher).toContain("'-translate-x-2 opacity-25'")
+    expect(switcher).toContain('fixed bottom-4 left-4')
+    expect(switcher).toContain('const [minimized, setMinimized] = useState(false)')
+    expect(switcher).toContain('View &amp; text')
+    expect(switcher).not.toContain('nearCorner')
   })
 
   it('offers Mike, David and John Doe without putting identity in a query string', () => {
@@ -95,9 +97,19 @@ describe('John Doe investor preview', () => {
     expect(switcher).toContain("description: 'Safe John Doe rehearsal'")
     expect(switcher).toContain('usePathname')
     expect(switcher).not.toContain('preview=')
+    expect(switcher).toContain('<TextSizeButtons />')
+    expect(switcher).toContain('data-testid="bottom-utility-panel"')
+    expect(switcher).toContain('data-testid="bottom-utility-tab"')
+    expect(switcher).toContain('Minimize view and text tools')
+    expect(switcher).toContain("const STORAGE_KEY = 'flipit-current-view-v1'")
+    expect(switcher).toContain('window.localStorage.setItem(STORAGE_KEY, view.id)')
+    expect(switcher).toContain("if (mode === 'INVESTOR') router.push(view.href)")
+    expect(switcher).toContain("if (mode !== 'INVESTOR') router.push(JOHN_DOE_PREVIEW_PATH)")
+    expect(switcher).toContain("router.replace('/admin/email-review')")
+    expect(switcher).toContain("router.replace('/admin')")
   })
 
-  it('defaults text to 50% above the previous size and keeps a visible hover control on every page', () => {
+  it('defaults text to 50% above the previous size and keeps reliable click controls on every page', () => {
     const styles = read('src/app/globals.css')
     const control = read('src/components/text-size-control.tsx')
     const rootLayout = read('src/app/layout.tsx')
@@ -107,8 +119,12 @@ describe('John Doe investor preview', () => {
     expect(styles).toContain('calc(0.875rem * var(--user-text-scale))')
     expect(control).toContain('const DEFAULT_TEXT_SCALE = 1.5')
     expect(control).toContain("const STORAGE_KEY = 'flipit-text-scale-v2'")
-    expect(control).toContain('group-hover:max-w-28')
-    expect(control).toContain('group-hover:visible')
+    expect(control).toContain('data-testid="text-size-buttons"')
+    expect(control).toContain("pathname.startsWith('/admin')")
+    expect(control).toContain("pathname.startsWith('/portal')")
+    expect(control).toContain('Minimize page tools')
+    expect(control).not.toContain('group-hover:max-w')
+    expect(control).not.toContain('invisible')
     expect(control).toContain('h-11 w-11')
     expect(control).toContain('Make text larger')
     expect(control).toContain('Make text smaller')

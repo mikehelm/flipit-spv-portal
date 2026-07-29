@@ -1,5 +1,6 @@
 'use client'
 
+import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 const STORAGE_KEY = 'flipit-text-scale-v2'
@@ -10,7 +11,7 @@ function applyTextScale(scale: number) {
   document.documentElement.style.setProperty('--user-text-scale', String(scale))
 }
 
-export function TextSizeControl() {
+export function TextSizeButtons() {
   const [scale, setScale] = useState(DEFAULT_TEXT_SCALE)
 
   useEffect(() => {
@@ -37,44 +38,98 @@ export function TextSizeControl() {
   )
 
   return (
-    <aside
-      className="group pointer-events-auto fixed bottom-5 right-5 z-[70] rounded-full border border-orange/35 bg-bg2/82 p-1.5 shadow-2xl backdrop-blur-md transition-all duration-200 hover:bg-bg2 focus-within:bg-bg2 focus:bg-bg2"
-      aria-label="Text size"
+    <div
+      className="flex items-center justify-between gap-4"
       role="group"
-      tabIndex={0}
-      title="Hover or focus to adjust text size"
+      aria-label="Text size"
+      data-testid="text-size-buttons"
+    >
+      <span className="leading-tight">
+        <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-orange">
+          Text size
+        </span>
+        <output
+          className="block text-xs tabular-nums text-ftext"
+          aria-live="polite"
+        >
+          {Math.round(scale * 100)}%
+        </output>
+      </span>
+
+      <span className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => choose(TEXT_SCALES[Math.max(0, currentIndex - 1)])}
+          disabled={currentIndex <= 0}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border hairline text-[13px] font-semibold text-ftext transition-colors hover:border-orange focus-visible:ring-2 focus-visible:ring-orange disabled:cursor-not-allowed disabled:opacity-35"
+          aria-label="Make text smaller"
+        >
+          A−
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            choose(TEXT_SCALES[Math.min(TEXT_SCALES.length - 1, currentIndex + 1)])
+          }
+          disabled={currentIndex >= TEXT_SCALES.length - 1}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border hairline text-[16px] font-semibold text-ftext transition-colors hover:border-orange focus-visible:ring-2 focus-visible:ring-orange disabled:cursor-not-allowed disabled:opacity-35"
+          aria-label="Make text larger"
+        >
+          A+
+        </button>
+      </span>
+    </div>
+  )
+}
+
+/**
+ * Pages without the role-aware view switcher still receive the same
+ * bottom-left utility treatment for text sizing.
+ */
+export function TextSizeControl() {
+  const pathname = usePathname()
+  const [minimized, setMinimized] = useState(false)
+  const usesCombinedPanel =
+    pathname.startsWith('/admin') || pathname.startsWith('/portal')
+
+  if (usesCombinedPanel) return null
+
+  return (
+    <div
+      className="fixed bottom-4 left-4 z-[70]"
       data-testid="text-size-control"
     >
-      <div className="flex items-center gap-1.5">
-        <div className="invisible flex max-w-0 items-center gap-1 overflow-hidden opacity-0 transition-all duration-200 group-hover:visible group-hover:max-w-28 group-hover:opacity-100 group-focus-within:visible group-focus-within:max-w-28 group-focus-within:opacity-100">
-          <button
-            type="button"
-            onClick={() => choose(TEXT_SCALES[Math.max(0, currentIndex - 1)])}
-            disabled={currentIndex <= 0}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border hairline text-[13px] font-semibold text-ftext transition-colors hover:border-orange disabled:cursor-not-allowed disabled:opacity-35"
-            aria-label="Make text smaller"
-          >
-            A−
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              choose(TEXT_SCALES[Math.min(TEXT_SCALES.length - 1, currentIndex + 1)])
-            }
-            disabled={currentIndex >= TEXT_SCALES.length - 1}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border hairline text-[16px] font-semibold text-ftext transition-colors hover:border-orange disabled:cursor-not-allowed disabled:opacity-35"
-            aria-label="Make text larger"
-          >
-            A+
-          </button>
-        </div>
-        <span className="whitespace-nowrap px-2 text-[12px] font-bold uppercase tracking-[0.12em] text-orange">
-          Text{' '}
-          <output className="tabular-nums" aria-live="polite">
-            {Math.round(scale * 100)}%
-          </output>
-        </span>
-      </div>
-    </aside>
+      {minimized ? (
+        <button
+          type="button"
+          onClick={() => setMinimized(false)}
+          className="min-h-11 rounded-t-md border hairline bg-bg2/96 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-orange shadow-2xl backdrop-blur-md hover:border-orange/60 focus-visible:ring-2 focus-visible:ring-orange"
+          aria-label="Open text tools"
+        >
+          Text tools
+        </button>
+      ) : (
+        <aside
+          className="w-[min(20rem,calc(100vw-2rem))] rounded-md border hairline bg-bg2/96 p-3 shadow-2xl backdrop-blur-md"
+          aria-label="Text tools"
+        >
+          <div className="mb-3 flex items-center justify-between border-b hairline pb-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-dim">
+              Page tools
+            </span>
+            <button
+              type="button"
+              onClick={() => setMinimized(true)}
+              className="inline-flex h-8 min-w-8 items-center justify-center rounded-sm border hairline px-2 text-sm text-silver2 hover:border-orange/60 hover:text-orange focus-visible:ring-2 focus-visible:ring-orange"
+              aria-label="Minimize page tools"
+              title="Minimize"
+            >
+              −
+            </button>
+          </div>
+          <TextSizeButtons />
+        </aside>
+      )}
+    </div>
   )
 }
