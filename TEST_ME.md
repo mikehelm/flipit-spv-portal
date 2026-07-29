@@ -1845,6 +1845,72 @@ twenty-two promises.
 
 ---
 
+## Breaking the checks themselves
+
+Everything the break-it-on-purpose command had broken until now was in the
+application. But the checks are code too, and **the checks are where this
+project's mistakes have actually been** — the banner that was never really
+looked at, the twenty-one checks that passed on nothing, the browser path
+written correctly in two places and missing from three.
+
+So four of the twenty-six promises now break the *checking machinery*, and two
+of them work by **deleting** something rather than changing it — which is the
+shape of every mistake this project has actually made:
+
+- A check downgraded to the weaker form that passes on nothing.
+- A sixth copy of the browser-launching code, which is the exact mistake that
+  once made three commands unrunnable.
+- **A whole verification removed from the list the release command runs.** It
+  still exists, running it by name still works, and `pnpm verify:all` silently
+  stops running it. The total stays green and the coverage quietly shrinks.
+- An entry lost from the list of places allowed to write to a log.
+
+All four are caught. That matters more than the others, because there is nothing
+underneath: a check that has stopped checking reports its own success.
+
+### What adding them found
+
+They broke four existing checks straight away, and the reason was worth the
+detour. The break-it-on-purpose file now *contains* the text of broken code — as
+quoted text, to paste into other files — and four different parts of this project
+read source code by pattern-matching over raw text. Each had its own idea of what
+counted as code, and all four were wrong: three of them read the quoted examples
+as if they were real, and one of them had earlier misread a piece of
+pattern-matching as quoted text and stopped reading five hundred lines.
+
+There is now **one** piece of code that decides what is code and what is quoted
+text, and everything that reads source uses it — the same "one copy, not five"
+rule this project already learned the hard way about launching a browser.
+
+The first attempt at the fix was too blunt: it blanked *all* quoted text, which
+also blanked the names of the libraries each file imports — so four checks went
+green while examining nothing at all. That is the same failure in the opposite
+direction, it lasted about ten minutes, and there is now a check whose only job
+is to notice it.
+
+---
+
+## One command that fails on a fresh copy, and why it is not a fault
+
+If you clone this project fresh and run `pnpm verify:all`, **two of the
+twenty-six report a failure** — and neither is a defect.
+
+Both need somewhere to put a file. One serves a video over a real connection to
+check it plays on an iPhone; the other measures the image library with something
+actually in it. A fresh copy has no storage configured, because an empty library
+is a perfectly supported state for the application itself.
+
+The run now tells you this **before it starts**, alongside the other things it
+checks for up front:
+
+    media      none — MEDIA_STORE is empty, so deployment and viewport will each
+               report one failure. Set it to "filesystem" in .env for a complete run.
+
+Set `MEDIA_STORE="filesystem"` in `.env` and all twenty-six pass. The setup file
+says the same thing where you would be configuring it.
+
+---
+
 ## Things worth knowing
 
 - The `ENCRYPTION_KEY` and `AUTH_SECRET` in your local `.env` are throwaway development values. Generate fresh ones for anything real.
