@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| David/Tohu first-login decision and separate investor previews | Codex `/root` | 2026-07-29 19:00 UTC | `src/actions/investor-plan.ts`, `src/lib/investor-plan/tohu-decision.ts`, `src/lib/investor-plan/tohu-decision.test.ts`, `src/components/admin/tohu-email-decision.tsx`, `src/app/(admin)/layout.tsx`, `src/lib/portal/demo.ts`, `src/app/portal/page.tsx`, `src/app/portal/demo/page.tsx`, `src/app/portal/demo/david/page.tsx`, `src/app/portal/demo/tohu/page.tsx`, `src/components/portal-preview-switch.tsx`, `src/lib/portal/demo-preview.test.ts` |
 
 ## Done, so nobody starts it again
 
