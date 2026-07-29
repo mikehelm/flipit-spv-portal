@@ -17,7 +17,16 @@ import {
 } from '@/lib/portal/operator-contact'
 import { noticeCopy } from '@/lib/portal/notices'
 import { loadPortalView, type PortalOffer, type PortalView } from '@/lib/portal/data'
-import { johnDoeDemoPortalView } from '@/lib/portal/demo'
+import {
+  davidDemoPortalView,
+  johnDoeDemoPortalView,
+  tohuDemoPortalView,
+  type DemoPreviewKind,
+} from '@/lib/portal/demo'
+import {
+  readTohuDecision,
+  type TohuDecision,
+} from '@/lib/investor-plan/tohu-decision'
 import { PAYMENT_SAFETY_NOTICE, type TimelineStep } from '@/lib/portal/timeline'
 import { readInvestorAccount } from '@/lib/portal/session'
 import { loadInvestorQa } from '@/lib/qa/data'
@@ -346,10 +355,14 @@ function OfferSection({
   )
 }
 
-export async function renderPortalPage(isDemoPreview = false) {
+export async function renderPortalPage(
+  demoPreview: DemoPreviewKind | null = null,
+) {
+  const isDemoPreview = demoPreview !== null
   let accountId: string
   let view: PortalView
   let previewRole: AdminRole = 'OPERATOR'
+  let tohuDecision: TohuDecision | null = null
 
   if (isDemoPreview) {
     // This is the real access boundary. Owners, operators and explicitly
@@ -357,7 +370,14 @@ export async function renderPortalPage(isDemoPreview = false) {
     // reaches this signed-in reader guard before any synthetic data is chosen.
     const admin = await requireReader()
     previewRole = admin.role
-    view = johnDoeDemoPortalView()
+    tohuDecision =
+      admin.role === 'OPERATOR' ? await readTohuDecision(admin.id) : null
+    view =
+      demoPreview === 'DAVID'
+        ? davidDemoPortalView(tohuDecision === 'COMBINE')
+        : demoPreview === 'TOHU'
+          ? tohuDemoPortalView()
+          : johnDoeDemoPortalView()
     accountId = view.accountId
   } else {
     const account = await readInvestorAccount()
@@ -447,14 +467,18 @@ export async function renderPortalPage(isDemoPreview = false) {
       </AccountCurlMenu>
 
       {isDemoPreview ? (
-        <PortalPreviewSwitch mode="INVESTOR" role={previewRole} />
+        <PortalPreviewSwitch
+          mode="INVESTOR"
+          role={previewRole}
+          tohuDecision={tohuDecision}
+        />
       ) : null}
 
       <main id="main" className="mx-auto w-full max-w-2xl px-5 py-10 sm:py-16">
         {isDemoPreview ? (
           <p className="mb-6 rounded-sm border border-orange/25 bg-orange/6 p-3 text-xs leading-relaxed text-silver2">
-            Private investor rehearsal for Mike, David and authorized testers. John Doe
-            is synthetic, nothing is saved, and no email can be sent.
+            Private investor rehearsal for Mike, David and authorized testers. This
+            preview is synthetic, nothing is saved, and no email can be sent.
           </p>
         ) : null}
 

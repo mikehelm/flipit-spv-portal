@@ -12,5 +12,5 @@ export const metadata: Metadata = {
  * synthetic record, so knowing the path grants nothing.
  */
 export default async function JohnDoeDemoPage() {
-  return renderPortalPage(true)
+  return renderPortalPage('JOHN')
 }

@@ -1,9 +1,14 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TextSizeButtons } from '@/components/text-size-control'
-import { JOHN_DOE_PREVIEW_PATH } from '@/lib/portal/demo'
+import {
+  DAVID_PREVIEW_PATH,
+  JOHN_DOE_PREVIEW_PATH,
+  TOHU_PREVIEW_PATH,
+} from '@/lib/portal/demo'
+import type { TohuDecision } from '@/lib/investor-plan/tohu-decision'
 import type { AdminRole } from '@/lib/roles'
 
 const VIEWS = [
@@ -25,6 +30,18 @@ const VIEWS = [
     description: 'Investor preview',
     href: JOHN_DOE_PREVIEW_PATH,
   },
+  {
+    id: 'DAVID_INVESTOR',
+    name: 'David as investor',
+    description: 'Personal allocation preview',
+    href: DAVID_PREVIEW_PATH,
+  },
+  {
+    id: 'TOHU_INVESTOR',
+    name: 'Tohu as investor',
+    description: 'Company allocation preview',
+    href: TOHU_PREVIEW_PATH,
+  },
 ] as const
 
 type ViewId = (typeof VIEWS)[number]['id']
@@ -43,9 +60,11 @@ function isViewId(value: string | null): value is ViewId {
 export function PortalPreviewSwitch({
   mode,
   role,
+  tohuDecision = null,
 }: {
   mode: 'ADMIN' | 'INVESTOR'
   role: AdminRole
+  tohuDecision?: TohuDecision | null
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -56,32 +75,67 @@ export function PortalPreviewSwitch({
 
   const routeView: ViewId =
     mode === 'INVESTOR'
-      ? 'JOHN'
+      ? pathname === DAVID_PREVIEW_PATH
+        ? 'DAVID_INVESTOR'
+        : pathname === TOHU_PREVIEW_PATH
+          ? 'TOHU_INVESTOR'
+          : 'JOHN'
       : role === 'OPERATOR'
         ? 'DAVID'
         : 'MIKE'
   const [selectedView, setSelectedView] = useState<ViewId | null>(null)
   const currentView = selectedView ?? routeView
-  const visibleViews = VIEWS.map((view) =>
-    role === 'VIEWER' && view.id === 'JOHN'
-      ? {
-          ...view,
-          name: 'Investor view',
-          description: 'Safe John Doe rehearsal',
+  const visibleViews = useMemo(
+    () =>
+      VIEWS.filter((view) => {
+        if (view.id === 'TOHU_INVESTOR') return tohuDecision === 'PLUS_ALIAS'
+        if (view.id === 'DAVID_INVESTOR') {
+          return tohuDecision === 'PLUS_ALIAS' || tohuDecision === 'COMBINE'
         }
-      : view,
+        return true
+      }).map((view) => {
+        if (role === 'VIEWER' && view.id === 'JOHN') {
+          return {
+            ...view,
+            name: 'Investor view',
+            description: 'Safe John Doe rehearsal',
+          }
+        }
+        if (view.id === 'DAVID_INVESTOR' && tohuDecision === 'COMBINE') {
+          return {
+            ...view,
+            name: 'David + Tohu',
+            description: 'Combined allocation preview',
+          }
+        }
+        return view
+      }),
+    [role, tohuDecision],
   )
   const current = visibleViews.find((view) => view.id === currentView) ?? visibleViews[0]
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY)
-    const initial = isViewId(saved) ? saved : routeView
+    const initial =
+      isViewId(saved) && visibleViews.some((view) => view.id === saved)
+        ? saved
+        : routeView
 
     const frame = window.requestAnimationFrame(() => {
       setSelectedView(initial)
 
       if (initial === 'JOHN' && mode !== 'INVESTOR') {
         router.replace(JOHN_DOE_PREVIEW_PATH)
+      } else if (
+        initial === 'DAVID_INVESTOR' &&
+        pathname !== DAVID_PREVIEW_PATH
+      ) {
+        router.replace(DAVID_PREVIEW_PATH)
+      } else if (
+        initial === 'TOHU_INVESTOR' &&
+        pathname !== TOHU_PREVIEW_PATH
+      ) {
+        router.replace(TOHU_PREVIEW_PATH)
       } else if (initial === 'DAVID' && mode === 'INVESTOR') {
         router.replace('/admin/email-review')
       } else if (initial === 'MIKE' && mode === 'INVESTOR') {
@@ -90,7 +144,7 @@ export function PortalPreviewSwitch({
     })
 
     return () => window.cancelAnimationFrame(frame)
-  }, [mode, routeView, router])
+  }, [mode, pathname, routeView, router, visibleViews])
 
   useEffect(() => {
     if (!open) return
@@ -120,8 +174,12 @@ export function PortalPreviewSwitch({
     setSelectedView(view.id)
     setMenuPath(null)
 
-    if (view.id === 'JOHN') {
-      if (mode !== 'INVESTOR') router.push(JOHN_DOE_PREVIEW_PATH)
+    if (
+      view.id === 'JOHN' ||
+      view.id === 'DAVID_INVESTOR' ||
+      view.id === 'TOHU_INVESTOR'
+    ) {
+      if (pathname !== view.href) router.push(view.href)
       return
     }
 

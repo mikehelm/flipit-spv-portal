@@ -4,12 +4,14 @@ import { signOutAction } from '@/actions/auth'
 import { AccountCurlMenu } from '@/components/account-curl-menu'
 import { AdminMainFrame } from '@/components/admin/admin-main-frame'
 import { AdminNav } from '@/components/admin/admin-nav'
+import { TohuEmailDecisionDialog } from '@/components/admin/tohu-email-decision'
 import { PortalPreviewSwitch } from '@/components/portal-preview-switch'
 import { SiteFooter } from '@/components/site-footer'
 import { requireReader } from '@/lib/auth/guards'
 import { countSubmittedEmailReviewProposals } from '@/lib/email-review/data'
 import { ROLE_LABELS, VIEWER_BANNER } from '@/lib/roles'
 import { env } from '@/lib/env'
+import { readTohuDecision } from '@/lib/investor-plan/tohu-decision'
 
 export const metadata: Metadata = {
   title: 'Admin — Flipit SPV',
@@ -43,6 +45,8 @@ export default async function AdminLayout({
   const config = env()
   const emailReviewPendingCount =
     admin.role === 'OWNER' ? await countSubmittedEmailReviewProposals() : 0
+  const tohuDecision =
+    admin.role === 'OPERATOR' ? await readTohuDecision(admin.id) : null
   const accountName =
     admin.name?.trim() ||
     (admin.role === 'OWNER'
@@ -82,7 +86,15 @@ export default async function AdminLayout({
         </div>
       </AccountCurlMenu>
 
-      <PortalPreviewSwitch mode="ADMIN" role={admin.role} />
+      <PortalPreviewSwitch
+        mode="ADMIN"
+        role={admin.role}
+        tohuDecision={tohuDecision}
+      />
+
+      {admin.role === 'OPERATOR' && tohuDecision === null ? (
+        <TohuEmailDecisionDialog />
+      ) : null}
 
       <div className="w-full flex-1 py-6 sm:py-10">
         <header className="mx-auto w-full max-w-6xl px-4 sm:px-6">

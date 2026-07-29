@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { johnDoeDemoPortalView } from './demo'
+import {
+  davidDemoPortalView,
+  johnDoeDemoPortalView,
+  tohuDemoPortalView,
+} from './demo'
 
 function read(path: string): string {
   return readFileSync(join(process.cwd(), path), 'utf8')
@@ -31,6 +35,25 @@ describe('John Doe investor preview', () => {
     )
   })
 
+  it('keeps David and Tohu as separate previews when the Gmail alias is chosen', () => {
+    const david = davidDemoPortalView()
+    const tohu = tohuDemoPortalView()
+
+    expect(david).toMatchObject({
+      name: 'David Serene',
+      email: 'serenedavid@gmail.com',
+    })
+    expect(tohu).toMatchObject({
+      name: 'Tohu Bohu Agence d’objets Ltd',
+      email: 'serenedavid+tohu@gmail.com',
+    })
+    expect(david.offers[0].proposedAmount).toBe('USD 4,128.00')
+    expect(tohu.offers[0].proposedAmount).toBe('USD 6,845.00')
+    expect(davidDemoPortalView(true).offers[0].proposedAmount).toBe(
+      'USD 10,973.00',
+    )
+  })
+
   it('is protected by a signed-in reader guard before its data is selected', () => {
     const portal = read('src/app/portal/page.tsx')
     const previewBranch = portal.slice(
@@ -40,13 +63,14 @@ describe('John Doe investor preview', () => {
 
     expect(previewBranch).toContain('await requireReader()')
     expect(previewBranch.indexOf('await requireReader()')).toBeLessThan(
-      previewBranch.indexOf('johnDoeDemoPortalView()'),
+      previewBranch.indexOf("demoPreview === 'DAVID'"),
     )
   })
 
   it('exposes the safe view switch to a read-only experience tester', () => {
     const layout = read('src/app/(admin)/layout.tsx')
-    expect(layout).toContain('<PortalPreviewSwitch mode="ADMIN" role={admin.role} />')
+    expect(layout).toContain('<PortalPreviewSwitch')
+    expect(layout).toContain('tohuDecision={tohuDecision}')
     expect(layout).not.toContain("admin.role !== 'VIEWER'")
   })
 
@@ -85,9 +109,9 @@ describe('John Doe investor preview', () => {
     const route = read('src/app/portal/demo/page.tsx')
     const portal = read('src/app/portal/page.tsx')
     const switcher = read('src/components/portal-preview-switch.tsx')
-    expect(route).toContain('renderPortalPage(true)')
+    expect(route).toContain("renderPortalPage('JOHN')")
     expect(portal).toContain(
-      '<PortalPreviewSwitch mode="INVESTOR" role={previewRole} />',
+      'mode="INVESTOR"',
     )
     expect(switcher).toContain('JOHN_DOE_PREVIEW_PATH')
     expect(switcher).toContain("name: 'Mike'")
@@ -103,8 +127,9 @@ describe('John Doe investor preview', () => {
     expect(switcher).toContain('Minimize view and text tools')
     expect(switcher).toContain("const STORAGE_KEY = 'flipit-current-view-v1'")
     expect(switcher).toContain('window.localStorage.setItem(STORAGE_KEY, view.id)')
-    expect(switcher).toContain("if (mode === 'INVESTOR') router.push(view.href)")
-    expect(switcher).toContain("if (mode !== 'INVESTOR') router.push(JOHN_DOE_PREVIEW_PATH)")
+    expect(switcher).toContain("view.id === 'DAVID_INVESTOR'")
+    expect(switcher).toContain("view.id === 'TOHU_INVESTOR'")
+    expect(switcher).toContain('router.push(view.href)')
     expect(switcher).toContain("router.replace('/admin/email-review')")
     expect(switcher).toContain("router.replace('/admin')")
   })
