@@ -37,7 +37,7 @@ import {
   pendingEmailChange,
   requestEmailChange,
 } from '@/lib/portal/email-change'
-import { everyOf } from '@/lib/verify/vacuous'
+import { emptyBeside, everyOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp-emailchange-verify'
 
@@ -52,6 +52,35 @@ function check(label: string, condition: boolean, detail?: string): void {
     failed += 1
     console.log(`  FAIL  ${label}${detail ? ` — ${detail}` : ''}`)
   }
+}
+
+/**
+ * The two queries that say whether this account still has a way in.
+ *
+ * Lifted out of the checks because they are now run twice — once before the
+ * address moves and once after — and the control is only a control if it is the
+ * *same* query. Two queries written out separately drift, and a control that
+ * drifted is worse than none: it goes on reporting that there was something to
+ * revoke while asking a different question.
+ */
+async function liveSessionsOf(accountId: string): Promise<{ id: string }[]> {
+  return db
+    .select({ id: investorSessions.id })
+    .from(investorSessions)
+    .where(and(eq(investorSessions.accountId, accountId), isNull(investorSessions.revokedAt)))
+}
+
+async function liveLinksOf(accountId: string): Promise<{ id: string }[]> {
+  return db
+    .select({ id: portalTokens.id })
+    .from(portalTokens)
+    .where(
+      and(
+        eq(portalTokens.accountId, accountId),
+        isNull(portalTokens.usedAt),
+        isNull(portalTokens.revokedAt),
+      ),
+    )
 }
 
 async function cleanup(): Promise<void> {
@@ -188,6 +217,13 @@ async function main(): Promise<void> {
     expiresAt: new Date(Date.now() + 3_600_000),
   })
 
+  // The same two queries, before the act. They are the control for the two
+  // checks after it: `liveSessions.length === 0` is satisfied by a session
+  // that was never created, and by a `where` clause that stopped matching
+  // after a column was renamed, exactly as loudly as it is by revocation.
+  const sessionsBefore = await liveSessionsOf(alex)
+  const linksBefore = await liveLinksOf(alex)
+
   const confirmed = await confirmEmailChange(await tokenFor(second.requestId!, second.token!))
   check('the link is accepted', confirmed.ok)
   check(
@@ -200,23 +236,14 @@ async function main(): Promise<void> {
   })
   check('the new address is recorded as verified', account?.emailVerifiedAt !== null)
 
-  const liveSessions = await db
-    .select({ id: investorSessions.id })
-    .from(investorSessions)
-    .where(and(eq(investorSessions.accountId, alex), isNull(investorSessions.revokedAt)))
-  check('every session was ended', liveSessions.length === 0)
+  check('there was a live session to end', sessionsBefore.length > 0)
+  check('every session was ended', emptyBeside(await liveSessionsOf(alex), sessionsBefore))
 
-  const liveLinks = await db
-    .select({ id: portalTokens.id })
-    .from(portalTokens)
-    .where(
-      and(
-        eq(portalTokens.accountId, alex),
-        isNull(portalTokens.usedAt),
-        isNull(portalTokens.revokedAt),
-      ),
-    )
-  check('every outstanding sign-in link was revoked', liveLinks.length === 0)
+  check('there was an outstanding sign-in link to revoke', linksBefore.length > 0)
+  check(
+    'every outstanding sign-in link was revoked',
+    emptyBeside(await liveLinksOf(alex), linksBefore),
+  )
 
   console.log('\nA link works once')
 

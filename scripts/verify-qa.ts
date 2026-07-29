@@ -38,7 +38,7 @@ import {
   setPinned,
   unpublishEntry,
 } from '@/lib/qa/service'
-import { everyOf, noneOf } from '@/lib/verify/vacuous'
+import { emptyBeside, everyOf, noneOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp9-verify'
 
@@ -439,8 +439,17 @@ async function main(): Promise<void> {
   })
   const suspendedView = await loadInvestorQa(alice!.id, suspendedAccess)
   check('a suspended account cannot ask', suspendedView.canAsk === false)
-  check('a suspended account sees no shared entries', suspendedView.shared.length === 0)
-  check('a suspended account sees no thread', suspendedView.own.length === 0)
+
+  // Bob is the control, loaded through the same function at the same moment
+  // and not suspended. `suspendedView.shared.length === 0` on its own is
+  // satisfied by `loadInvestorQa` having stopped returning anything to anybody,
+  // which is the shape of a defect in the query rather than of the rule this
+  // is about. It is the stronger of the two controls: it proves the emptiness
+  // belongs to *this* account and not to the loader.
+  const liveNeighbour = await loadInvestorQa(bob!.id, access)
+  check('the control sees a shared entry and a thread of their own', liveNeighbour.shared.length > 0 && liveNeighbour.own.length > 0)
+  check('a suspended account sees no shared entries', emptyBeside(suspendedView.shared, liveNeighbour.shared))
+  check('a suspended account sees no thread', emptyBeside(suspendedView.own, liveNeighbour.own))
 
   await cleanup()
 

@@ -1795,6 +1795,54 @@ something it was not actually looking at, and the first time the thing it was no
 looking at was **its own input**. It is fixed, the count of examined lines went
 from 413 to 447, and there is a test that would catch it happening again.
 
+### And a second way of writing to the screen it had missed
+
+There is another way to print something that does not go through the usual one,
+and two of the commands use it — one to show you a long check's progress as it
+happens, and one to print a bare setup token so an automated check can pick it
+up. That second one is a **second place a token is printed on purpose**, and the
+check that claimed to have listed every place this application writes anything
+did not know about it.
+
+Both are now on the list with their reasons, and there is a check that neither
+of them is in the application itself — printing this way inside a live page
+would be a log line with the rule taken off it. The count went from 447 to 449.
+
+---
+
+## "There are none of these" needs something to compare against
+
+Three times now, a check in this project has reported success about a thing it
+was not looking at. This is the third, and it is the same shape as the first two.
+
+A check that says **"every session was ended"** was written as *count the
+sessions still alive; there should be none*. That passes when every session was
+ended. It also passes when there never was a session to end, and when the
+question being asked stopped matching anything after an unrelated change. The
+sentence being reported — *changing your address logs out the old mailbox* — can
+be false while the check is green.
+
+The fix is the same one used twice before: **prove there was something there**.
+Five checks now compare against a control in the same run:
+
+- Moving an address runs the same two questions **before** it moves and after —
+  there was a live session and a live link, and now there are none.
+- A suspended investor's question page is checked against **another investor's,
+  loaded at the same moment**. That one also proves the page went blank because
+  of the suspension rather than because the page stopped working for everybody.
+- Another investor's offer carries no acknowledgements — checked beside the
+  offer that does carry some.
+
+**How it was proved.** The question page was broken so that it returned nothing
+to *anybody*, and the check run in both forms against that one defect:
+
+- The old form: *ok — a suspended account sees no shared entries.*
+- The new one: *FAIL — the control sees a shared entry and a thread of their own.*
+
+Green and worthless, red and right, on the same defect in the same run. Both are
+now permanent entries in the break-it-on-purpose command, which holds
+twenty-two promises.
+
 ---
 
 ## Things worth knowing

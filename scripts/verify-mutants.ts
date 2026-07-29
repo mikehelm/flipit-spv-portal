@@ -343,6 +343,42 @@ const MUTATIONS: readonly Mutation[] = [
     replace: 'console.log("counting")\nexport async function countTrackedFiles',
     noticedBy: 'vitest run src/lib/security/logging.test.ts',
   },
+  {
+    // §13, and the third coat of the vacuity defect. Moving a contact address
+    // kills every session and every outstanding link, because the commonest
+    // reason to move one in a hurry is that the old mailbox is no longer yours.
+    //
+    // The check for it was `liveSessions.length === 0`, which is satisfied by a
+    // session that was never created and by a `where` clause that stopped
+    // matching. It is now `emptyBeside(after, before)`, with the same query run
+    // before the act as the control. This mutation is the proof: stop revoking,
+    // and it fails.
+    claim: 'moving a contact address kills every session and every outstanding link',
+    file: 'src/lib/portal/email-change.ts',
+    find: '  await revokeAllPortalAccess(account.id)',
+    replace: '  void revokeAllPortalAccess',
+    noticedBy: 'verify:email-change',
+    says: /every session was ended/,
+  },
+  {
+    // The mutation that tells the two forms of the same check apart.
+    //
+    // "A suspended account sees no shared entries" was
+    // `suspendedView.shared.length === 0`, and this is what that cannot see: a
+    // loader that has stopped returning anything to *anybody*. The count is
+    // green, and the sentence it is reporting — that suspension is what emptied
+    // the page — is false.
+    //
+    // With `emptyBeside(suspendedView.shared, liveNeighbour.shared)` it fails,
+    // because the live neighbour's page went empty too. Run `verify:qa` against
+    // this mutation with the old form restored and it reports `ok`.
+    claim: 'a suspended account sees nothing because it is suspended, not because the page is broken',
+    file: 'src/lib/qa/data.ts',
+    find: "  const shared = state === 'VISIBLE' ? await loadSharedQa() : []",
+    replace: '  const shared: Awaited<ReturnType<typeof loadSharedQa>> = []',
+    noticedBy: 'verify:qa',
+    says: /FAIL\s+the control sees a shared entry|FAIL\s+a suspended account sees no shared entries/,
+  },
 ]
 
 /** What a run of one check produced. */

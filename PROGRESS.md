@@ -13082,3 +13082,179 @@ the check catching the claim being broken. Point 8 has five.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The third coat, and the two writes that were outside the set
+
+Two items from the last entry's queue, both of them small, and one of them
+turned out to be the same defect this repository keeps finding in new clothes.
+
+### `process.stdout.write`, which point 8 had not been looking at
+
+The sweep built last entry enumerated every `console.*` call and called that the
+set. It was not: `process.stdout.write` is the same act with a different name,
+and two files use it — `verify-all.ts` streams a child's output through it, and
+`mint-setup-link.ts` prints a bare setup **token** with it behind
+`SETUP_LINK_TOKEN_ONLY=1`, so the end-to-end check can capture one.
+
+***So there was a second deliberate token print, and the file that claimed to
+enumerate every log statement in the repository did not know about it.*** Both
+writes are now in the set, declared with reasons and an exact count, and there
+is a check that neither of them is in the shipped application — a
+`process.stdout.write` in a request path is a log line with the rule taken off
+it, and nothing looking for `console.` would ever see it. 449 calls now, from
+447.
+
+### `.filter(...).length === 0`, the third coat
+
+Recorded as open for four entries. `everyOf`'s own header is what put it there:
+
+> If a check genuinely means *"there are none of these, and none is the right
+> answer"*, that is a count and should be written as one —
+> `rows.filter(bad).length === 0`.
+
+True, and incomplete in exactly the way the first two coats were. A count is
+honest when the collection being empty is a legitimate state. It is **as vacuous
+as `.every()`** when the collection being empty is the defect:
+
+    check('every session was ended', liveSessions.length === 0)
+
+A fixture that never created a session passes that. So does a `where` clause
+that stopped matching after a column was renamed. The check exists to prove that
+moving a contact address *revokes* a live session, and it was satisfied by there
+never having been one.
+
+***`emptyBeside(rows, control)`*** — this is empty, and here in the same run is
+one that is not. Two shapes of control are in use and the second is stronger:
+
+- ***Before and after.*** `verify-email-change.ts` now runs the same two queries
+  before the address moves and after. Both queries were lifted into named
+  functions, because a control is only a control if it is the *same* query — two
+  written out separately drift, and a drifted control goes on reporting that
+  there was something to revoke while asking a different question.
+- ***A live neighbour.*** `verify-qa.ts` loads Bob's page through the same
+  function at the same moment Alice's suspended one is checked. This one also
+  proves the emptiness belongs to *that account* rather than to the loader.
+
+Applied at five sites: the two revocation checks, the two suspension checks, and
+the pair in `verify-acknowledgements.ts` that says another investor's offer
+carries no acknowledgements and no history — checklist point 5, previously
+satisfied by both functions returning nothing to anybody.
+
+### Proved by breaking it
+
+`loadInvestorQa` made to return an empty shared page for **every** investor, and
+`verify:qa` run against that mutation in both forms:
+
+- ***With the old count:*** `ok  a suspended account sees no shared entries`.
+- ***With `emptyBeside`:*** `FAIL the control sees a shared entry and a thread of
+  their own`, `FAIL a suspended account sees no shared entries` — 53 passed, 2
+  failed.
+
+Green and worthless, red and right, on the same defect in the same run. It is
+now a permanent entry in `verify:mutants`, along with one that stops
+`confirmEmailChange` revoking anything.
+
+**Decisions.**
+
+- ***No source-level guard for `.length === 0`.*** The same reasoning that
+  refused one for `.some(`, and stronger here: most of the forty-odd sites are
+  cleanup checks — *verification data is removed* — where empty is the entire
+  point and a guard would be wrong at every one of them. A ban people route
+  around is worse than none.
+- ***The uploads site keeps its plain count, with the reason written beside
+  it.*** Both uploads in that scenario were refused, so there is no successful
+  row to hold up as a control, and inventing a third upload to satisfy a helper
+  is a worse check than an honestly bounded one. Same position `noneOf` takes
+  for its six.
+- ***`emptyBeside` counts a `Map` and a `Set`.*** `currentAcknowledgements`
+  returns a `Set`, and a helper that only understood arrays would have left the
+  weaker of that pair alone.
+
+**Deviations.** None.
+
+**Checklist.** Point 5 strengthened at four more sites — a suspended investor's
+page and another investor's acknowledgements are now proved empty *beside*
+something that is not, rather than empty in a run where everything was.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2844**) are green.
+`pnpm verify:all` is **26 passed, 0 failed, 0 skipped**.
+`pnpm verify:mutants` is **44 passed, 0 failed** — twenty-two claims.
+
+**Uncertain.**
+
+- ***`verify:deployment` and `verify:viewport` fail on a fresh `.env`***, and
+  neither failure is about them: both need `MEDIA_STORE` set to measure a
+  populated library, and `.env.example` ships it empty because empty is a
+  supported state for the application. **A fresh clone therefore fails
+  `verify:all` at two of twenty-six, for a configuration reason, with a message
+  that names the variable but not the fact that this is expected.** That cost
+  this session a diagnosis and it will cost the next one the same. **Next item:
+  either the two scripts skip with a stated reason when no store is configured,
+  or `.env.example` says which commands need one.**
+- ***`emptyBeside`'s weak default does not exist.*** `noneOf` defaults its
+  control to "at least one row that is not the absent thing", which costs the
+  caller nothing. `emptyBeside` has no equivalent — the control is a second
+  collection and there is no way to synthesise one — so every site had to be
+  given one by hand, and a site where nobody can think of one gets a comment
+  instead. Three helpers, three different answers to the same question.
+- ***Thirty-odd other `.length === 0` sites were read and left alone.*** Most are
+  *verification data is removed*, which is honest. The reading was by eye, and
+  nothing records which ones were considered.
+- ***The sweep reads names, not values.*** `const x = rendered.html;
+  console.log(x)` passes it.
+- ***The classifier does not know a regular expression from a division in every
+  case.*** The usual previous-token heuristic, right on this repository.
+- ***The flake was found by luck.*** One run in three. Nothing measures whether
+  the suite is deterministic.
+- ***Nothing mutates the verification scripts themselves.***
+- ***No mutation deletes a rule from a list.*** Every one rewrites a line, and the
+  defects this repository has actually shipped were omissions.
+- ***The six negated checks without controls are recorded, not solved.***
+- ***The same trick would work on the health *signal*.*** `summariseHealth` is a
+  third surface for the findings and has no parity test.
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved.***
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

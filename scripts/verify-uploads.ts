@@ -674,6 +674,12 @@ async function main(): Promise<void> {
       .select({ id: mediaAssets.id })
       .from(mediaAssets)
       .where(like(mediaAssets.name, `${PREFIX}%`))
+    // No `emptyBeside` here, and the reason is the one its header gives: both
+    // uploads in this scenario were refused, so there is no successfully
+    // uploaded row to hold up as the control. The control that exists is the
+    // POST count on the line above — the browser was made to try, and the
+    // application refused — and inventing a third upload purely to satisfy a
+    // helper would be a worse check than an honestly bounded one.
     check('neither is in the library', images.length === 0, String(images.length))
     checkNothingWasRefused('the media library', mark)
 

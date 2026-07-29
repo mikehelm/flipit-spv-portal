@@ -90,6 +90,54 @@ export function noneOf<T>(
   return !rows.some((row, index) => absent(row, index))
 }
 
+/** An array, a `Map`, a `Set` — anything a check counts. */
+type Countable = { readonly length: number } | { readonly size: number }
+
+function countOf(value: Countable): number {
+  return 'length' in value ? value.length : value.size
+}
+
+/**
+ * This collection is empty — **beside one that is not**.
+ *
+ * The third coat of the same defect, and the one the fix for the first two
+ * pointed straight at. `everyOf`'s own header says it:
+ *
+ * > If a check genuinely means *"there are none of these, and none is the right
+ * > answer"*, that is a count and should be written as one —
+ * > `rows.filter(bad).length === 0`.
+ *
+ * True, and incomplete. `rows.filter(bad).length === 0` is honest when `rows`
+ * being empty is a legitimate state. It is exactly as vacuous as `.every()` when
+ * `rows` being empty is **the defect**:
+ *
+ *     check('every session was ended', liveSessions.length === 0)
+ *
+ * A fixture that never created a session passes that. So does a query whose
+ * `where` clause stopped matching after a column was renamed. The check exists
+ * to prove that changing an address *revokes* a live session, and it is
+ * satisfied by there never having been one.
+ *
+ * The control is whatever proves there was something to make empty: the same
+ * query run before the act, or the same loader run for somebody the act did not
+ * touch. Both forms are in use — before-and-after in `verify-email-change.ts`,
+ * a live neighbour in `verify-qa.ts` — and the second is the stronger, because
+ * it also proves the emptiness belongs to *this* investor rather than to the
+ * loader having stopped working.
+ *
+ * Where there is genuinely no control — the check is that an upload the
+ * application refused left nothing behind, and a refused upload leaves nothing
+ * to compare against — this is the wrong function and a comment saying so is
+ * the right answer, exactly as with `noneOf`.
+ *
+ * @param rows the collection that must be empty
+ * @param control a collection that must not be, in the same run
+ */
+export function emptyBeside(rows: Countable, control: Countable): boolean {
+  if (countOf(control) === 0) return false
+  return countOf(rows) === 0
+}
+
 /**
  * `a` appears before `b`, **and both appear**.
  *

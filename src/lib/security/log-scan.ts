@@ -363,7 +363,19 @@ export function separateLiterals(expression: string): { code: string; literals: 
 export function consoleCalls(file: string, rawSource: string): LogCall[] {
   const { code: source, inString } = classify(rawSource)
   const found: LogCall[] = []
-  const opener = /console\s*\.\s*(log|info|warn|error|debug|trace|dir|table|group|groupEnd)\s*\(/g
+  /*
+   * `console.*`, and the two writes that bypass it.
+   *
+   * `process.stdout.write` and `process.stderr.write` are the same act with a
+   * different name, and both are in use here: `verify-all.ts` streams a child
+   * process's output through the first, and `mint-setup-link.ts` prints a token
+   * with it on purpose. Two log statements outside a set that claimed to
+   * enumerate every one of them is exactly the gap this file exists to close,
+   * so they are in the set and the deliberate one is declared as an exception
+   * rather than left to be noticed later.
+   */
+  const opener =
+    /(?:console\s*\.\s*(log|info|warn|error|debug|trace|dir|table|group|groupEnd)|process\s*\.\s*(stdout|stderr)\s*\.\s*(write))\s*\(/g
 
   let match: RegExpExecArray | null
   while ((match = opener.exec(source)) !== null) {
@@ -411,7 +423,7 @@ export function consoleCalls(file: string, rawSource: string): LogCall[] {
     found.push({
       file,
       line: source.slice(0, match.index).split('\n').length,
-      method: match[1]!,
+      method: match[1] ?? `${match[2]!}.${match[3]!}`,
       call: call.replace(/\s+/g, ' '),
       expressions,
       literals,

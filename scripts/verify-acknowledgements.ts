@@ -28,7 +28,7 @@ import {
   recordAcknowledgements,
 } from '@/lib/portal/acknowledgements-data'
 import { forbiddenWordsInAcknowledgement } from '@/lib/portal/acknowledgements'
-import { everyOf, noneOf } from '@/lib/verify/vacuous'
+import { emptyBeside, everyOf, noneOf } from '@/lib/verify/vacuous'
 
 const PREFIX = 'wp-ack-verify'
 
@@ -229,13 +229,17 @@ async function main(): Promise<void> {
 
   console.log('\nNothing reaches another investor')
 
+  // This offer is the control for the other one's emptiness, through the same
+  // two functions in the same run. Checklist point 5: an investor-facing page
+  // that reveals nothing because it loads nothing is not the claim, and
+  // `.size === 0` alone cannot tell the two apart.
   check(
     "another investor's offer has no acknowledgements",
-    (await currentAcknowledgements(otherOffer.id)).size === 0,
+    emptyBeside(await currentAcknowledgements(otherOffer.id), await currentAcknowledgements(offer.id)),
   )
   check(
     'and no history',
-    (await acknowledgementHistory(otherOffer.id)).length === 0,
+    emptyBeside(await acknowledgementHistory(otherOffer.id), await acknowledgementHistory(offer.id)),
   )
 
   console.log('\nArchiving keeps the evidence')

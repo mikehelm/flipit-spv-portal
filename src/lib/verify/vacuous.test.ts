@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { appearsBefore, everyOf, noneOf } from './vacuous'
+import { appearsBefore, emptyBeside, everyOf, noneOf } from './vacuous'
 
 const root = join(import.meta.dirname, '../../..')
 
@@ -84,6 +84,38 @@ describe('nothing here matches, on a list that had something in it', () => {
         (row) => row === 'alice-doc',
       ),
     ).toBe(false)
+  })
+})
+
+describe('empty, beside something that is not', () => {
+  it('is true when the collection is empty and the control is not', () => {
+    expect(emptyBeside([], [1])).toBe(true)
+  })
+
+  it('is false when the collection is not empty', () => {
+    expect(emptyBeside([1], [1, 2])).toBe(false)
+  })
+
+  it('is false when the control is empty, whatever the collection says', () => {
+    // The whole reason it exists. `liveSessions.length === 0` passes when the
+    // fixture never made a session, and reports that revocation works.
+    expect(emptyBeside([], [])).toBe(false)
+  })
+
+  it('counts a Map and a Set as well as an array', () => {
+    expect(emptyBeside(new Map(), new Set([1]))).toBe(true)
+    expect(emptyBeside(new Map(), new Set())).toBe(false)
+    expect(emptyBeside(new Set([1]), new Map([[1, 1]]))).toBe(false)
+  })
+
+  it('reports the defect the plain count reports as ok — the control', () => {
+    // Both halves of a revocation check, run against a fixture whose session
+    // insert silently did nothing.
+    const before: unknown[] = []
+    const after: unknown[] = []
+
+    expect(after.length === 0).toBe(true) // the old form: green, and worthless
+    expect(emptyBeside(after, before)).toBe(false) // the new one: red, correctly
   })
 })
 

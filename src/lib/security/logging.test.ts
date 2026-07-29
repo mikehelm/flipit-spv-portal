@@ -264,6 +264,62 @@ describe('rule 2 — the shipped application logs from two files', () => {
   })
 })
 
+/**
+ * The two writes that do not go through `console`, each with the reason it is
+ * there. Both are in `scripts/`, both are deliberate, and one of them prints a
+ * token — which is precisely why they belong in the set rather than outside it.
+ */
+const ALLOWED_WRITES: ReadonlyArray<{ file: string; calls: number; because: string }> = [
+  {
+    file: 'scripts/verify-all.ts',
+    calls: 1,
+    because:
+      'Streams a child verification’s output through as it arrives, rather than holding it ' +
+      'behind a spinner for half an hour. It writes whatever the child wrote and adds nothing.',
+  },
+  {
+    file: 'scripts/mint-setup-link.ts',
+    calls: 1,
+    because:
+      'Behind SETUP_LINK_TOKEN_ONLY, prints the bare setup token with no newline so the ' +
+      'end-to-end check can capture it. It is the second of the two deliberate token prints, ' +
+      'it is single-use and expiring, and it is off unless that variable is set.',
+  },
+]
+
+describe('rule 2b — the two writes that bypass console', () => {
+  const writes = scanForLogCalls(ROOTS).filter((call) => call.method.includes('.'))
+
+  it('are exactly the two declared here', () => {
+    const actual = new Map<string, number>()
+    for (const call of writes) actual.set(call.file, (actual.get(call.file) ?? 0) + 1)
+
+    expect([...actual.keys()].sort()).toEqual(ALLOWED_WRITES.map((entry) => entry.file).sort())
+    for (const entry of ALLOWED_WRITES) {
+      expect(actual.get(entry.file) ?? 0, entry.file).toBe(entry.calls)
+      expect(entry.because.length, entry.file).toBeGreaterThan(80)
+    }
+  })
+
+  it('found them at all — the control', () => {
+    expect(writes.length).toBe(2)
+    expect(writes.map((call) => call.method)).toEqual(['stdout.write', 'stdout.write'])
+  })
+
+  it('none of them is in the shipped application', () => {
+    // A `process.stdout.write` inside a request path is a log line with the
+    // rule taken off it, and would not be caught by anything looking for
+    // `console.`.
+    for (const call of writes) expect(call.file.startsWith('scripts/'), call.file).toBe(true)
+  })
+
+  it('the token print is behind a variable that is off by default', () => {
+    const mint = readFileSync('scripts/mint-setup-link.ts', 'utf8')
+    expect(mint).toContain("process.env.SETUP_LINK_TOKEN_ONLY === '1'")
+    expect(readFileSync('.env.example', 'utf8')).not.toContain('SETUP_LINK_TOKEN_ONLY')
+  })
+})
+
 describe('rule 3 — the one place a token is printed on purpose', () => {
   const seed = readFileSync('src/db/seed.ts', 'utf8')
 
