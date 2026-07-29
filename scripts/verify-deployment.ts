@@ -430,6 +430,10 @@ async function main(): Promise<void> {
   const deploymentEnv = {
     BASE_PATH,
     APP_URL: ORIGIN,
+    // Crawler and cookie origins must describe the same prefixed deployment
+    // being exercised, even if the caller's local environment names a
+    // different preview origin.
+    PUBLIC_ORIGIN: ORIGIN,
     // Switches the health endpoint on for this run. Long enough to satisfy the
     // boot check, and obviously a fixture — it exists for the length of one
     // server and is never written anywhere.

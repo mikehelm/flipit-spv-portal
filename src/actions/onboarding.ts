@@ -16,7 +16,6 @@ import {
 } from '@/lib/auth/onboarding'
 import { ONBOARDING_ACTIONS, readOnboardingSnapshot } from '@/lib/auth/onboarding-store'
 import { SERVICE_CONFIG_ID } from '@/lib/auth/service-config'
-import { encrypt } from '@/lib/crypto'
 
 /**
  * The five-step operator onboarding of BUILD_SPEC §2.1, plus step 4b.
@@ -166,69 +165,6 @@ export async function setContactMethodAction(
     contactMethod === 'EMAIL_ONLY'
       ? 'Saved. No number is stored, and the phone line is removed from the invitation entirely. Changing this later is a template change and needs re-approval.'
       : 'Saved. Changing this later is a template change and needs a fresh compliance approval, because it alters what recipients receive.',
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Step 3 — the sending account
-// ---------------------------------------------------------------------------
-
-const sendingAccountSchema = z.object({
-  smtpUser: z.email('Enter the full Gmail address mail will be sent from.'),
-  smtpPassword: z
-    .string()
-    .transform((value) => value.replace(/\s+/g, ''))
-    .refine((value) => value.length >= 8 && value.length <= 128, {
-      message:
-        'A Google app password is 16 letters. Paste it here — spaces are removed for you.',
-    }),
-})
-
-export async function connectSendingAccountAction(
-  _previous: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const operator = await requireOperator()
-
-  const parsed = sendingAccountSchema.safeParse({
-    smtpUser: formData.get('smtpUser'),
-    smtpPassword: formData.get('smtpPassword'),
-  })
-  if (!parsed.success) {
-    const issues: Record<string, string> = {}
-    for (const issue of parsed.error.issues) {
-      issues[String(issue.path[0] ?? 'form')] = issue.message
-    }
-    return actionError('The sending account could not be saved.', issues)
-  }
-
-  await db
-    .update(serviceConfig)
-    .set({
-      emailTransport: 'SMTP',
-      smtpUserEncrypted: encrypt(parsed.data.smtpUser.trim().toLowerCase()),
-      smtpPasswordEncrypted: encrypt(parsed.data.smtpPassword),
-      // The credential changed, so any previous verification result is stale.
-      // WP5 re-verifies against SMTP before sending is possible.
-      smtpLastVerifiedAt: null,
-      smtpLastVerifyResult: null,
-    })
-    .where(eq(serviceConfig.id, SERVICE_CONFIG_ID))
-
-  await audit({
-    actor: { kind: 'user', id: operator.id, label: operator.email },
-    entityType: 'user',
-    entityId: operator.id,
-    action: ONBOARDING_ACTIONS.sendingAccount,
-    // Neither the address nor the app password goes in the log. The pair is a
-    // credential. BUILD_SPEC §15.
-    metadata: { transport: 'SMTP' },
-  })
-
-  revalidatePath(ONBOARDING_PATH)
-  return actionOk(
-    'Sending account stored, encrypted. It is never shown again and never leaves the server. ' +
-      'Sending stays blocked until the connection has been tested.',
   )
 }
 

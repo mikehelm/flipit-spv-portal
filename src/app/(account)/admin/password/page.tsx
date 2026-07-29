@@ -46,15 +46,15 @@ export default async function PasswordPage() {
       >
         {alreadySet
           ? `Signed in as ${admin.email}. Changing your password signs out every session, including this one.`
-          : `Signed in as ${admin.email} through a one-time setup link. Choose a password to finish setting up the account — the link you used has already been spent.`}
+          : `Signed in as ${admin.email} through a setup link. Choose a password to finish setting up the account — the link remains usable until the password is saved.`}
       </SectionHeading>
 
       {!alreadySet ? (
         <div className="mb-6">
           <Notice tone="warn">
             You will be signed out as soon as the password is saved, and can sign back in
-            with it straight away. The setup link that got you here does not work a second
-            time.
+            with it straight away. Until the password is saved successfully, the setup
+            link remains available for another try.
           </Notice>
         </div>
       ) : null}
@@ -99,6 +99,16 @@ export default async function PasswordPage() {
               autoComplete="new-password"
               minLength={MIN_PASSWORD_LENGTH}
               required
+            />
+          </Field>
+
+          <Field label="Reminder sentence (optional)" name="passwordHint">
+            <TextInput
+              name="passwordHint"
+              type="text"
+              autoComplete="off"
+              maxLength={160}
+              placeholder="A clue that helps you remember — never the password itself"
             />
           </Field>
         </ActionForm>

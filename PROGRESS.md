@@ -5722,6 +5722,83 @@ and it restores a limit the middleware had lowered rather than raising one.
 - *The password-reset journey is still not built,* and belongs in
   OPEN_DECISIONS.md as a question for Michael.
 
+## The canonical release candidate, without borrowing the unfinished curl
+
+**Built.**
+
+A fresh candidate branch now reconciles the current GitHub additions, the
+verified preview and the protected public checkout. It includes the access
+request, owner-managed mail connection, reusable setup-link, password/reminder,
+John Doe preview, navigation and development-policy work, along with all three
+database migrations and their checks. `RELEASE_CANDIDATE_RECEIPT.md` records the
+exact source fingerprints and rollback boundary.
+
+Two verifier defects found during the full run were repaired rather than worked
+around: `verify:access-requests` now exits explicitly after its checks instead
+of printing success and hanging, and `verify:recorder` now prepares
+owner-managed SMTP state through the storage boundary and restores the sender
+name and phone it changes.
+
+**Decisions.**
+
+- The active physical-curl claim is not crossed. Its Package 1 checks are green,
+  but visual acceptance is still pending. Until then the canonical candidate
+  uses explicit accessible account controls and contains none of the claimed
+  animation files.
+- The three-character password minimum is intentional because the owner
+  explicitly named a three-character local password. The existing leak-list,
+  name/address checks, rate limit and lockout remain.
+- Development CSP allowances are confined to the development branch of the
+  policy. The production build retains nonce-only script and self-only style
+  rules.
+- The protected public and preview trees remain byte-for-byte at their captured
+  status, diff and untracked-manifest fingerprints. Rollback is therefore a
+  branch/revert operation, not a cleanup of either working tree.
+
+**Deviations.**
+
+- `verify:memory` cannot observe RSS on this macOS host because the verifier
+  reads Linux `/proc`. It reported the platform skip; no pass was inferred.
+- The connected Gmail account did not return David's original message in four
+  read-only searches. The repository's source receipt remains intact, but a
+  fresh Gmail character-for-character cross-check is not claimed.
+- Chromium's full browser passed the recorder's 107 checks. The bundled headless
+  shell did not expose the camera-arm behavior, so the passing full-browser run
+  is the recorded result.
+
+**Checklist.**
+
+1. *Money as a `number`?* No new monetary representation.
+2. *A send path bypassing a gate?* No. SMTP configuration authenticates without
+   sending; the access-request flow cannot send or create access by itself.
+3. *One recipient or the whole batch?* Untouched.
+4. *Can an operator record an approval?* Untouched.
+5. *Does anything reveal another investor?* No. John Doe is a synthetic private
+   owner/operator preview and saves nothing.
+6. *Tokens?* Setup tokens remain hashed, scoped and unspent until password setup
+   succeeds.
+7. *Suspension?* Untouched.
+8. *Does any log line contain a token, body or key?* No. SMTP audit metadata
+   contains neither address nor secret.
+9. *Indexable routes?* Unchanged; private routes remain non-indexable.
+10. *Published Q&A?* Untouched.
+11. *Can the AI path change a figure?* Untouched.
+12. *Base-URL guard?* Production remains canonical; only local development keeps
+    a localhost/127.0.0.1 setup redirect on the host that received its cookie.
+
+`pnpm check` is green: typecheck, lint, 2,478 tests and production build.
+Twenty-three named verifiers add 1,320 passing checks. The 48-criterion
+acceptance account regenerated without a diff.
+
+**Uncertain.**
+
+- *David's original email has not been freshly compared with Gmail character by
+  character in this release run.* The connected mailbox returned no match.
+- *The memory-streaming verifier still needs a Linux `/proc` host for a fresh
+  measurement.*
+- *Physical curl Package 1 still needs Mike's directional visual acceptance.*
+  Packages 2+3+6 remain stopped and none is part of this candidate.
+
 ## The original invitation and the limits of the rewrite record
 
 The repository held only the current invitation. It could show what would be

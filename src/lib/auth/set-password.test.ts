@@ -50,14 +50,14 @@ describe('choosing a password for the first time', () => {
   it('refuses a password shorter than the minimum, and says why without quoting it', async () => {
     const store = await storeWithPassword(null)
     const result = await setAdminPassword(
-      { ...base, newPassword: 'zx9qv', confirmation: 'zx9qv' },
+      { ...base, newPassword: 'z9', confirmation: 'z9' },
       { store },
     )
 
     expect(result).toMatchObject({ ok: false, reason: 'WEAK_PASSWORD' })
     if (result.ok) throw new Error('unreachable')
-    expect(result.message).not.toContain('zx9qv')
-    expect(result.message).toMatch(/at least 12 characters/i)
+    expect(result.message).not.toContain('z9')
+    expect(result.message).toMatch(/at least 3 characters/i)
     expect((await store.findByEmail(OWNER_EMAIL))?.passwordHash).toBeNull()
   })
 

@@ -9,6 +9,7 @@ import { maskConfigured } from '@/lib/crypto'
 import { describeMailConnection } from '@/lib/email/transport'
 import { readUnattendedAlert } from '@/lib/health/report'
 import { describeAreas } from '@/lib/health/rules'
+import { countPendingAccessRequests } from '@/lib/access-requests/store'
 
 // The mail connection is read live on every load; a cached "verified" panel is
 // worse than no panel.
@@ -25,6 +26,9 @@ export const dynamic = 'force-dynamic'
 export default async function AdminHomePage() {
   const admin = await requireReader()
   const config = await readServiceConfig()
+  const firstName =
+    admin.name?.trim().split(/\s+/)[0] ||
+    (admin.role === 'OWNER' ? 'Mike' : admin.role === 'OPERATOR' ? 'David' : 'there')
 
   const sendingConfigured = isSendingAccountConfigured(config)
   const mail = describeMailConnection(config)
@@ -38,10 +42,12 @@ export default async function AdminHomePage() {
     admin.role === 'OPERATOR'
       ? onboardingProgress(await readOnboardingSnapshot(admin.id))
       : null
+  const pendingAccessRequests =
+    admin.role === 'VIEWER' ? null : await countPendingAccessRequests()
 
   return (
     <>
-      <SectionHeading eyebrow="Overview" title={`Good to see you, ${admin.name ?? admin.email}`}>
+      <SectionHeading eyebrow="Overview" title={`Good to see you, ${firstName}`}>
         The invitation workflow — recipients, review, sending and the investor timeline —
         arrives on this screen as it is built. What is here now is the configuration the
         rest of it depends on.
@@ -72,6 +78,29 @@ export default async function AdminHomePage() {
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {pendingAccessRequests !== null ? (
+          <Card
+            title="Access requests"
+            tone={pendingAccessRequests > 0 ? 'warn' : 'default'}
+          >
+            <p className="text-sm text-ftext">
+              {pendingAccessRequests === 0
+                ? 'No requests are waiting for a call.'
+                : pendingAccessRequests === 1
+                  ? '1 request is waiting for a verification call.'
+                  : `${pendingAccessRequests} requests are waiting for verification calls.`}
+            </p>
+            <p className="mt-3">
+              <Link
+                href="/access-requests"
+                className="text-sm font-semibold text-orange"
+              >
+                Review access requests
+              </Link>
+            </p>
+          </Card>
+        ) : null}
+
         <Card title="Service mode">
           <p className="text-sm text-ftext">
             <Pill tone={config.serviceMode === 'ACTIVE' ? 'ok' : 'warn'}>

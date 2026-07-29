@@ -2,9 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { actionError, actionOk, type ActionState } from '@/components/admin/action-state'
 import { audit } from '@/lib/audit'
+import { db } from '@/db'
+import { users } from '@/db/schema'
 import {
   SIGN_IN_FAILED_MESSAGE,
   SIGN_IN_LOCKED_MESSAGE,
@@ -77,7 +80,19 @@ export async function signInWithPasswordAction(
 
     if (result.reason === 'LOCKED') return actionError(SIGN_IN_LOCKED_MESSAGE)
     if (result.reason === 'UNAVAILABLE') return actionError(SIGN_IN_UNAVAILABLE_MESSAGE)
-    return actionError(SIGN_IN_FAILED_MESSAGE)
+    const normalisedEmail = email.trim().toLowerCase()
+    const account =
+      normalisedEmail === ''
+        ? null
+        : await db.query.users.findFirst({
+            where: eq(users.email, normalisedEmail),
+            columns: { passwordHint: true },
+          })
+    return actionError(
+      account?.passwordHint
+        ? `${SIGN_IN_FAILED_MESSAGE} Reminder: ${account.passwordHint}`
+        : SIGN_IN_FAILED_MESSAGE,
+    )
   }
 
   await createAdminSession(result.userId)

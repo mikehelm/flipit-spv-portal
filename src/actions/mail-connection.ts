@@ -6,9 +6,13 @@ import { actionError, actionOk, type ActionState } from '@/components/admin/acti
 import { db } from '@/db'
 import { serviceConfig } from '@/db/schema'
 import { audit } from '@/lib/audit'
-import { requireAdmin } from '@/lib/auth/guards'
+import { requireAdmin, requireOwner } from '@/lib/auth/guards'
 import { readServiceConfig, SERVICE_CONFIG_ID } from '@/lib/auth/service-config'
 import { verifyMailConnection } from '@/lib/email/transport'
+import {
+  smtpCredentialSchema,
+  storeSmtpCredential,
+} from '@/lib/email/transport/configure'
 
 /**
  * The mail connection, from the admin side. BUILD_SPEC §8.1, §12.
@@ -16,25 +20,75 @@ import { verifyMailConnection } from '@/lib/email/transport'
  *   "Provide a 'test connection' action that authenticates against SMTP
  *   without sending."
  *
- * Two actions and no more. There is deliberately nothing here that sends to
+ * There is deliberately nothing here that sends to
  * anybody: a "test connection" that quietly emails someone is not a test, and
  * a send action in a file called mail-connection is where a bulk send would
  * eventually be added by someone in a hurry. Sending lives behind
  * `sendOneEmail`, one recipient at a time (§14).
  *
- * Both actions are open to either privileged role. The credential is the
- * operator's and only he enters it (onboarding step 3, §2.1) — but the owner
- * has full access to all records (§2), connection health is on the main
- * dashboard both of them see (§12), and an owner who can see that sending is
- * broken but cannot test or revoke it is an owner who has to phone someone.
- * Neither action reveals the credential; testing it and removing it are both
- * safe capabilities to hold.
+ * Testing and disconnecting are open to either acting administrator. The
+ * Owner may also configure the shared service mailbox from Settings. That
+ * separate action is guarded by `requireOwner()` and never returns the secret.
  */
 
 const REVALIDATE_PATHS = ['/admin', '/admin/settings', '/admin/onboarding']
 
 function revalidate(): void {
   for (const path of REVALIDATE_PATHS) revalidatePath(path)
+}
+
+/**
+ * Store the shared Gmail app password, then authenticate without sending.
+ *
+ * The Owner chose to manage this service credential. It is write-only in the
+ * UI, encrypted before storage, omitted from audit metadata, and never passed
+ * to a mail-sending function.
+ */
+export async function connectOwnerSendingAccountAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const owner = await requireOwner()
+
+  const parsed = smtpCredentialSchema.safeParse({
+    smtpUser: formData.get('smtpUser'),
+    smtpPassword: formData.get('smtpPassword'),
+  })
+  if (!parsed.success) {
+    const issues: Record<string, string> = {}
+    for (const issue of parsed.error.issues) {
+      issues[String(issue.path[0] ?? 'form')] = issue.message
+    }
+    return actionError('The sending account could not be saved.', issues)
+  }
+
+  await storeSmtpCredential(parsed.data)
+
+  await audit({
+    actor: { kind: 'user', id: owner.id, label: owner.email },
+    entityType: 'mail_connection',
+    entityId: SERVICE_CONFIG_ID,
+    action: 'mail_connection.configured',
+    metadata: { transport: 'SMTP', byRole: 'OWNER' },
+  })
+
+  const outcome = await verifyMailConnection({
+    actor: { kind: 'user', id: owner.id, label: owner.email },
+  })
+
+  revalidate()
+
+  if (!outcome.ok) {
+    return actionError(
+      'The app password was stored encrypted, but Gmail did not accept the connection. ' +
+        `${outcome.detail} Nothing was sent.`,
+    )
+  }
+
+  return actionOk(
+    `Connected and verified as ${outcome.authenticatedAddress ?? parsed.data.smtpUser}. ` +
+      'The app password is encrypted and will never be displayed. Nothing was sent.',
+  )
 }
 
 /**
@@ -86,7 +140,7 @@ export async function disconnectSendingAccountAction(
   _previous: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const admin = await requireAdmin()
+  const admin = await requireOwner()
   const config = await readServiceConfig()
 
   const wasConfigured = Boolean(config.smtpUserEncrypted) && Boolean(config.smtpPasswordEncrypted)

@@ -145,6 +145,17 @@ export const contactMethodEnum = pgEnum('contact_method', [
   'EMAIL_ONLY',
 ])
 
+/**
+ * A public request never becomes access by itself. `VERIFIED` means an owner
+ * or operator recorded that they completed the phone check; creating an
+ * account and issuing a setup link remain separate, deliberate actions.
+ */
+export const accessRequestStatusEnum = pgEnum('access_request_status', [
+  'PENDING',
+  'VERIFIED',
+  'CLOSED',
+])
+
 // ---------------------------------------------------------------------------
 // Column helpers
 // ---------------------------------------------------------------------------
@@ -167,8 +178,9 @@ const percentage = (name: string) => numeric(name, { precision: 9, scale: 6 })
 // ---------------------------------------------------------------------------
 
 /**
- * Owner and operator only. Investors are `investorAccounts`, not users — they
- * are deliberately a different kind of thing with different rules.
+ * Owner, operator and read-only viewer accounts. Investors are
+ * `investorAccounts`, not users — they are deliberately a different kind of
+ * thing with different rules.
  */
 export const users = pgTable('users', {
   id: id(),
@@ -195,6 +207,8 @@ export const users = pgTable('users', {
    * well as by deleting rows at write time.
    */
   passwordChangedAt: timestamp('password_changed_at', { withTimezone: true }),
+  /** Optional plaintext reminder. It must never contain the password itself. */
+  passwordHint: text('password_hint'),
 
   // Two-factor — optional in v1 (§2.2).
   /** encrypt() from lib/crypto. Never returned to any client. */
@@ -299,6 +313,55 @@ export const operatorInvites = pgTable(
   },
   (t) => [index('operator_invites_email_idx').on(t.email)],
 )
+
+/**
+ * Requests made at the deliberately non-identifying public front door.
+ *
+ * One row per normalised address keeps repeated submissions from filling the
+ * queue. The source address is held only as a keyed hash, solely to enforce a
+ * durable public rate limit; the raw address is never stored here.
+ */
+export const accessRequests = pgTable(
+  'access_requests',
+  {
+    id: id(),
+    firstName: text('first_name').notNull(),
+    lastName: text('last_name').notNull(),
+    email: text('email').notNull().unique(),
+    phone: text('phone').notNull(),
+    status: accessRequestStatusEnum('status').notNull().default('PENDING'),
+    sourceHash: text('source_hash').notNull(),
+    lastSubmittedAt: timestamp('last_submitted_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    verifiedById: text('verified_by_id').references(() => users.id),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    closedById: text('closed_by_id').references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('access_requests_status_created_idx').on(t.status, t.createdAt),
+    index('access_requests_source_created_idx').on(t.sourceHash, t.createdAt),
+  ],
+)
+
+/**
+ * Atomic, privacy-preserving abuse counters for the public access-request form.
+ *
+ * This is intentionally separate from `accessRequests`: duplicate addresses
+ * still count as attempts even though they do not create duplicate queue rows.
+ * A keyed source hash is the only identifier retained.
+ */
+export const accessRequestAttempts = pgTable('access_request_attempts', {
+  sourceHash: text('source_hash').primaryKey(),
+  windowStartedAt: timestamp('window_started_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  attemptCount: integer('attempt_count').notNull().default(1),
+  updatedAt: updatedAt(),
+})
 
 // ---------------------------------------------------------------------------
 // Rounds, recipients, accounts, offers

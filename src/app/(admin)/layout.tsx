@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { signOutAction } from '@/actions/auth'
 import { AdminNav } from '@/components/admin/admin-nav'
-import { PageCurl } from '@/components/page-curl'
+import { PortalPreviewSwitch } from '@/components/portal-preview-switch'
 import { SiteFooter } from '@/components/site-footer'
 import { requireReader } from '@/lib/auth/guards'
 import { ROLE_LABELS, VIEWER_BANNER } from '@/lib/roles'
@@ -37,32 +38,54 @@ export default async function AdminLayout({
   // own guard, and a nested route handler never runs this at all.
   const admin = await requireReader()
   const config = env()
+  const accountName =
+    admin.name?.trim() ||
+    (admin.role === 'OWNER'
+      ? 'Mike'
+      : admin.role === 'OPERATOR'
+        ? 'David'
+        : 'Read-only account')
 
   return (
     <div className="flex min-h-full flex-col">
+      <aside className="mx-auto mt-4 flex w-[min(56rem,calc(100%-2rem))] flex-wrap items-center justify-between gap-3 rounded-sm border hairline bg-panel/95 px-4 py-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ftext">{accountName}</p>
+          <p className="truncate text-xs text-dim">
+            {admin.email} · {ROLE_LABELS[admin.role]}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/admin/password"
+            className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
+          >
+            Password
+          </Link>
+          <Link
+            href="/admin/security"
+            className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
+          >
+            Two-factor security
+          </Link>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="inline-flex min-h-11 items-center justify-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
+      </aside>
+
+      {admin.role !== 'VIEWER' ? <PortalPreviewSwitch mode="ADMIN" /> : null}
+
       <div className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6 sm:py-10">
         <header>
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <div className="min-w-0">
-              <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-orange">
-                <PageCurl size={16} />
-                Flipit Global SPV
-              </p>
-              <p className="mt-1 text-sm break-words text-dim">
-                Signed in as <span className="text-ftext">{admin.email}</span>{' '}
-                <span className="text-orange">({ROLE_LABELS[admin.role]})</span>
-              </p>
-            </div>
-
-            <form action={signOutAction}>
-              <button
-                type="submit"
-                className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-xs font-semibold text-dim transition-colors hover:border-orange hover:text-ftext"
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
+          <p className="pr-24 text-[11px] font-bold uppercase tracking-[0.22em] text-orange">
+            Flipit Global SPV
+          </p>
 
           {/*
             A read-only session says so, permanently and on every screen.
@@ -79,14 +102,6 @@ export default async function AdminLayout({
             </p>
           ) : null}
 
-          {!config.isProductionDeployment ? (
-            <p className="mt-4 border-l-2 border-warn pl-3 text-xs leading-relaxed text-dim">
-              Testing deployment. Portal links embed this domain, so real invitations are
-              refused from here. Test sends to the operator&rsquo;s own address remain
-              available.
-            </p>
-          ) : null}
-
           <div className="mt-6 border-t hairline pt-3">
             <AdminNav role={admin.role} />
           </div>
@@ -98,6 +113,17 @@ export default async function AdminLayout({
       </div>
 
       <SiteFooter surface="ADMIN" />
+
+      {!config.isProductionDeployment ? (
+        <aside
+          role="status"
+          className="fixed bottom-4 left-1/2 z-30 w-[min(44rem,calc(100vw-2rem))] -translate-x-1/2 rounded-full border border-warn/30 bg-bg2/95 px-5 py-3 text-center text-xs leading-relaxed text-dim shadow-2xl backdrop-blur-md"
+        >
+          <span className="font-semibold text-warn">Testing deployment.</span>{' '}
+          Portal links embed this domain, so real invitations are refused from here. Test
+          sends to the operator&rsquo;s own address remain available.
+        </aside>
+      ) : null}
     </div>
   )
 }

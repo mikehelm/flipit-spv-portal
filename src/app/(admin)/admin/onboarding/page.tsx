@@ -3,7 +3,6 @@ import {
   acknowledgeTestInvitationAction,
   completeOnboardingAction,
   confirmDisplayNameAction,
-  connectSendingAccountAction,
   recordVideoChoiceAction,
   setContactMethodAction,
 } from '@/actions/onboarding'
@@ -149,20 +148,9 @@ export default async function OnboardingPage() {
         <Card>
           {stepHeader('SENDING_ACCOUNT')}
           <p className="text-sm leading-relaxed text-dim">
-            Mail goes out over Gmail&rsquo;s own servers from your address, using a
-            16-letter <strong className="text-ftext">app password</strong> — not your
-            Google account password, which this application never asks for and could not
-            use. Turn on 2-Step Verification first, then generate an app password at{' '}
-            <a
-              href="https://myaccount.google.com/apppasswords"
-              target="_blank"
-              rel="noreferrer noopener"
-              className="text-orange"
-            >
-              myaccount.google.com/apppasswords
-            </a>
-            . You can revoke it there at any moment, and it can only send — it cannot
-            read your mail.
+            The owner manages the shared Gmail credential in Owner Settings. Operators
+            can see whether it is connected, but cannot enter, replace, or read the app
+            password.
           </p>
 
           <div className="mt-4">
@@ -173,40 +161,10 @@ export default async function OnboardingPage() {
           </div>
 
           <div className="mt-4">
-            <ActionForm
-              action={connectSendingAccountAction}
-              submitLabel="Save sending account"
-            >
-              <Field label="Sending Gmail address" name="smtpUser">
-                <TextInput
-                  name="smtpUser"
-                  type="email"
-                  autoComplete="off"
-                  placeholder="serenedavid@gmail.com"
-                  required
-                />
-              </Field>
-              <Field
-                label="App password"
-                name="smtpPassword"
-                hint="Encrypted at rest, never displayed again, never written to a log or an export. Spaces are removed for you."
-              >
-                <TextInput
-                  name="smtpPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                />
-              </Field>
-            </ActionForm>
-          </div>
-
-          <div className="mt-4">
             <Notice tone="warn">
-              An app password is a static credential. If this server were ever
-              compromised, it could be used to send as you until you revoke it. Treat it
-              like any other secret, and revoke it at Google the moment it is no longer
-              needed.
+              No email is sent while this step is disconnected. Ask the owner to
+              configure and verify the shared sending account; never paste an app
+              password into chat or ordinary support messages.
             </Notice>
           </div>
 

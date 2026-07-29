@@ -28,6 +28,9 @@ export function PageCurl({
   // Unique enough within a document that two marks on one page do not share a
   // gradient definition, without needing `useId` and a client component.
   const gradientId = `flipit-curl-${size}`
+  const faceGradientId = `flipit-page-face-${size}`
+  const recessGradientId = `flipit-curl-recess-${size}`
+  const shadowId = `flipit-curl-shadow-${size}`
 
   return (
     <svg
@@ -41,27 +44,60 @@ export function PageCurl({
       className={`shrink-0 ${className}`}
     >
       <defs>
-        <linearGradient id={gradientId} x1="32" y1="32" x2="10" y2="10">
-          <stop offset="0%" stopColor="var(--color-silver3)" />
-          <stop offset="55%" stopColor="var(--color-silver2)" />
-          <stop offset="100%" stopColor="var(--color-silver1)" />
+        <linearGradient id={faceGradientId} x1="4" y1="30" x2="27" y2="2">
+          <stop offset="0%" stopColor="var(--color-bg2)" />
+          <stop offset="58%" stopColor="var(--color-bg)" />
+          <stop offset="100%" stopColor="var(--color-silver1)" stopOpacity="0.2" />
         </linearGradient>
+        <linearGradient id={recessGradientId} x1="20" y1="2" x2="27" y2="10">
+          <stop offset="0%" stopColor="var(--color-bg)" />
+          <stop offset="55%" stopColor="var(--color-orange)" stopOpacity="0.2" />
+          <stop offset="100%" stopColor="var(--color-bg2)" />
+        </linearGradient>
+        <linearGradient id={gradientId} x1="19" y1="3" x2="28" y2="11">
+          <stop offset="0%" stopColor="var(--color-silver1)" />
+          <stop offset="38%" stopColor="var(--color-silver3)" />
+          <stop offset="68%" stopColor="var(--color-orange)" />
+          <stop offset="100%" stopColor="var(--color-silver2)" />
+        </linearGradient>
+        <filter id={shadowId} x="-35%" y="-35%" width="180%" height="190%">
+          <feDropShadow
+            dx="-1.5"
+            dy="2"
+            stdDeviation="1.8"
+            floodColor="#000"
+            floodOpacity="0.72"
+          />
+        </filter>
       </defs>
 
-      {/* The sheet: a page with its lower-right corner lifted away. */}
+      {/* The page, with its top-right corner peeled back. */}
       <path
-        d="M4 2h24v18.5L20.5 30H4z"
+        d="M4 2h16.5L28 9.5V30H4z"
+        fill={`url(#${faceGradientId})`}
         stroke="var(--color-edge)"
         strokeWidth="1.5"
         strokeLinejoin="round"
       />
 
-      {/* The curl itself — the folded corner, silver, the signature. */}
-      <path d="M28 20.5H20.5V30z" fill={`url(#${gradientId})`} />
+      {/* Recess under the lifted corner and the dimensional folded face. */}
+      <path d="M20.5 2H28v7.5z" fill={`url(#${recessGradientId})`} />
+      <path
+        d="M20.5 2C23.2 3.3 25.8 6.1 28 9.5L20.5 9z"
+        fill={`url(#${gradientId})`}
+        filter={`url(#${shadowId})`}
+      />
+      <path
+        d="M20.5 2C23.2 3.3 25.8 6.1 28 9.5"
+        fill="none"
+        stroke="var(--color-silver1)"
+        strokeWidth="0.8"
+        strokeLinecap="round"
+      />
 
       {/* Two ruled lines, so the sheet reads as a page rather than a shape. */}
       <path
-        d="M9 10.5h14M9 16h10"
+        d="M9 13h14M9 18.5h10"
         stroke="var(--color-edge)"
         strokeWidth="1.5"
         strokeLinecap="round"

@@ -19,7 +19,16 @@ export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token') ?? ''
   const result = await redeemAdminSetupLink(token)
 
-  const base = env().APP_URL.replace(/\/+$/, '')
+  const configuredBase = env().APP_URL.replace(/\/+$/, '')
+  const requestedHost = request.nextUrl.hostname
+  const localAlias =
+    process.env.NODE_ENV !== 'production' &&
+    (requestedHost === 'localhost' || requestedHost === '127.0.0.1')
+  // During local development, keep the redirect on the hostname that received
+  // the cookie. A localhost cookie does not accompany a redirect to 127.0.0.1
+  // (or vice versa), which previously spent a setup link and then lost its
+  // session. Production always uses the configured canonical origin.
+  const base = localAlias ? request.nextUrl.origin : configuredBase
   const destination = result.ok ? `${base}/admin` : `${base}/signin?error=SetupLink`
 
   return NextResponse.redirect(destination)

@@ -79,6 +79,7 @@ import { readOnboardingSnapshot } from '@/lib/auth/onboarding-store'
 import { SERVICE_CONFIG_ID } from '@/lib/auth/service-config'
 import { isStepComplete, type OnboardingStepId } from '@/lib/auth/onboarding'
 import { hashPassword } from '@/lib/auth/password'
+import { storeSmtpCredential } from '@/lib/email/transport/configure'
 import { MAX_VIDEO_BYTES, tooLargeMessage } from '@/lib/media/formats'
 import { everythingSent, onScreen } from '@/lib/verify/page-text'
 
@@ -107,11 +108,10 @@ let serverOutput: () => string = () => ''
 /**
  * The sending account as it was before this run, put back afterwards.
  *
- * Step 3 of onboarding stores an SMTP pair, and this run supplies an obviously
- * fake one. Left behind, it would leave a developer's own database claiming a
- * sending account is connected when none is — the kind of state that is
- * discovered later, on a screen about sending, by somebody who did not run this
- * script. Restoring it costs four columns.
+ * The owner-managed setup path stores an SMTP pair before this run enters
+ * operator onboarding. Left behind, it would leave a developer's own database
+ * claiming a sending account is connected when none is. Onboarding also writes
+ * the sender name and phone defaults, so all six values are restored together.
  */
 let sendingAccountBefore: {
   emailTransport: 'SMTP' | 'GMAIL_API'
@@ -119,6 +119,8 @@ let sendingAccountBefore: {
   smtpPasswordEncrypted: string | null
   smtpLastVerifiedAt: Date | null
   smtpLastVerifyResult: string | null
+  defaultSenderName: string | null
+  defaultSenderPhone: string | null
 } | null = null
 
 function check(label: string, condition: boolean, detail?: string): void {
@@ -267,8 +269,18 @@ async function prepareOperator(): Promise<void> {
       smtpPasswordEncrypted: config.smtpPasswordEncrypted,
       smtpLastVerifiedAt: config.smtpLastVerifiedAt,
       smtpLastVerifyResult: config.smtpLastVerifyResult,
+      defaultSenderName: config.defaultSenderName,
+      defaultSenderPhone: config.defaultSenderPhone,
     }
   }
+
+  // Not a real credential. It has the shape the storage boundary accepts and
+  // no account anywhere would accept it. cleanUp restores the six original
+  // configuration fields after the run.
+  await storeSmtpCredential({
+    smtpUser: OPERATOR_EMAIL,
+    smtpPassword: 'aaaabbbbccccdddd',
+  })
 
   const hash = await hashPassword(PASSWORD)
   await db
@@ -304,11 +316,9 @@ async function prepareOperator(): Promise<void> {
  * operator-only, which is why `verify:viewport` — which signs in as the owner —
  * could never reach it.
  *
- * **Step 3 stores a credential and connects nothing.** `connectSendingAccount`
- * encrypts the pair and explicitly clears any previous verification, because
- * WP5 re-verifies against SMTP before sending is possible. So an obviously fake
- * app password is stored here, sending remains refused, and no gate is touched
- * — this script never sends and never could.
+ * **Step 3 is owner-managed.** The verifier puts an obviously fake encrypted
+ * app password through the same storage helper before the operator signs in,
+ * then proves onboarding recognises it. It never attempts SMTP and never sends.
  */
 async function completeOnboarding(page: Page): Promise<void> {
   const operator = await db.query.users.findFirst({ where: eq(users.email, OPERATOR_EMAIL) })
@@ -342,12 +352,10 @@ async function completeOnboarding(page: Page): Promise<void> {
   await page.locator('form', { hasText: 'How investors reach you' }).getByRole('button').click()
   check('onboarding 2 — a contact method is chosen', await settled('CONTACT_METHOD'))
 
-  await page.fill('input[name="smtpUser"]', OPERATOR_EMAIL)
-  // Not a credential. Sixteen letters in the shape the form expects, and no
-  // account anywhere would accept them.
-  await page.fill('input[name="smtpPassword"]', 'aaaabbbbccccdddd')
-  await page.locator('form', { hasText: 'Sending Gmail address' }).getByRole('button').click()
-  check('onboarding 3 — the sending account is stored', await settled('SENDING_ACCOUNT'))
+  check(
+    'onboarding 3 — the owner-configured sending account is recognised',
+    await settled('SENDING_ACCOUNT'),
+  )
 
   await page.selectOption('select[name="choice"]', 'RECORD_NOW')
   await page.locator('form', { hasText: 'Your choice' }).getByRole('button').click()
