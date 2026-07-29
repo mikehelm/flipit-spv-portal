@@ -76,16 +76,24 @@ describe('the credit never reaches a formal instrument', () => {
 
   it('adds the quiet public credit only to the start and sign-in pages', () => {
     const publicCredit = readFileSync('src/components/public-maker-credit.tsx', 'utf8')
+    const creditText = readFileSync('src/components/maker-credit-text.tsx', 'utf8')
     const home = readFileSync('src/app/page.tsx', 'utf8')
     const signIn = readFileSync('src/app/signin/page.tsx', 'utf8')
     const accessRequest = readFileSync('src/app/access-request/page.tsx', 'utf8')
+    const settings = readFileSync('src/app/(admin)/admin/settings/page.tsx', 'utf8')
 
-    expect(publicCredit).toContain('Made with Mike')
+    expect(publicCredit).toContain('<MakerCreditText')
+    expect(creditText).toContain('Made by ')
+    expect(creditText).toContain('Make with Mike')
+    expect(creditText).toContain('text-silver2')
+    expect(creditText).toContain('text-orange')
+    expect(creditText).not.toMatch(/rounded|border|bg-/)
     expect(publicCredit).toContain('bottom-20')
     expect(publicCredit).toContain('sm:right-40')
     expect(home).toContain('<PublicMakerCredit')
     expect(signIn).toContain('<PublicMakerCredit')
     expect(accessRequest).not.toContain('<PublicMakerCredit')
+    expect(settings).toContain('Show a quiet <MakerCreditText /> credit')
   })
 
   it('keeps the interior credit beneath the account curl until it opens', () => {
@@ -97,7 +105,7 @@ describe('the credit never reaches a formal instrument', () => {
     expect(curlAt).toBeGreaterThan(creditAt)
     expect(accountCurl).toContain('aria-hidden={!visible}')
     expect(accountCurl).toContain("visible ? 'opacity-80 delay-150'")
-    expect(accountCurl).toContain('Made with Mike')
+    expect(accountCurl).toContain('<MakerCreditText')
   })
 })
 
@@ -119,14 +127,12 @@ describe('the optional link', () => {
     expect(safeAttributionHref(null)).toBeNull()
   })
 
-  it('is never styled to draw the eye', () => {
+  it('keeps the project-colour credit understated and the link safe', () => {
     const footer = readFileSync('src/components/site-footer.tsx', 'utf8')
     const anchor = footer.slice(footer.indexOf('<a'), footer.indexOf('</a>'))
 
-    // §13.2: "no colour". The credit is `--muted`, the dimmest text token, and
-    // the anchor takes the same one rather than a link colour.
-    expect(anchor).toContain('text-muted')
-    expect(anchor).not.toMatch(/text-orange|text-ok|font-bold|font-semibold/)
+    expect(anchor).toContain('<MakerCreditText')
+    expect(anchor).not.toMatch(/rounded|border|bg-/)
 
     // "opening in a new tab" — and a new tab without `noopener` hands the
     // opened page a reference back to a portal session.

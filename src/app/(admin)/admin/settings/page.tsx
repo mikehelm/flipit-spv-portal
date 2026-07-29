@@ -9,6 +9,7 @@ import {
 import { connectOwnerSendingAccountAction } from '@/actions/mail-connection'
 import { ActionForm } from '@/components/admin/action-form'
 import { MailConnectionPanel } from '@/components/admin/mail-connection-panel'
+import { MakerCreditText } from '@/components/maker-credit-text'
 import {
   Card,
   Checkbox,
@@ -342,8 +343,8 @@ export default async function SettingsPage() {
           title="The maker's credit"
           description={
             <>
-              Show a quiet &ldquo;Made by Make with Mike&rdquo; credit in the footer. It
-              never appears in an invitation email or on a participation certificate.
+              Show a quiet <MakerCreditText /> credit in the footer. It never appears in
+              an invitation email or on a participation certificate.
             </>
           }
         >

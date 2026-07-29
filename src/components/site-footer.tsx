@@ -1,3 +1,4 @@
+import { MakerCreditText } from '@/components/maker-credit-text'
 import { PageCurl } from '@/components/page-curl'
 import { loadAttribution, type AttributionSurface } from '@/lib/attribution'
 
@@ -5,9 +6,9 @@ import { loadAttribution, type AttributionSurface } from '@/lib/attribution'
  * The footer of a screen — BUILD_SPEC §13.2.
  *
  * Two things live here and they are in the order §13.2 asks for: the legal
- * notice, and *below it* the maker's credit. The credit is small, dimmed, has
- * no logo, no colour and no animation, and it can be switched off for either
- * surface independently.
+ * notice, and *below it* the maker's credit. The credit is small, has no logo,
+ * container or animation, and it can be switched off for either surface
+ * independently.
  *
  * The page curl sits beside the FLIPIT wordmark rather than beside the credit —
  * §13.2 wants "no logo competing with FLIPIT's", and putting a brand mark next
@@ -42,24 +43,24 @@ export async function SiteFooter({
           attribution.href ? (
             <p>
               {/*
-                "Optionally a link, opening in a new tab, but never styled to
-                draw the eye." So: the same size, the same colour, and the same
-                weight as the plain text — the only difference is that it is
-                clickable. `noopener` because it opens in a new tab; `nofollow`
-                because a securities portal should not be passing ranking to
-                anybody.
+                The link keeps the same understated split-colour treatment as
+                the plain credit. `noopener` because it opens in a new tab;
+                `nofollow` because a securities portal should not be passing
+                ranking to anybody.
               */}
               <a
                 href={attribution.href}
                 target="_blank"
                 rel="noopener noreferrer nofollow"
-                className="text-muted underline-offset-2 hover:underline"
+                className="underline-offset-2 hover:underline"
               >
-                {attribution.text}
+                <MakerCreditText />
               </a>
             </p>
           ) : (
-            <p>{attribution.text}</p>
+            <p>
+              <MakerCreditText />
+            </p>
           )
         ) : null}
       </div>

@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { type FocusEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { CurlCorner } from '@/components/effects/CurlCorner'
+import { MakerCreditText } from '@/components/maker-credit-text'
 
 /**
  * The account controls live physically beneath the signature page curl.
@@ -78,11 +79,11 @@ export function AccountCurlMenu({
         <span
           data-testid="curl-maker-credit"
           aria-hidden={!visible}
-          className={`pointer-events-none absolute right-5 top-8 z-10 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.14em] text-silver2 transition-opacity duration-300 ${
+          className={`pointer-events-none absolute right-5 top-8 z-10 whitespace-nowrap text-[9px] tracking-[0.04em] transition-opacity duration-300 ${
             visible ? 'opacity-80 delay-150' : 'opacity-0 delay-0'
           }`}
         >
-          Made with Mike
+          <MakerCreditText />
         </span>
         <CurlCorner
           intro={false}
