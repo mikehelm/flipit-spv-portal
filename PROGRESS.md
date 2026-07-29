@@ -13258,3 +13258,188 @@ something that is not, rather than empty in a run where everything was.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## Four definitions of "this is code", and a failure that was a variable
+
+Three items from the queue: the fresh-clone `MEDIA_STORE` failure named last
+entry, mutations of the **verification scripts themselves**, and mutations that
+**delete** rather than rewrite. The last two turned out to be one package, and
+running them exposed something neither had predicted.
+
+### The failure that is a variable, not a defect
+
+A fresh clone fails `verify:all` at two of twenty-six. Both are `MEDIA_STORE`
+being empty — supported by the application, and not supported by a complete
+verification, because `verify:deployment` serves a range request from a real
+video and `verify:viewport` measures the library with something in it.
+
+***Not made a prerequisite.*** The runner's skip mechanism is whole-script, and
+skipping those two would drop 109 and 591 checks to avoid two. Instead the run
+**says so up front**, on the same line as `build`, `browser`, `camera` and
+`pg tools`:
+
+    media      none — MEDIA_STORE is empty, so deployment and viewport will each
+               report one failure. Set it to "filesystem" in .env for a complete run.
+
+`.env.example` says the same thing where somebody configuring it will read it,
+and `verify-all.test.ts` now holds four checks on all of that — including one
+asserting the two store-dependent scripts are still exactly those two, so the
+sentence cannot quietly become a lie. It is also the first test `.env.example`
+has ever had.
+
+### Mutating the checking machinery
+
+Every mutation until now broke something in `src/`. But the banner defect — the
+one that started this whole line of work — was **in a script**, and so were the
+twenty-one `.every()` calls and the `indexOf` ordering. The scripts are where
+this repository's checks have actually been wrong, and nothing was breaking
+them.
+
+Four new mutations, and **two of them delete rather than rewrite**, which is the
+shape of every defect this repository has actually shipped:
+
+- ***`everyOf` downgraded to `.every()`*** in `verify-roadmap.ts` — caught by
+  `vacuous.test.ts`.
+- ***A sixth browser launch*** added to `verify-media.ts` — caught by
+  `chromium.test.ts`, which says in its own header that preventing exactly this
+  is the only reason its last test exists.
+- ***A verification deleted from the runner's list.*** `verify:roadmap` still
+  exists, `pnpm verify:roadmap` still works, and `pnpm verify:all` silently stops
+  running it. The total stays green and the coverage shrinks by one.
+- ***An entry's count changed in the log inventory*** built two entries ago — an
+  inventory that can lose an entry without complaining is a list of opinions.
+
+**All four are caught by unit tests reading the scripts' source.** That is the
+layer that has to hold, because there is nothing under it: a verification script
+that has stopped checking reports its own success.
+
+### And then all four failed, for a reason that was the point
+
+Adding them broke four *existing* tests. `verify-mutants.ts` now contains
+`chromium.launch({})` and `.every(` — as **strings**, held as data and pasted
+into other files. Three separate guards read those strings as code and concluded
+the mutation table launches a browser, drives Playwright without the launcher,
+and calls `every()` on a query result.
+
+***Four things in this repository read TypeScript as text, and each had its own
+private idea of what counted as code.*** All four ideas were regular expressions
+over raw source, and all four were wrong — in both directions:
+
+- three of them read code out of strings, as above;
+- and the log sweep's first draft read a regular expression's quotation marks as
+  a string, opened one that never closed, and stopped seeing five hundred lines.
+
+***This is `chromium.test.ts`'s own defect, in a different costume.*** That file
+exists because a correct browser launch was written twice and the copies
+disagreed; its header calls its last test "the only thing preventing the sixth
+copy". Four private definitions of *this is code* is the same situation.
+
+So there is now **one classifier** — `src/lib/verify/source.ts` — and every
+source-level rule uses it. `classify` moved there out of `log-scan.ts`, with two
+functions over it:
+
+- ***`codeWithoutStrings`*** — comments and string contents blanked, line numbers
+  preserved. For rules looking for a *shape*: `.every(`, `chromium.launch(`.
+- ***`existsInCode`*** — does this pattern *start* at a position that is code.
+  For rules looking for an **import**, where the module specifier is itself a
+  string.
+
+**Decisions.**
+
+- ***`codeWithoutStrings` was the wrong tool for five of the seven rules, and
+  trying it first is how that was learnt.*** Blanking string contents turns
+  `from 'playwright'` into `from ''`, so every browser-driven script stops being
+  recognised and the rule passes over an empty set — reading exactly like a
+  clean repository. It went in, all four prerequisite audits went green while
+  measuring nothing, and only `existsInCode` puts them back. ***The fix for a
+  check that reads too much can easily be a check that reads nothing.***
+- ***So the Chromium rule now has a control.*** *At least five scripts import
+  Playwright, and `lib/browser.ts` is one of them* — because the rule below it
+  is "if it imports Playwright it must use the launcher", and a version that
+  finds no importer passes vacuously. The vacuity was live in this working tree
+  for about ten minutes.
+- ***The classifier lives under `verify/`, not `security/`.*** It arrived inside
+  the log sweep, and three of its four users are verification guards.
+- ***The media store is reported, not gated.*** A prerequisite is a thing without
+  which a script cannot run; this is a thing without which two checks of seven
+  hundred cannot run.
+
+**Deviations.** None.
+
+**Checklist.** No point changes hands. Point 8's inventory gains a mutation
+proving it cannot lose an entry quietly.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2849**) are green.
+`pnpm verify:all` is **26 passed, 0 failed, 0 skipped**.
+`pnpm verify:mutants` is **52 passed, 0 failed** — twenty-six claims.
+
+**Uncertain.**
+
+- ***The classifier has no test of its own.*** It is exercised through four
+  users and `logging.test.ts` drives its edge cases — a regex containing
+  quotation marks, a division, a console call inside a string — but there is no
+  `source.test.ts` naming its contract. It is now load-bearing for seven rules
+  across three files, and it is the single point at which all of them fail
+  together. **This is the next item.**
+- ***`existsInCode` and `codeWithoutStrings` are chosen per rule, by hand.***
+  Nothing stops the next rule picking the wrong one, and picking the wrong one
+  fails *silently* — the rule passes over nothing. That is exactly what happened
+  here and it was caught by a control, not by the choice.
+- ***Nothing mutates `source.ts` itself.*** Breaking the classifier should break
+  seven rules at once, and that has not been driven.
+- ***The regex-or-division heuristic is still a heuristic.***
+- ***The flake was found by luck.*** Nothing measures whether the suite is
+  deterministic. `verify:all` has now run green four times in a row, which is
+  evidence and not a measurement.
+- ***`emptyBeside` has no weak default.***
+- ***Thirty-odd other `.length === 0` sites were read by eye and left alone.***
+- ***The sweep reads names, not values.***
+- ***The six negated checks without controls are recorded, not solved.***
+- ***The same trick would work on the health *signal*.*** `summariseHealth` is a
+  third surface for the findings and has no parity test.
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved.***
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { CHROMIUM_CANDIDATES, chooseChromium, fallbackChromium } from './chromium'
+import { existsInCode } from './source'
 
 /**
  * Which Chromium the browser-driven checks launch, and the rule that there is
@@ -99,6 +100,24 @@ describe('after the pinned build has refused to launch', () => {
 })
 
 describe('there is one launcher, not five', () => {
+
+  /**
+   * The scripts, as written.
+   *
+   * Every rule below asks its question through `existsInCode`, never with a
+   * plain regex over the text. `verify-mutants.ts` holds broken code as
+   * **strings** — including `chromium.launch({})` — and pastes it into other
+   * files to check that somebody notices. It runs none of it. A guard that read
+   * those strings would report the very check that proves the guard works,
+   * which is how a rule gets switched off.
+   *
+   * Blanking the strings outright is the wrong fix here and was tried: two of
+   * these three rules look for an **import**, and a module specifier is a
+   * string. `from 'playwright'` becomes unfindable, every file is skipped, and
+   * the rule passes over nothing at all — which is worse than what it replaced.
+   * Hence the control below, and hence `existsInCode`, which asks whether the
+   * match *starts* in code.
+   */
   function scriptSources(): Array<{ name: string; source: string }> {
     const out: Array<{ name: string; source: string }> = []
     for (const name of readdirSync(join(root, 'scripts'))) {
@@ -107,7 +126,10 @@ describe('there is one launcher, not five', () => {
     }
     for (const name of readdirSync(join(root, 'scripts/lib'))) {
       if (!name.endsWith('.ts')) continue
-      out.push({ name: `lib/${name}`, source: readFileSync(join(root, 'scripts/lib', name), 'utf8') })
+      out.push({
+        name: `lib/${name}`,
+        source: readFileSync(join(root, 'scripts/lib', name), 'utf8'),
+      })
     }
     return out
   }
@@ -128,9 +150,10 @@ describe('there is one launcher, not five', () => {
      */
     for (const { name, source } of scriptSources()) {
       if (name === 'lib/browser.ts') continue
-      expect(source, `${name} launches its own browser — use launchChromium()`).not.toMatch(
-        /chromium\.launch\(/,
-      )
+      expect(
+        existsInCode(source, /chromium\.launch\(/),
+        `${name} launches its own browser — use launchChromium()`,
+      ).toBe(false)
     }
   })
 
@@ -139,19 +162,34 @@ describe('there is one launcher, not five', () => {
     // is how the repository got here.
     for (const { name, source } of scriptSources()) {
       if (name === 'lib/browser.ts') continue
-      expect(source, `${name} reads CHROMIUM_PATH — the launcher does that`).not.toContain(
-        'process.env.CHROMIUM_PATH',
-      )
+      expect(
+        existsInCode(source, /process\.env\.CHROMIUM_PATH/),
+        `${name} reads CHROMIUM_PATH — the launcher does that`,
+      ).toBe(false)
     }
+  })
+
+  it('finds the browser-driven scripts at all — the control on the rule below', () => {
+    /*
+     * The rule below is `if it imports playwright, it must use launchChromium`,
+     * and a version of it that finds no importer passes over nothing while
+     * reading exactly like a clean repository. That is not hypothetical: this
+     * file briefly read the scripts with their string contents blanked, which
+     * turned every `from 'playwright'` into `from ''` and skipped all five.
+     */
+    const importers = scriptSources().filter(({ source }) => existsInCode(source, /from 'playwright'/))
+    expect(importers.length).toBeGreaterThanOrEqual(5)
+    expect(importers.map(({ name }) => name)).toContain('lib/browser.ts')
   })
 
   it('and every script that drives a browser goes through the launcher', () => {
     for (const { name, source } of scriptSources()) {
       if (name === 'lib/browser.ts') continue
-      if (!/from 'playwright'/.test(source)) continue
-      expect(source, `${name} imports playwright without using launchChromium`).toMatch(
-        /launchChromium/,
-      )
+      if (!existsInCode(source, /from 'playwright'/)) continue
+      expect(
+        existsInCode(source, /launchChromium/),
+        `${name} imports playwright without using launchChromium`,
+      ).toBe(true)
     }
   })
 })

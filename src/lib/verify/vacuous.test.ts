@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { appearsBefore, emptyBeside, everyOf, noneOf } from './vacuous'
+import { codeWithoutStrings } from './source'
 
 const root = join(import.meta.dirname, '../../..')
 
@@ -157,6 +158,20 @@ describe('one thing appearing before another', () => {
  * the twenty-one that were fixed.
  */
 describe('no verification script calls every() on a query result', () => {
+
+  /**
+   * The scripts, with comments and **string contents** blanked out.
+   *
+   * These rules ask *does this file launch a browser* and *does this file call
+   * `.every()` on a query result*. `verify-mutants.ts` holds broken code as
+   * strings — `chromium.launch({})`, `.every(`, a `console.log` of an email
+   * body — and pastes them into other files to check that somebody notices. It
+   * runs none of them. A guard that reads them is reporting the check that
+   * proves the guard works, which is how a rule gets switched off.
+   *
+   * One classifier, in `@/lib/verify/source`, shared by every source-level
+   * rule here. Line numbers survive, so a failure still points at the line.
+   */
   function scriptSources(): Array<{ name: string; source: string }> {
     const out: Array<{ name: string; source: string }> = []
     for (const dir of ['scripts', 'scripts/lib']) {
@@ -164,7 +179,7 @@ describe('no verification script calls every() on a query result', () => {
         if (!name.endsWith('.ts')) continue
         out.push({
           name: dir === 'scripts' ? name : `lib/${name}`,
-          source: readFileSync(join(root, dir, name), 'utf8'),
+          source: codeWithoutStrings(readFileSync(join(root, dir, name), 'utf8')),
         })
       }
     }

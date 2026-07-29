@@ -2,6 +2,8 @@ import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+import { existsInCode } from './source'
+
 /**
  * `verify:all` against the scripts it claims to run.
  *
@@ -42,6 +44,22 @@ const wired = Object.keys(packageJson.scripts)
   .filter((name) => name.startsWith('verify:') && name !== 'verify:all')
   .map((name) => name.slice('verify:'.length))
 
+/**
+ * A script's source, as written.
+ *
+ * The rules below ask what a script *does* — starts a server, drives a browser,
+ * shells out to `pg_restore` — and each of them asks it through `existsInCode`,
+ * not with a plain regex. `verify-mutants.ts` holds broken code as strings and
+ * pastes it into other files; a plain regex read one of those strings and
+ * concluded the mutation table drives a browser and had forgotten to declare
+ * `'BROWSER'`.
+ *
+ * `codeWithoutStrings` is the wrong tool for these three, because every one of
+ * them looks for an **import** and a module specifier *is* a string. Blanking
+ * the quotes makes `from 'playwright'` unfindable in the files that really do
+ * import it. `existsInCode` asks whether the match *starts* in code, which is
+ * the actual question.
+ */
 function sourceOf(name: string): string {
   const command = packageJson.scripts[`verify:${name}`]!
   const path = /tsx (scripts\/[\w-]+\.ts)/.exec(command)![1]!
@@ -98,7 +116,7 @@ describe('verify:all', () => {
   it('marks every script that starts a server as needing a build', () => {
     for (const entry of declared) {
       const source = sourceOf(entry.name)
-      const startsAServer = /\[\s*'start'/.test(source) && /next/.test(source)
+      const startsAServer = existsInCode(source, /\[\s*'start'/) && existsInCode(source, /next/)
       expect(entry.needs.includes('BUILD'), `${entry.name}: BUILD flag`).toBe(startsAServer)
     }
   })
@@ -106,7 +124,7 @@ describe('verify:all', () => {
   it('marks every script that drives a browser as needing one', () => {
     for (const entry of declared) {
       const source = sourceOf(entry.name)
-      const drivesABrowser = /from 'playwright'/.test(source)
+      const drivesABrowser = existsInCode(source, /from 'playwright'/)
       expect(entry.needs.includes('BROWSER'), `${entry.name}: BROWSER flag`).toBe(drivesABrowser)
     }
   })
@@ -120,7 +138,7 @@ describe('verify:all', () => {
     // refusing rather than the browser being unable.
     for (const entry of declared) {
       const source = sourceOf(entry.name)
-      const opensACamera = /getUserMedia/.test(source)
+      const opensACamera = existsInCode(source, /getUserMedia/)
       expect(entry.needs.includes('CAMERA'), `${entry.name}: CAMERA flag`).toBe(opensACamera)
     }
   })
@@ -147,7 +165,7 @@ describe('verify:all', () => {
       const source = sourceOf(entry.name)
       // `backup.ts` is where `pg_dump` and `pg_restore` are spawned; a script
       // that imports from it inherits the requirement.
-      const usesPgTools = /from '\.\/backup'/.test(source)
+      const usesPgTools = existsInCode(source, /from '\.\/backup'/)
       expect(entry.needs.includes('PG_TOOLS'), `${entry.name}: PG_TOOLS flag`).toBe(usesPgTools)
     }
   })
@@ -178,5 +196,43 @@ describe('verify:all', () => {
   it('builds at most once', () => {
     // Five of them start a server. Each building its own would be five builds.
     expect((runner.match(/await run\('build'\)/g) ?? []).length).toBe(1)
+  })
+
+  // -------------------------------------------------------------------------
+  // The failure that is a variable rather than a defect
+  // -------------------------------------------------------------------------
+
+  describe('the media store, which is reported up front and is not a prerequisite', () => {
+    it('says which of the two states the run is in, before anything starts', () => {
+      // A fresh clone has `MEDIA_STORE=""` — supported by the application, not
+      // supported by a complete run. Discovering that from a FAIL seventy-nine
+      // seconds into `verify:deployment` costs a diagnosis every time.
+      expect(runner).toContain("process.env.MEDIA_STORE ?? ''")
+      expect(runner).toContain('deployment and viewport will each')
+      expect(runner).toContain('"filesystem"')
+    })
+
+    it('does not turn it into a prerequisite, because that would skip 700 checks to avoid two', () => {
+      const declaredNeeds = [...runner.matchAll(/needs: \[([^\]]*)\]/g)].map((m) => m[1]!)
+      for (const needs of declaredNeeds) expect(needs).not.toContain('MEDIA')
+    })
+
+    it('and the two scripts that need one are still exactly those two', () => {
+      // If a third grows a store-dependent check, the sentence above becomes a
+      // lie and this is what says so.
+      const users = ['deployment', 'viewport', 'media', 'object-store', 'uploads', 'erasure-bytes']
+        .filter((name) => existsSync(join(root, `scripts/verify-${name}.ts`)))
+        .filter((name) => {
+          const source = readFileSync(join(root, `scripts/verify-${name}.ts`), 'utf8')
+          return /a media store is configured for this run/.test(source)
+        })
+      expect(users.sort()).toEqual(['deployment', 'viewport'])
+    })
+
+    it('.env.example says the same thing, for somebody who never reads the runner', () => {
+      const example = readFileSync(join(root, '.env.example'), 'utf8')
+      expect(example).toContain('NOT supported by a complete `pnpm verify:all`')
+      expect(example).toContain('MEDIA_STORE="filesystem"')
+    })
   })
 })

@@ -379,6 +379,72 @@ const MUTATIONS: readonly Mutation[] = [
     noticedBy: 'verify:qa',
     says: /FAIL\s+the control sees a shared entry|FAIL\s+a suspended account sees no shared entries/,
   },
+
+  // -------------------------------------------------------------------------
+  // The checking machinery itself, and mutations that DELETE.
+  //
+  // Two shapes have been recorded as missing for four entries, and they are the
+  // same gap read two ways.
+  //
+  //   - ***Nothing mutates the verification scripts.*** Every mutation above
+  //     breaks something in `src/`. But the banner defect — the one that
+  //     started this whole line of work — was **in a script**, and so was the
+  //     `.every()` family, and so was the `indexOf` ordering. The scripts are
+  //     where this repository's checks have actually been wrong.
+  //   - ***Every mutation rewrites a line; none deletes one.*** The defects this
+  //     repository has actually shipped were omissions — a rule missing from a
+  //     list, a fix applied to two files of five. A rewrite and a deletion are
+  //     not the same experiment.
+  //
+  // The four below are both at once: each deletes or downgrades something in
+  // the checking machinery, and the check that notices is a **unit test**
+  // reading the scripts' source. That is the layer that has to hold, because
+  // there is nothing below it — a verification script that has stopped checking
+  // reports its own success.
+  // -------------------------------------------------------------------------
+  {
+    // The `everyOf` guard, downgraded to the language's own `every` — which is
+    // `true` for an empty collection, which is exactly the twenty-one-site
+    // defect that produced `everyOf` in the first place.
+    claim: 'no verification script calls every() on something a query returned',
+    file: 'scripts/verify-roadmap.ts',
+    find: '    everyOf(seeded, (tile) => !tile.label.includes(ROADMAP_DISCLAIMER)) &&',
+    replace: '    seeded.every((tile) => !tile.label.includes(ROADMAP_DISCLAIMER)) &&',
+    noticedBy: 'vitest run src/lib/verify/vacuous.test.ts',
+  },
+  {
+    // A sixth copy of the browser launch, which is the defect `chromium.test.ts`
+    // says in as many words is the only thing it exists to prevent. Two places
+    // deciding which browser to use is how five scripts ended up disagreeing.
+    claim: 'one file decides which Chromium the checks launch',
+    file: 'scripts/verify-media.ts',
+    find: "import 'dotenv/config'",
+    replace: "import 'dotenv/config'\nimport { chromium } from 'playwright'\nconst _b = () => chromium.launch({})",
+    noticedBy: 'vitest run src/lib/verify/chromium.test.ts',
+  },
+  {
+    // A **deletion**: one verification removed from the runner's list. It still
+    // exists, `pnpm verify:roadmap` still works, and `pnpm verify:all` — the
+    // command run before a release — silently stops running it. The total stays
+    // green and the coverage shrinks by one. This is the omission shape, and it
+    // is the exact rot `verify-all.test.ts` was written against.
+    claim: 'verify:all runs every verification that exists',
+    file: 'scripts/verify-all.ts',
+    find: "  { name: 'roadmap', proves: 'the portal roadmap tiles' },\n",
+    replace: '',
+    noticedBy: 'vitest run src/lib/verify/verify-all.test.ts',
+  },
+  {
+    // The other deletion, and the one this session put in reach: a file removed
+    // from the log inventory. The call stays where it is; only the declaration
+    // that somebody thought about it goes. An inventory that can lose an entry
+    // without complaining is a list of opinions, not a check.
+    claim: 'the log inventory cannot lose an entry quietly',
+    file: 'src/lib/security/logging.test.ts',
+    find: "    file: 'src/app/api/health/route.ts',\n    calls: 1,",
+    replace: "    file: 'src/app/api/health/route.ts',\n    calls: 0,",
+    noticedBy: 'vitest run src/lib/security/logging.test.ts',
+  },
 ]
 
 /** What a run of one check produced. */

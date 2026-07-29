@@ -353,6 +353,31 @@ async function main(): Promise<void> {
     available.set('PG_TOOLS', tools)
   }
 
+  /*
+   * The media store, which is **not** a prerequisite and is reported anyway.
+   *
+   * `MEDIA_STORE=""` is a supported state for the application: the portal, the
+   * invitation and the certificate are all complete with an empty library, and
+   * `.env.example` ships it empty for that reason. It is not a supported state
+   * for a *complete* verification. Two scripts hold a check that needs
+   * somewhere to put a file — `verify:deployment` serves a range request from a
+   * real video, `verify:viewport` measures the library with something in it —
+   * and both report a failure when there is nowhere.
+   *
+   * Skipping either script wholesale would be far worse than the failure: it
+   * would drop 109 and 591 checks to avoid one. So the run says so **up front**,
+   * beside the other prerequisites, rather than letting a fresh clone discover
+   * it seventy-nine seconds in and spend a diagnosis working out whether it has
+   * found a defect. It has not; it has found a variable it did not set.
+   */
+  const configuredStore = process.env.MEDIA_STORE ?? ''
+  console.log(
+    configuredStore === ''
+      ? '  media      none — MEDIA_STORE is empty, so deployment and viewport will each ' +
+          'report one failure. Set it to "filesystem" in .env for a complete run.'
+      : `  media      ${configuredStore}`,
+  )
+
   console.log('')
 
   // -- the run --------------------------------------------------------------
