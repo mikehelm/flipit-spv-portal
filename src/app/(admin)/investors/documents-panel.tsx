@@ -59,8 +59,8 @@ export function DocumentsPanel({
         <div className="mt-3">
           <Notice tone="warn">
             There is nowhere to store a file on this deployment, so documents cannot be
-            uploaded. Set <code>MEDIA_STORE</code> and <code>MEDIA_DIR</code>. Everything else
-            on this screen works.
+            uploaded. Mike needs to connect document storage. Everything else on this
+            screen still works.
           </Notice>
         </div>
       ) : null}

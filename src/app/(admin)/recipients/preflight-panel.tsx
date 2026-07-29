@@ -21,9 +21,26 @@ function toneFor(item: PreflightItem): 'ok' | 'warn' | 'accent' {
 }
 
 function stateLabel(item: PreflightItem): string {
-  if (item.state === 'PASS') return item.kind === 'ENFORCED' ? 'Verified' : 'Confirmed'
-  if (item.state === 'FAIL') return item.kind === 'ENFORCED' ? 'Blocking' : 'Cannot confirm'
+  if (item.state === 'PASS') return 'Ready'
+  if (item.state === 'FAIL') return 'Blocked'
   return 'Needs you'
+}
+
+const FRIENDLY_LABEL: Partial<Record<PreflightItem['id'], string>> = {
+  SENDER_IDENTITY_RESOLVES: 'Sender contact details are complete',
+  TEMPLATE_RENDERS_FOR_EVERY_RECIPIENT: 'Every invitation is complete',
+  SERVICE_MODE_ACTIVE: 'The service is ready',
+  MAIL_CONNECTION_VERIFIED: 'The sending account is connected',
+  TEMPLATE_HASH_MATCHES_APPROVAL: 'The approved wording has not changed',
+  COMPLIANCE_APPROVAL_CURRENT: 'The required approval is current',
+}
+
+function friendlyDetail(detail: string): string {
+  return detail
+    .replaceAll('sender_phone', 'sender phone')
+    .replaceAll('sender_email', 'sender email')
+    .replaceAll('sender_name', 'sender name')
+    .replace(/\s*\(§\d+(?:\.\d+)?\)/g, '')
 }
 
 /**
@@ -86,8 +103,12 @@ function Row({
     <li className="border-t hairline py-4 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-ftext">{item.label}</p>
-          <p className="mt-1 text-xs leading-relaxed text-dim">{item.detail}</p>
+          <p className="text-sm font-medium text-ftext">
+            {FRIENDLY_LABEL[item.id] ?? item.label}
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-dim">
+            {friendlyDetail(item.detail)}
+          </p>
 
           {affected.length > 0 ? (
             <p className="mt-2 text-xs leading-relaxed text-dim">
@@ -96,13 +117,8 @@ function Row({
           ) : null}
         </div>
 
-        <div className="flex shrink-0 flex-col items-end gap-2">
+        <div className="flex shrink-0 items-end">
           <Pill tone={toneFor(item)}>{stateLabel(item)}</Pill>
-          {item.kind === 'ENFORCED' ? (
-            <span className="text-[10px] uppercase tracking-wider text-muted">
-              Enforced
-            </span>
-          ) : null}
         </div>
       </div>
 
@@ -134,39 +150,56 @@ export function PreflightPanel({
   /** §13.3's test send is the operator's own. The action refuses anyone else. */
   canSendTest: boolean
 }) {
+  const unresolved = preflight.items.filter((item) => item.state !== 'PASS')
+  const passed = preflight.items.filter((item) => item.state === 'PASS')
+
   return (
     <Card
-      title="Pre-flight — BUILD_SPEC §19"
+      title={preflight.ready ? 'Ready to invite' : `${unresolved.length} things need attention`}
       description={
         preflight.ready
-          ? 'Complete. Sending is unlocked for every recipient the compliance gate clears — one at a time, each with its own confirmation.'
-          : 'Sending stays locked until this is complete. It unlocks per-recipient sending; it does not send anything itself.'
+          ? 'The safety checks are complete. Each invitation still requires its own confirmation.'
+          : 'Invitations remain locked. Complete the items below; the system will keep checking everything else.'
       }
       tone={preflight.ready ? 'ok' : 'warn'}
     >
-      <ul className="mb-4">
-        {preflight.items.map((item) => (
+      {unresolved.length > 0 ? (
+        <ul>
+          {unresolved.map((item) => (
+            <Row key={item.id} item={item} names={names} canSendTest={canSendTest} />
+          ))}
+        </ul>
+      ) : (
+        <Notice>Nothing needs fixing before you review an individual invitation.</Notice>
+      )}
+
+      <details className="mt-4 rounded-sm border hairline bg-bg2/45 p-3">
+        <summary className="cursor-pointer text-xs font-semibold text-silver2">
+          {passed.length} safety checks passed
+        </summary>
+        <ul className="mt-3">
+          {passed.map((item) => (
           <Row key={item.id} item={item} names={names} canSendTest={canSendTest} />
-        ))}
-      </ul>
+          ))}
+        </ul>
+      </details>
 
-      <Notice>
-        Eight of these twelve are worked out by the application and cannot be ticked. A
-        tick would be a way to assert something untrue about money, a jurisdiction or a
-        mail server, and there is no path through this screen that offers one.
-      </Notice>
-
-      <div className="mt-5 border-t hairline pt-4">
-        <p className="mb-3 text-xs leading-relaxed text-dim">
-          Re-imported the recipient file, or changed the template? Clear the checklist and
-          walk it again.
-        </p>
-        <ActionForm
-          action={resetPreflightAction}
-          submitLabel="Clear pre-flight"
-          tone="danger"
-        />
-      </div>
+      <details className="mt-3 rounded-sm border hairline bg-bg2/45 p-3">
+        <summary className="cursor-pointer text-xs font-semibold text-muted">
+          Advanced checklist controls
+        </summary>
+        <div className="mt-3">
+          <p className="mb-3 text-xs leading-relaxed text-dim">
+            If the list or invitation wording changed, clear the confirmations and review
+            them again.
+          </p>
+          <ActionForm
+            action={resetPreflightAction}
+            submitLabel="Clear confirmations"
+            tone="danger"
+          />
+        </div>
+      </details>
     </Card>
   )
 }

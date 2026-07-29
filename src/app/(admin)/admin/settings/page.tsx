@@ -342,11 +342,8 @@ export default async function SettingsPage() {
           title="The maker's credit"
           description={
             <>
-              BUILD_SPEC §13.2 asks for a quiet &ldquo;Made by Make with Mike&rdquo; in the
-              footer, switchable per surface. It never appears in an invitation email or on
-              a participation certificate &mdash; those are formal instruments about
-              someone&rsquo;s money, and there is no setting here that would put it on
-              either.
+              Show a quiet &ldquo;Made by Make with Mike&rdquo; credit in the footer. It
+              never appears in an invitation email or on a participation certificate.
             </>
           }
         >

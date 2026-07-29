@@ -34,7 +34,7 @@ export function TemplateMediaPanel({ images }: { images: MediaListItem[] }) {
       {images.length === 0 ? (
         <p className="text-sm leading-relaxed text-dim">
           Nothing in the library yet. The invitation is designed to be legible with images
-          blocked (§11.5), so it is complete without one &mdash;{' '}
+          blocked, so it is complete without one &mdash;{' '}
           <Link href="/admin/media" className="text-orange underline-offset-4 hover:underline">
             add one
           </Link>{' '}
@@ -73,15 +73,14 @@ export function TemplateMediaPanel({ images }: { images: MediaListItem[] }) {
           <div className="mt-5 space-y-3">
             <Notice tone="warn">
               Putting an image in the template <strong>changes the template</strong>, so it
-              changes the hash the compliance approval covers &mdash; and sending is blocked
-              until a fresh approval is recorded. That is deliberate: an approval has to cover
-              the document that actually goes out, images included.
+              needs fresh approval before sending unlocks. The approval must cover the
+              document that actually goes out, images included.
             </Notice>
             <Notice>
               Use the absolute address exactly as shown. An email client has no idea where the
-              message came from, and a relative path will not load. §11.5 also asks the email to
-              be legible with images blocked, so an image should add to it rather than carry it
-              &mdash; give every one a real <code>alt</code>.
+              message came from, and a relative path will not load. The email must remain
+              legible with images blocked, so an image should add to it rather than carry it
+              &mdash; give every one a useful text description.
             </Notice>
           </div>
         </>

@@ -84,7 +84,7 @@ export default async function AuditPage({
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        <Card title="Filter" description="By actor, entity or action — BUILD_SPEC §20.">
+        <Card title="Filter" description="Find an entry by person, record type, action or date.">
           <form method="get" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="block">
               <span className="block text-xs font-semibold uppercase tracking-wider text-silver2">
@@ -184,7 +184,7 @@ export default async function AuditPage({
 
         <Card
           title="Export"
-          description="The audit-log export is the owner's alone (§20). The recipient export is available to both roles and is what §7 counts as a completed export."
+          description="Only Mike can export the full audit history. Mike and David can export the investor records for a round."
         >
           <div className="flex flex-wrap gap-3">
             <a

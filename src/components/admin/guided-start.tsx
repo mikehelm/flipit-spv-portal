@@ -8,6 +8,41 @@ import { Card } from '@/components/admin/ui'
 import type { OnboardingProgress } from '@/lib/auth/onboarding'
 import type { AdminRole } from '@/lib/roles'
 
+function ProgressStrip({
+  prepare,
+  invite,
+  followUp,
+}: {
+  prepare: HumanStatus
+  invite: HumanStatus
+  followUp: HumanStatus
+}) {
+  return (
+    <ol
+      aria-label="Round progress"
+      className="mt-5 grid grid-cols-3 overflow-hidden rounded-sm border hairline bg-bg2/50"
+    >
+      {(
+        [
+          ['Prepare', prepare],
+          ['Invite', invite],
+          ['Follow up', followUp],
+        ] as const
+      ).map(([label, status], index) => (
+        <li
+          key={label}
+          className={`px-3 py-3 ${index > 0 ? 'border-l hairline' : ''}`}
+        >
+          <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
+            {index + 1}. {label}
+          </span>
+          <span className="mt-1 block text-xs font-semibold text-silver2">{status}</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 function OperatorStart({
   firstName,
   onboarding,
@@ -113,12 +148,17 @@ function OperatorStart({
         ) : null}
       </Card>
 
-      <div className="mt-6">
-        <h2 className="text-sm font-semibold text-ftext">Preparation path</h2>
-        <p className="mt-1 text-xs leading-relaxed text-dim">
-          This shows what is available now. Ready does not mean reviewed or approved.
-        </p>
-        <ol className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+      <ProgressStrip
+        prepare={setupStatus}
+        invite={onboarding.complete ? 'Ready' : 'Waiting'}
+        followUp="Waiting"
+      />
+
+      <details className="mt-4 rounded-sm border hairline bg-bg2/35 p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-silver2">
+          Completed and later work
+        </summary>
+        <ol className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           <PathItem
             number="1"
             title="Your setup"
@@ -152,7 +192,7 @@ function OperatorStart({
             href="/portal/demo"
           />
         </ol>
-      </div>
+      </details>
     </section>
   )
 }
@@ -195,7 +235,7 @@ function OwnerStart({
         : {
             title: 'Review invitation readiness',
             description:
-              'Access requests and submitted wording changes are clear. Check the investor list and pre-flight readiness next.',
+              'Access requests and submitted wording changes are clear. Check the investor list and invitation readiness next.',
             href: '/recipients',
             action: 'Review invitation readiness',
           }
@@ -233,30 +273,41 @@ function OwnerStart({
         </Link>
       </Card>
 
-      <ol className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <PathItem
-          number="1"
-          title="Access decisions"
-          description={
-            pendingAccessRequests === 0
-              ? 'No verification decisions are waiting.'
-              : `${pendingAccessRequests} verification ${pendingAccessRequests === 1 ? 'decision is' : 'decisions are'} waiting.`
-          }
-          status={accessStatus}
-          href="/access-requests"
-        />
-        <PathItem
-          number="2"
-          title="Invitation decisions"
-          description={
-            submittedProposals === 0
-              ? 'No submitted wording changes are waiting.'
-              : `${submittedProposals} submitted wording ${submittedProposals === 1 ? 'change is' : 'changes are'} waiting.`
-          }
-          status={proposalStatus}
-          href="/admin/email-review"
-        />
-      </ol>
+      <ProgressStrip
+        prepare={totalDecisions > 0 ? 'Needs you' : 'Ready'}
+        invite={totalDecisions > 0 ? 'Waiting' : 'Ready'}
+        followUp="Waiting"
+      />
+
+      <details className="mt-4 rounded-sm border hairline bg-bg2/35 p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-silver2">
+          Completed and later work
+        </summary>
+        <ol className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <PathItem
+            number="1"
+            title="Access decisions"
+            description={
+              pendingAccessRequests === 0
+                ? 'No verification decisions are waiting.'
+                : `${pendingAccessRequests} verification ${pendingAccessRequests === 1 ? 'decision is' : 'decisions are'} waiting.`
+            }
+            status={accessStatus}
+            href="/access-requests"
+          />
+          <PathItem
+            number="2"
+            title="Invitation decisions"
+            description={
+              submittedProposals === 0
+                ? 'No submitted wording changes are waiting.'
+                : `${submittedProposals} submitted wording ${submittedProposals === 1 ? 'change is' : 'changes are'} waiting.`
+            }
+            status={proposalStatus}
+            href="/admin/email-review"
+          />
+        </ol>
+      </details>
     </section>
   )
 }

@@ -24,7 +24,7 @@ const SELECT =
   'w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext focus:border-orange'
 
 export const metadata: Metadata = {
-  title: 'Review and send — Flipit SPV',
+  title: 'People — Flipit SPV',
   robots: { index: false, follow: false, nocache: true },
 }
 
@@ -62,12 +62,19 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
   )
 }
 
-const EMAIL_STATUS_TONE = {
-  SENT: 'ok',
-  DRAFT: 'neutral',
-  FAILED: 'warn',
-  BLOCKED: 'warn',
-} as const
+function personStatus(row: ReviewRow): {
+  label: string
+  tone: 'ok' | 'neutral' | 'warn' | 'accent'
+} {
+  if (row.emailStatus === 'FAILED' || row.emailStatus === 'BLOCKED') {
+    return { label: 'Needs attention', tone: 'warn' }
+  }
+  if (row.emailStatus !== 'SENT') return { label: 'Not sent', tone: 'neutral' }
+  if (row.responseChoice === 'INTERESTED') return { label: 'Interested', tone: 'ok' }
+  if (row.responseChoice === 'QUESTION') return { label: 'Has a question', tone: 'accent' }
+  if (row.responseChoice === 'NOT_INTERESTED') return { label: 'Not interested', tone: 'neutral' }
+  return { label: 'Invited', tone: 'ok' }
+}
 
 function RecipientCard({
   row,
@@ -80,6 +87,8 @@ function RecipientCard({
   blockedMessage: string | null
   preflightReady: boolean
 }) {
+  const status = personStatus(row)
+
   return (
     <li className="rounded-sm border hairline bg-paper p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -88,7 +97,7 @@ function RecipientCard({
           <p className="truncate text-xs text-dim">{row.email}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-          <Pill tone={EMAIL_STATUS_TONE[row.emailStatus]}>{row.emailStatus}</Pill>
+          <Pill tone={status.tone}>{status.label}</Pill>
           <Pill tone="neutral">{row.jurisdiction ?? 'No country'}</Pill>
         </div>
       </div>
@@ -120,26 +129,39 @@ function RecipientCard({
         </div>
       </dl>
 
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
-        <div>
-          <dt className="text-muted">Account</dt>
-          <dd className="mt-0.5 text-silver2">{row.accountStatus}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Timeline</dt>
-          <dd className="mt-0.5 text-silver2">{row.stage.replaceAll('_', ' ')}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Response</dt>
-          <dd className="mt-0.5 text-silver2">{row.responseChoice.replaceAll('_', ' ')}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Last activity</dt>
-          <dd className="mt-0.5 text-silver2">
-            {row.lastActivityAt ? row.lastActivityAt.toISOString().slice(0, 10) : '—'}
-          </dd>
-        </div>
-      </dl>
+      <details className="mt-3 rounded-sm border hairline bg-bg2/35 px-3 py-2.5">
+        <summary className="cursor-pointer text-xs font-semibold text-silver2">
+          Offer and history details
+        </summary>
+        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
+          <div>
+            <dt className="text-muted">Account</dt>
+            <dd className="mt-0.5 text-silver2">
+              {row.accountStatus === 'ACTIVE' ? 'Active' : 'Needs attention'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted">Progress</dt>
+            <dd className="mt-0.5 text-silver2">
+              {row.stage.toLowerCase().replaceAll('_', ' ')}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted">Response</dt>
+            <dd className="mt-0.5 text-silver2">
+              {row.responseChoice === 'NO_RESPONSE'
+                ? 'Waiting'
+                : row.responseChoice.toLowerCase().replaceAll('_', ' ')}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted">Last activity</dt>
+            <dd className="mt-0.5 text-silver2">
+              {row.lastActivityAt ? row.lastActivityAt.toISOString().slice(0, 10) : 'None yet'}
+            </dd>
+          </div>
+        </dl>
+      </details>
 
       {blockedMessage ? (
         <p className="mt-4 border-l-2 border-warn pl-3 text-xs leading-relaxed text-warn">
@@ -175,7 +197,7 @@ function RecipientCard({
           />
         ) : (
           <p className="text-xs text-dim">
-            Sending unlocks when pre-flight is complete.
+            Sending unlocks when the remaining checks are complete.
           </p>
         )}
       </div>
@@ -192,6 +214,35 @@ export default async function RecipientsPage({
 
   const params = await searchParams
   const context = await loadBatchContext()
+
+  if (context.rows.length === 0) {
+    return (
+      <>
+        <SectionHeading eyebrow="People" title="Add the investor list">
+          Upload the spreadsheet once. The application will flag only the rows that need
+          attention before anybody can be invited.
+        </SectionHeading>
+        <Card title="No investors have been added yet">
+          <p className="text-sm leading-relaxed text-dim">
+            Start with the spreadsheet. Nothing is sent when it is uploaded.
+          </p>
+          {admin.role !== 'VIEWER' ? (
+            <Link
+              href="/import"
+              className="mt-4 inline-flex min-h-11 items-center rounded-sm bg-orange px-4 text-sm font-semibold text-ink"
+            >
+              Upload spreadsheet
+            </Link>
+          ) : (
+            <p className="mt-3 text-xs text-dim">
+              Mike or David will upload the investor list.
+            </p>
+          )}
+        </Card>
+      </>
+    )
+  }
+
   const summary = summarise(context.rows)
 
   const filters: ReviewFilters = {
@@ -223,59 +274,26 @@ export default async function RecipientsPage({
 
   return (
     <>
-      <SectionHeading eyebrow="Round" title="Review and send">
-        Every recipient in the round, the four money totals, and the pre-flight that
-        unlocks sending. Invitations go out one recipient at a time, each behind its own
-        confirmation — there is no bulk send anywhere in this application.
+      <SectionHeading eyebrow="People" title="Prepare and invite">
+        Fix only the people who need attention, review each invitation, then send one at
+        a time.
       </SectionHeading>
 
-      {/* §12: these two are always visible, because they are what silently breaks a send. */}
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-sm border hairline bg-paper p-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-dim">
-            Compliance approval
-          </p>
-          <p className="mt-2">
-            <Pill tone={approvalState.tone}>{approvalState.text}</Pill>
-          </p>
-          <p className="mt-2 text-xs leading-relaxed text-dim">
-            {context.drift.message}
-          </p>
-        </div>
-        <div className="rounded-sm border hairline bg-paper p-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-dim">
-            Mail connection
-          </p>
-          <p className="mt-2">
-            <Pill tone={mailHealthy ? 'ok' : 'warn'}>{context.mailConnection.state}</Pill>
-          </p>
-          <p className="mt-2 text-xs leading-relaxed text-dim">
-            {context.mailConnection.summary}
-          </p>
-        </div>
-      </div>
-
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Recipients" value={String(summary.totalRecipients)} />
-        <StatCard label="Sent" value={String(summary.sent)} />
-        <StatCard
-          label="Portal opened"
-          value={String(summary.portalOpened)}
-          hint="Claimed and opened. Not an email open — there is no tracking pixel."
-        />
-        <StatCard label="No response" value={String(summary.noResponse)} />
-        <StatCard label="Interested" value={String(summary.interested)} />
-        <StatCard label="Not interested" value={String(summary.notInterested)} />
-        <StatCard label="Questions" value={String(summary.questions)} />
-        <StatCard label="Blocked" value={String(context.gate.blocked.length)} />
-      </div>
-
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total proposed" value={money(summary.totalProposedUsd)} />
-        <StatCard label="Total committed" value={money(summary.totalCommittedUsd)} />
-        <StatCard label="Total accepted" value={money(summary.totalAcceptedUsd)} />
-        <StatCard label="Funds received" value={money(summary.totalReceivedUsd)} />
-      </div>
+      <ol className="mb-6 grid grid-cols-2 overflow-hidden rounded-sm border hairline bg-bg2/45 sm:grid-cols-4">
+        {[
+          ['1', 'Upload spreadsheet', 'Complete'],
+          ['2', 'Fix flagged rows', context.gate.blocked.length > 0 ? 'Needs you' : 'Ready'],
+          ['3', 'Review people', summary.sent > 0 ? 'Complete' : 'Current'],
+          ['4', 'Invited people', `${summary.sent} sent`],
+        ].map(([number, label, state], index) => (
+          <li key={label} className={`p-3 ${index > 0 ? 'border-l hairline' : ''}`}>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-muted">
+              {number}. {label}
+            </span>
+            <span className="mt-1 block text-xs font-semibold text-silver2">{state}</span>
+          </li>
+        ))}
+      </ol>
 
       <div className="mb-6">
         <PreflightPanel
@@ -285,102 +303,137 @@ export default async function RecipientsPage({
         />
       </div>
 
-      <Card
-        title={`Recipients (${visible.length} of ${context.rows.length})`}
-        description="Filters are links, so a filtered view can be shared or bookmarked."
-      >
-        <form method="get" className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <input
-            type="search"
-            name="search"
-            defaultValue={filters.search ?? ''}
-            placeholder="Name or email"
-            aria-label="Search by name or email"
-            className="w-full min-h-11 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext placeholder:text-muted focus:border-orange"
-          />
-          <select
-            name="emailStatus"
-            defaultValue={filters.emailStatus ?? ''}
-            aria-label="Filter by email status"
-            className={SELECT}
-          >
-            <option value="">Any email status</option>
-            {REVIEW_FILTER_CONTROLS[0]!.options.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <select
-            name="jurisdiction"
-            defaultValue={filters.jurisdiction ?? ''}
-            aria-label="Filter by jurisdiction"
-            className={SELECT}
-          >
-            <option value="">Any jurisdiction</option>
-            {jurisdictionsIn(context.rows).map((code) => (
-              <option key={code} value={code}>
-                {code}
-              </option>
-            ))}
-          </select>
+      <div className="mb-6 grid grid-cols-3 gap-3">
+        <StatCard label="People" value={String(summary.totalRecipients)} />
+        <StatCard label="Sent" value={String(summary.sent)} />
+        <StatCard label="Interested" value={String(summary.interested)} />
+      </div>
 
-          {/*
-            §12 names seven filters. All seven were parsed and applied; three
-            had a control. The other four were reachable only by typing a query
-            string, which for the person this screen is built for is the same as
-            not existing. They are rendered from REVIEW_FILTER_CONTROLS so the
-            list and `applyFilters` are read together — and a test asserts the
-            two agree, which is the check that would have caught the gap.
-          */}
-          {REVIEW_FILTER_CONTROLS.filter((control) => control.name !== 'emailStatus').map(
-            (control) => (
+      <details className="mb-6 rounded-sm border hairline bg-bg2/35 p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-silver2">
+          Round totals and connection details
+        </summary>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard label="Total proposed" value={money(summary.totalProposedUsd)} />
+          <StatCard label="Total committed" value={money(summary.totalCommittedUsd)} />
+          <StatCard label="Total accepted" value={money(summary.totalAcceptedUsd)} />
+          <StatCard label="Funds received" value={money(summary.totalReceivedUsd)} />
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-sm border hairline bg-paper p-4">
+            <p className="text-xs font-semibold text-ftext">Required approval</p>
+            <p className="mt-2"><Pill tone={approvalState.tone}>{approvalState.text}</Pill></p>
+            <p className="mt-2 text-xs text-dim">{context.drift.message}</p>
+          </div>
+          <div className="rounded-sm border hairline bg-paper p-4">
+            <p className="text-xs font-semibold text-ftext">Sending account</p>
+            <p className="mt-2">
+              <Pill tone={mailHealthy ? 'ok' : 'warn'}>
+                {mailHealthy ? 'Connected' : 'Needs attention'}
+              </Pill>
+            </p>
+            <p className="mt-2 text-xs text-dim">{context.mailConnection.summary}</p>
+          </div>
+        </div>
+      </details>
+
+      <Card
+        title={`People (${visible.length} of ${context.rows.length})`}
+        description="Search the list, then open one person to review their offer and next step."
+      >
+        <form method="get" className="mb-5">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              type="search"
+              name="search"
+              defaultValue={filters.search ?? ''}
+              placeholder="Search by name or email"
+              aria-label="Search by name or email"
+              className="min-h-11 w-full flex-1 rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm text-ftext placeholder:text-muted focus:border-orange"
+            />
+            <button
+              type="submit"
+              className="inline-flex min-h-11 items-center justify-center rounded-sm border hairline px-4 text-sm font-semibold text-ftext transition-colors hover:border-orange"
+            >
+              Search
+            </button>
+            {anyFilterSet(filters) ? (
+              <Link
+                href="/recipients"
+                className="inline-flex min-h-11 items-center text-sm text-orange underline"
+              >
+                Clear
+              </Link>
+            ) : null}
+          </div>
+
+          <details className="mt-3 rounded-sm border hairline bg-bg2/35 px-3 py-2.5">
+            <summary className="cursor-pointer text-xs font-semibold text-silver2">
+              More filters
+            </summary>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <select
-                key={control.name}
-                name={control.name}
-                defaultValue={(filters[control.name] as string | null) ?? ''}
-                aria-label={`Filter by ${control.label.toLowerCase()}`}
+                name="emailStatus"
+                defaultValue={filters.emailStatus ?? ''}
+                aria-label="Filter by email status"
                 className={SELECT}
               >
-                <option value="">{control.anyLabel}</option>
-                {control.options.map((option) => (
+                <option value="">Any email status</option>
+                {REVIEW_FILTER_CONTROLS[0]!.options.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
               </select>
-            ),
-          )}
-
-          {/*
-            No `outline-none` anywhere near this, deliberately: the whole set of
-            controls is meant to be usable from a keyboard, and a focus ring
-            removed for tidiness is the commonest way that stops being true.
-          */}
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            <span>Deadline on or before</span>
-            <input
-              type="date"
-              name="deadlineOnOrBefore"
-              defaultValue={filters.deadlineOnOrBefore ?? ''}
-              aria-label="Filter by deadline, on or before a date"
-              className={SELECT}
-            />
-          </label>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="submit"
-              className="inline-flex min-h-11 items-center justify-center rounded-sm border hairline px-4 text-sm font-semibold text-ftext transition-colors hover:border-orange"
-            >
-              Apply filters
-            </button>
-            {anyFilterSet(filters) ? (
-              <Link href="/recipients" className="text-sm text-orange underline">
-                Clear
-              </Link>
-            ) : null}
-          </div>
+              <select
+                name="jurisdiction"
+                defaultValue={filters.jurisdiction ?? ''}
+                aria-label="Filter by jurisdiction"
+                className={SELECT}
+              >
+                <option value="">Any jurisdiction</option>
+                {jurisdictionsIn(context.rows).map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </select>
+              {REVIEW_FILTER_CONTROLS.filter((control) => control.name !== 'emailStatus').map(
+                (control) => (
+                  <select
+                    key={control.name}
+                    name={control.name}
+                    defaultValue={(filters[control.name] as string | null) ?? ''}
+                    aria-label={`Filter by ${control.label.toLowerCase()}`}
+                    className={SELECT}
+                  >
+                    <option value="">{control.anyLabel}</option>
+                    {control.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ),
+              )}
+              <label className="flex flex-col gap-1 text-xs text-muted">
+                <span>Deadline on or before</span>
+                <input
+                  type="date"
+                  name="deadlineOnOrBefore"
+                  defaultValue={filters.deadlineOnOrBefore ?? ''}
+                  aria-label="Filter by deadline, on or before a date"
+                  className={SELECT}
+                />
+              </label>
+              <button
+                type="submit"
+                className="inline-flex min-h-11 items-center justify-center rounded-sm border hairline px-4 text-sm font-semibold text-ftext transition-colors hover:border-orange"
+              >
+                Apply filters
+              </button>
+            </div>
+          </details>
         </form>
 
         {visible.length === 0 ? (

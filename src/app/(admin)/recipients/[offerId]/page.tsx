@@ -10,7 +10,7 @@ import { readServiceConfig } from '@/lib/auth/service-config'
 import { listCertificates } from '@/lib/certificate/issue'
 import { formatMoney, formatPercentage } from '@/lib/money'
 import { loadStageHistory } from '@/lib/portal/advance'
-import { STAGE_LABEL, nextStage } from '@/lib/portal/stages'
+import { STAGE_LABEL, nextStage, stageIndex } from '@/lib/portal/stages'
 import { OFFER_STAGES, type OfferStage } from '@/lib/portal/timeline'
 import {
   AcceptedAmountForm,
@@ -68,6 +68,7 @@ export default async function OfferPage({
   const config = await readServiceConfig()
   const stage = row.offer.stage as OfferStage
   const next = nextStage(stage)
+  const currentStage = stageIndex(stage)
   const history = await loadStageHistory(offerId)
   const certificates = await listCertificates(offerId)
 
@@ -77,7 +78,7 @@ export default async function OfferPage({
     <>
       <SectionHeading eyebrow="Investor record" title={row.name}>
         <Link href="/recipients" className="text-orange">
-          Back to review and send
+          Back to People
         </Link>
       </SectionHeading>
 
@@ -130,34 +131,44 @@ export default async function OfferPage({
                 {row.offer.responseDeadline}
               </dd>
             </div>
-            <div>
-              <dt className="text-xs text-muted">Response</dt>
-              <dd className="mt-0.5 font-semibold text-white">
-                {row.offer.responseChoice.toLowerCase().replace(/_/g, ' ')}
-              </dd>
-            </div>
           </dl>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link
+              href={`/templates/preview/${offerId}`}
+              className="inline-flex min-h-11 items-center rounded-sm border hairline px-4 text-sm font-semibold text-ftext hover:border-orange"
+            >
+              Preview invitation
+            </Link>
+            <Link
+              href="/recipients"
+              className="inline-flex min-h-11 items-center text-sm font-semibold text-orange"
+            >
+              Check readiness
+            </Link>
+          </div>
         </Card>
 
-        <Card title="Where they are">
-          <ol className="grid grid-cols-1 gap-2">
+        <details className="rounded-sm border hairline bg-paper p-5">
+          <summary className="cursor-pointer text-sm font-semibold text-white">
+            Full timeline
+          </summary>
+          <ol className="mt-4 grid grid-cols-1 gap-2">
             {OFFER_STAGES.map((item, index) => {
-              const currentIndex = OFFER_STAGES.indexOf(stage)
               const tone =
-                index < currentIndex
+                index < currentStage
                   ? 'text-ok'
-                  : index === currentIndex
+                  : index === currentStage
                     ? 'text-orange'
                     : 'text-muted'
               return (
                 <li key={item} className={`text-sm ${tone}`}>
                   {index + 1}. {STAGE_LABEL[item]}
-                  {index === currentIndex ? ' — where they are now' : ''}
+                  {index === currentStage ? ' — current' : ''}
                 </li>
               )
             })}
           </ol>
-        </Card>
+        </details>
 
         {next && next !== 'FUNDS_RECEIVED' ? (
           <Card
@@ -168,81 +179,135 @@ export default async function OfferPage({
           </Card>
         ) : null}
 
-        <Card
-          title="Commitment agreed"
-          description="The committed amount is stored separately from the proposed one. §5 keeps all four figures distinct."
-        >
-          <CommitmentForm offerId={offerId} committedAmount={row.offer.committedAmountUsd} />
-        </Card>
-
-        <Card title="Allocation accepted">
-          <AcceptedAmountForm offerId={offerId} acceptedAmount={row.offer.acceptedAmountUsd} />
-        </Card>
-
-        <Card tone="warn" title="Funds received">
-          <FundsReceivedForm
-            offerId={offerId}
-            receivedAmount={row.offer.receivedAmountUsd}
-            corrected={row.offer.receivedAmountUsd !== null}
-          />
-        </Card>
-
-        <Card
-          title="Participation certificate"
-          description="Issued once funds are received. A correction reissues it and the superseded version is kept on their record."
-        >
-          {certificates.length === 0 ? (
-            <Notice>
-              None issued yet. It is generated automatically when funds received is recorded.
-            </Notice>
-          ) : (
-            <ul className="mb-4 grid grid-cols-1 gap-2">
-              {certificates.map((certificate) => (
-                <li
-                  key={certificate.id}
-                  className="rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm"
-                >
-                  <span className="text-ftext">
-                    Version {certificate.version} · {certificate.currency}{' '}
-                    {certificate.amountReceived} · value date {certificate.valueDate}
-                  </span>
-                  <span className="ml-2 text-xs text-muted">
-                    issued {certificate.issuedAt.toISOString().slice(0, 10)}
-                    {certificate.supersededAt ? ' · superseded' : ' · current'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <ReissueCertificateForm offerId={offerId} />
-        </Card>
-
-        <Card
-          title="Corrections"
-          description="A reversal is recorded as a correction with a reason, never as a silent overwrite."
-        >
-          <CorrectionForm offerId={offerId} currentStage={stage} />
-        </Card>
-
-        {history.length > 0 ? (
-          <Card title="History">
-            <ol className="grid grid-cols-1 gap-3">
-              {history.map((event) => (
-                <li key={event.id} className="border-l-2 border-edge pl-3">
-                  <p className="text-sm text-ftext">
-                    {event.fromStage ? `${STAGE_LABEL[event.fromStage as OfferStage]} → ` : ''}
-                    {STAGE_LABEL[event.toStage as OfferStage]}
-                    {event.isCorrection ? ' (correction)' : ''}
-                  </p>
-                  <p className="text-xs text-muted">{formatDate(event.createdAt)}</p>
-                  {event.reason ? (
-                    <p className="mt-1 text-xs leading-relaxed text-dim">{event.reason}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
+        {currentStage >= stageIndex('RESPONSE_RECORDED') ? (
+          <Card title="Response and conversation">
+            <p className="text-sm text-silver2">
+              Response:{' '}
+              <span className="font-semibold text-ftext">
+                {row.offer.responseChoice === 'NO_RESPONSE'
+                  ? 'Waiting'
+                  : row.offer.responseChoice.toLowerCase().replaceAll('_', ' ')}
+              </span>
+            </p>
+            <Link
+              href="/questions"
+              className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-orange"
+            >
+              Open questions and conversation
+            </Link>
           </Card>
         ) : null}
+
+        {currentStage >= stageIndex('DOCUMENTS_ISSUED') ? (
+          <Card title="Documents">
+            <p className="text-sm leading-relaxed text-dim">
+              The document package and its previous versions are kept with this person’s
+              account.
+            </p>
+            <Link
+              href="/investors"
+              className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-orange"
+            >
+              Open documents
+            </Link>
+          </Card>
+        ) : null}
+
+        {currentStage >= stageIndex('DOCUMENTS_ISSUED') ? (
+          <Card
+            title="Commitment agreed"
+            description="Record the amount this person has agreed to invest. It remains separate from the amount first offered."
+          >
+            <CommitmentForm offerId={offerId} committedAmount={row.offer.committedAmountUsd} />
+          </Card>
+        ) : null}
+
+        {currentStage >= stageIndex('COMMITMENT_AGREED') ? (
+          <Card title="Allocation accepted">
+            <AcceptedAmountForm offerId={offerId} acceptedAmount={row.offer.acceptedAmountUsd} />
+          </Card>
+        ) : null}
+
+        {currentStage >= stageIndex('PAYMENT_INSTRUCTIONS_ISSUED') ? (
+          <Card tone="warn" title="Funds received">
+            <FundsReceivedForm
+              offerId={offerId}
+              receivedAmount={row.offer.receivedAmountUsd}
+              corrected={row.offer.receivedAmountUsd !== null}
+            />
+          </Card>
+        ) : null}
+
+        {currentStage >= stageIndex('COMPLETED') ? (
+          <Card
+            title="Participation certificate"
+            description="Issued once funds are received. A correction reissues it and keeps the previous version in the history."
+          >
+            {certificates.length === 0 ? (
+              <Notice>
+                None issued yet. It is generated automatically when funds received is recorded.
+              </Notice>
+            ) : (
+              <ul className="mb-4 grid grid-cols-1 gap-2">
+                {certificates.map((certificate) => (
+                  <li
+                    key={certificate.id}
+                    className="rounded-sm border hairline bg-bg2 px-3 py-2.5 text-sm"
+                  >
+                    <span className="text-ftext">
+                      Version {certificate.version} · {certificate.currency}{' '}
+                      {certificate.amountReceived} · value date {certificate.valueDate}
+                    </span>
+                    <span className="ml-2 text-xs text-muted">
+                      issued {certificate.issuedAt.toISOString().slice(0, 10)}
+                      {certificate.supersededAt ? ' · previous version' : ' · current'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <ReissueCertificateForm offerId={offerId} />
+          </Card>
+        ) : null}
+
+        <details className="rounded-sm border hairline bg-paper p-5">
+          <summary className="cursor-pointer text-sm font-semibold text-white">
+            Corrections and history
+          </summary>
+          <div className="mt-5 grid grid-cols-1 gap-6">
+            <div>
+              <h2 className="text-sm font-semibold text-ftext">Record a correction</h2>
+              <p className="mt-1 text-xs leading-relaxed text-dim">
+                A reversal is recorded with a reason, never as a silent overwrite.
+              </p>
+              <div className="mt-3">
+                <CorrectionForm offerId={offerId} currentStage={stage} />
+              </div>
+            </div>
+            {history.length > 0 ? (
+              <div>
+                <h2 className="text-sm font-semibold text-ftext">History</h2>
+                <ol className="mt-3 grid grid-cols-1 gap-3">
+                  {history.map((event) => (
+                    <li key={event.id} className="border-l-2 border-edge pl-3">
+                      <p className="text-sm text-ftext">
+                        {event.fromStage ? `${STAGE_LABEL[event.fromStage as OfferStage]} → ` : ''}
+                        {STAGE_LABEL[event.toStage as OfferStage]}
+                        {event.isCorrection ? ' (correction)' : ''}
+                      </p>
+                      <p className="text-xs text-muted">{formatDate(event.createdAt)}</p>
+                      {event.reason ? (
+                        <p className="mt-1 text-xs leading-relaxed text-dim">{event.reason}</p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : (
+              <p className="text-xs text-dim">No changes have been recorded yet.</p>
+            )}
+          </div>
+        </details>
       </div>
     </>
   )

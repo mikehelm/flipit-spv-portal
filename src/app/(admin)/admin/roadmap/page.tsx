@@ -47,8 +47,8 @@ export default async function RoadmapPage() {
     <>
       <SectionHeading eyebrow="Owner only" title="Coming to your portal">
         The small set of named tiles at the bottom of an investor&rsquo;s portal. Names
-        only &mdash; §13.1 asks for short labels and no explanation, and the effect to aim
-        for is <em>a real system still being built out</em>, not a list of promises.
+        only. Keep them short and factual so they feel like a real system being built,
+        not a list of promises.
       </SectionHeading>
 
       <div className="space-y-4">
@@ -57,8 +57,8 @@ export default async function RoadmapPage() {
           <div className="mt-4">
             <Notice>
               This line is fixed. There is no setting that removes it, and renaming or
-              hiding every tile does not remove it either &mdash; §13.1 requires it
-              wherever the section appears.
+              hiding every tile does not remove it either. It is part of the investor
+              protection built into this page.
             </Notice>
           </div>
         </Card>

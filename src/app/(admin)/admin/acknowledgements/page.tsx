@@ -56,10 +56,9 @@ export default async function AcknowledgementsPage() {
   return (
     <>
       <SectionHeading eyebrow="Owner only" title="Acknowledgements">
-        The checkboxes an investor ticks before recording an interest. §8.2 makes these
-        configurable so that <em>approved wording can be applied without a code change</em>
-        &mdash; so this screen is where the approver&rsquo;s words go, and the only place
-        they live.
+        The checkboxes an investor ticks before recording an interest. Approved wording
+        can be updated here without a code change. This is the only place these words
+        are managed.
       </SectionHeading>
 
       <div className="space-y-4">
@@ -70,10 +69,9 @@ export default async function AcknowledgementsPage() {
           <div className="mt-4">
             <Notice>
               This line is fixed. There is no setting that removes it, and archiving every
-              acknowledgement does not remove it either. §13 requires that a tick is never
-              treated as a binding subscription unless the final legal documents expressly
-              make it so, and that is a constraint on this application rather than a
-              default anybody may change.
+              acknowledgement does not remove it either. A tick is never treated as a
+              binding subscription unless the final legal documents expressly make it so.
+              That protection cannot be switched off here.
             </Notice>
           </div>
         </Card>

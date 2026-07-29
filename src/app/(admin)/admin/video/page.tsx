@@ -71,8 +71,7 @@ export default async function VideoPage() {
           <Card title="This one is David's" tone="warn">
             <p className="text-sm leading-relaxed text-silver2">
               You can watch whatever is here. Recording, replacing, publishing and removing are
-              the operator&rsquo;s alone &mdash; §13.3 is written about his video, and the
-              controls below will refuse you.
+              David&rsquo;s alone, and the controls below will refuse anyone else.
             </p>
           </Card>
         ) : null}
@@ -199,7 +198,7 @@ export default async function VideoPage() {
                   href="/recipients"
                   className="inline-flex min-h-11 items-center rounded-sm bg-orange px-4 text-sm font-semibold text-ink hover:bg-orange-soft"
                 >
-                  Go to review and send
+                  Go to People
                 </Link>
               </p>
               <p className="mt-3 text-xs leading-relaxed text-dim">
@@ -221,8 +220,8 @@ export default async function VideoPage() {
         {video ? (
           <Card title="Remove it altogether">
             <p className="mb-4 text-sm leading-relaxed text-silver2">
-              Deletes the row and the stored file. §13.3 calls the whole feature optional and
-              removable, and this is what that means.
+              Deletes the record and the stored file. This feature is optional and can be
+              removed completely.
             </p>
             <ActionForm
               action={removeVideoAction}

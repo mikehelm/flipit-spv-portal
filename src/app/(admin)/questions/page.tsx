@@ -46,7 +46,7 @@ function QueueEntry({ entry }: { entry: QaQueueEntry }) {
             </p>
           ) : (
             <p className="text-xs text-muted">
-              No investor asked this — it is a seeded entry (§6.7.4).
+              This was written directly for the shared questions page.
             </p>
           )}
         </div>
