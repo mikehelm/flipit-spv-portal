@@ -95,14 +95,6 @@ describe('FILE-LEVEL errors — nothing in the file can be imported', () => {
     expect(result.canImport).toBe(false)
   })
 
-  it('a duplicate email inside the file', () => {
-    const result = run(
-      `${HEADERS}\nA,same@example.com,1500,5,2026-08-10,GB\nB,SAME@example.com,1500,5,2026-08-10,AU\n`,
-    )
-    expect(result.fileErrors[0].code).toBe('DUPLICATE_EMAIL_IN_FILE')
-    expect(result.canImport).toBe(false)
-  })
-
   it('a duplicate against a record that already exists', () => {
     const result = run(`${HEADERS}\nA,a@example.com,1500,5,2026-08-10,GB\n`, {
       existingEmails: ['a@example.com'],
@@ -207,6 +199,33 @@ describe('PER-RECIPIENT blocks — the row imports, and only it is blocked', () 
 })
 
 describe('warnings — they never block', () => {
+  it('imports duplicate addresses as visible drafts for later resolution', () => {
+    const result = run(
+      `${HEADERS}\nA,same@example.com,1500,5,2026-08-10,GB\nB,SAME@example.com,1500,5,2026-08-10,AU\n`,
+    )
+    expect(result.fileErrors).toEqual([])
+    expect(result.rows).toHaveLength(2)
+    expect(result.warnings.map((warning) => warning.code)).toContain(
+      'DUPLICATE_EMAIL_REQUIRES_REVIEW',
+    )
+    expect(result.canImport).toBe(true)
+  })
+
+  it('imports missing onboarding fields as held drafts', () => {
+    const result = run(`${HEADERS}\nA,a@example.com,1500,5,,\n`)
+    expect(result.fileErrors).toEqual([])
+    expect(result.warnings.map((warning) => warning.code)).toEqual(
+      expect.arrayContaining(['MISSING_DEADLINE', 'MISSING_JURISDICTION']),
+    )
+    expect(result.rows[0]).toMatchObject({
+      responseDeadline: null,
+      jurisdiction: null,
+      blocked: true,
+      blockReason: 'VALIDATION_FAILED',
+    })
+    expect(result.canImport).toBe(true)
+  })
+
   it('warns when the SPV percentages exceed the whole SPV', () => {
     const rows = Array.from(
       { length: 3 },

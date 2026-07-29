@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { eq } from 'drizzle-orm'
 import { db } from '@/db'
-import { investorAccounts, offers, rounds } from '@/db/schema'
+import { investorAccounts, offers, recipients, rounds } from '@/db/schema'
 import { Card, Notice, Pill, SectionHeading } from '@/components/admin/ui'
 import { requireReader } from '@/lib/auth/guards'
 import { readServiceConfig } from '@/lib/auth/service-config'
@@ -19,6 +19,7 @@ import {
   CorrectionForm,
   FundsReceivedForm,
   ReissueCertificateForm,
+  RecipientDraftForm,
 } from './parts'
 
 export const metadata: Metadata = {
@@ -44,20 +45,25 @@ export default async function OfferPage({
 }: {
   params: Promise<{ offerId: string }>
 }) {
-  await requireReader()
+  const admin = await requireReader()
 
   const { offerId } = await params
 
   const rows = await db
     .select({
       offer: offers,
-      name: investorAccounts.name,
-      email: investorAccounts.email,
+      accountName: investorAccounts.name,
+      accountEmail: investorAccounts.email,
+      recipientId: recipients.id,
+      recipientName: recipients.name,
+      recipientEmail: recipients.email,
+      jurisdiction: recipients.jurisdiction,
       accountStatus: investorAccounts.status,
       roundName: rounds.name,
     })
     .from(offers)
     .innerJoin(investorAccounts, eq(offers.accountId, investorAccounts.id))
+    .leftJoin(recipients, eq(offers.recipientId, recipients.id))
     .innerJoin(rounds, eq(offers.roundId, rounds.id))
     .where(eq(offers.id, offerId))
     .limit(1)
@@ -76,7 +82,7 @@ export default async function OfferPage({
 
   return (
     <>
-      <SectionHeading eyebrow="Investor record" title={row.name}>
+      <SectionHeading eyebrow="Investor record" title={row.recipientName ?? row.accountName}>
         <Link href="/recipients" className="text-orange">
           Back to People
         </Link>
@@ -86,7 +92,7 @@ export default async function OfferPage({
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-sm text-dim">{row.email}</p>
+              <p className="text-sm text-dim">{row.recipientEmail ?? row.accountEmail}</p>
               <p className="text-xs text-muted">
                 {row.roundName} · account {row.accountStatus.toLowerCase()}
               </p>
@@ -128,7 +134,7 @@ export default async function OfferPage({
             <div>
               <dt className="text-xs text-muted">Deadline</dt>
               <dd className="mt-0.5 font-semibold tabular-nums text-white">
-                {row.offer.responseDeadline}
+                {row.offer.responseDeadline ?? 'Not set'}
               </dd>
             </div>
           </dl>
@@ -147,6 +153,21 @@ export default async function OfferPage({
             </Link>
           </div>
         </Card>
+
+        {admin.role !== 'VIEWER' && row.recipientId ? (
+          <Card
+            title="Draft invitation details"
+            description="These details can be completed after import. Saving never sends an email."
+          >
+            <RecipientDraftForm
+              offerId={offerId}
+              name={row.recipientName ?? row.accountName}
+              email={row.recipientEmail ?? row.accountEmail}
+              jurisdiction={row.jurisdiction}
+              responseDeadline={row.offer.responseDeadline}
+            />
+          </Card>
+        ) : null}
 
         <details className="rounded-sm border hairline bg-paper p-5">
           <summary className="cursor-pointer text-sm font-semibold text-white">

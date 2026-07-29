@@ -27,8 +27,6 @@ export const REQUIRED_FIELDS: readonly TargetField[] = [
   'recipient_email',
   'investment_amount_usd',
   'spv_percentage',
-  'response_deadline',
-  'recipient_jurisdiction',
 ]
 
 export const OPTIONAL_FIELDS: readonly TargetField[] = TARGET_FIELDS.filter(
@@ -71,9 +69,10 @@ export const FIELD_HELP: Readonly<Record<TargetField, string>> = {
   recipient_email: 'One address per recipient. Duplicates block the whole file.',
   investment_amount_usd: 'The proposed amount. Stored exactly, never rounded.',
   spv_percentage: 'Their share of the SPV, as a percentage.',
-  response_deadline: 'Must be in the future. Deadlines are dates, not times.',
+  response_deadline:
+    'May be added after import. Sending stays locked until a present or future date is recorded.',
   recipient_jurisdiction:
-    'Two-letter ISO code. An invalid code blocks the file; a valid code outside the approved list blocks only that recipient.',
+    'May be added after import. Sending stays locked until a valid two-letter ISO country code is recorded and cleared.',
   indirect_flipit_percentage_override:
     'Leave empty unless a specific figure was agreed. Otherwise it is calculated.',
   sender_name: 'Only if it differs per recipient. Normally taken from settings.',

@@ -92,7 +92,7 @@ async function selectRecipients(offerId?: string): Promise<PreviewRecipient[]> {
     proposedAmountUsd: row.proposedAmountUsd,
     spvPercentage: row.spvPercentage,
     indirectPercentage: row.indirectPercentage,
-    responseDeadline: row.responseDeadline,
+    responseDeadline: row.responseDeadline ?? '',
     rowSenderName: row.rowSenderName,
     rowSenderEmail: row.rowSenderEmail,
     rowSenderPhone: row.rowSenderPhone,

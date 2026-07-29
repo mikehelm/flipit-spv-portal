@@ -99,6 +99,10 @@ async function loadCandidates(roundId: string): Promise<
   const out: Array<ReminderCandidate & { accountId: string; name: string; email: string }> = []
 
   for (const row of rows) {
+    // An imported preparation draft has no reminder date yet. It is visible in
+    // People, but it cannot enter the reminder queue until the deadline exists.
+    if (row.responseDeadline === null) continue
+
     const actuallySent = await db
       .select({
         id: reminderEvents.id,
@@ -345,7 +349,7 @@ export async function loadQueue(roundId: string): Promise<QueueRow[]> {
       cancelledAt: row.event.cancelledAt,
       skippedReason: row.event.skippedReason,
       claimedAt: row.event.claimedAt,
-      responseDeadline: row.responseDeadline,
+      responseDeadline: row.responseDeadline ?? '',
       eligibility,
       state,
     }
@@ -430,7 +434,10 @@ export async function rescheduleReminder(input: {
   }
 
   const offer = await db.query.offers.findFirst({ where: eq(offers.id, event.offerId) })
-  if (offer && input.scheduledFor.toISOString().slice(0, 10) > offer.responseDeadline) {
+  if (
+    offer?.responseDeadline &&
+    input.scheduledFor.toISOString().slice(0, 10) > offer.responseDeadline
+  ) {
     return {
       ok: false,
       message:

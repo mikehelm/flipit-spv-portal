@@ -69,7 +69,9 @@ export async function closeRound(input: {
     .from(offers)
     .where(eq(offers.roundId, input.roundId))
 
-  const outstanding = stillOpen.filter((row) => row.responseDeadline > today)
+  const outstanding = stillOpen.filter(
+    (row) => row.responseDeadline === null || row.responseDeadline > today,
+  )
 
   if (outstanding.length > 0 && !input.closingEarlyAcknowledged) {
     return {
@@ -176,7 +178,7 @@ export async function extendDeadline(input: {
   const offer = await db.query.offers.findFirst({ where: eq(offers.id, input.offerId) })
   if (!offer) return { ok: false, message: 'That offer could not be found.' }
 
-  if (input.newDeadline < offer.responseDeadline) {
+  if (offer.responseDeadline !== null && input.newDeadline < offer.responseDeadline) {
     return {
       ok: false,
       message:
@@ -190,7 +192,7 @@ export async function extendDeadline(input: {
     .set({
       responseDeadline: input.newDeadline,
       // Written once, at import. Never overwritten — see above.
-      originalDeadline: offer.originalDeadline ?? offer.responseDeadline,
+      originalDeadline: offer.originalDeadline ?? offer.responseDeadline ?? input.newDeadline,
     })
     .where(eq(offers.id, input.offerId))
 
@@ -249,7 +251,7 @@ export async function extendRoundDeadline(input: {
 
   let extended = 0
   for (const row of rows) {
-    if (row.responseDeadline >= input.newDeadline) continue
+    if (row.responseDeadline !== null && row.responseDeadline >= input.newDeadline) continue
     const result = await extendDeadline({
       offerId: row.id,
       newDeadline: input.newDeadline,

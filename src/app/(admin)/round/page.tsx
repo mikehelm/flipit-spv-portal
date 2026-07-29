@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Card, Notice, Pill, SectionHeading } from '@/components/admin/ui'
 import { requireReader } from '@/lib/auth/guards'
 import { DIGEST_CADENCE_DAYS, lastDigestAt } from '@/lib/rounds/digest'
@@ -158,8 +159,10 @@ export default async function RoundPage() {
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-white">{row.name}</p>
                       <p className="text-xs text-muted">
-                        {row.email} · deadline {row.responseDeadline}
-                        {row.originalDeadline && row.responseDeadline > row.originalDeadline
+                        {row.email} · deadline {row.responseDeadline ?? 'not set'}
+                        {row.originalDeadline &&
+                        row.responseDeadline &&
+                        row.responseDeadline > row.originalDeadline
                           ? ` · extended from ${row.originalDeadline}`
                           : ''}
                       </p>
@@ -177,10 +180,19 @@ export default async function RoundPage() {
                   </div>
 
                   <div className="mt-3">
-                    <ExtendOneForm
-                      offerId={row.offerId}
-                      currentDeadline={row.responseDeadline}
-                    />
+                    {row.responseDeadline ? (
+                      <ExtendOneForm
+                        offerId={row.offerId}
+                        currentDeadline={row.responseDeadline}
+                      />
+                    ) : (
+                      <Link
+                        href={`/recipients/${row.offerId}`}
+                        className="text-sm font-semibold text-orange"
+                      >
+                        Set the first deadline on their record
+                      </Link>
+                    )}
                   </div>
                 </li>
               ))}

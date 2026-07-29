@@ -88,13 +88,20 @@ describe('an account is durable and the round is not — §4.3, §22 AC15', () =
     expect(emailColumn?.isUnique).toBe(true)
   })
 
-  it('scopes the recipient row to its round, so the same address can appear in the next one', () => {
-    // A recipient is a row of the uploaded file and belongs to one round. The
-    // uniqueness is on the pair, not on the address, or a second round could
-    // not carry the same investor at all.
+  it('keeps every uploaded row, including a same-round duplicate that needs review', () => {
+    // A recipient is a row of the uploaded file and belongs to one round.
+    // Requiring uniqueness here would prevent a truthful draft import when
+    // two legal recipients temporarily share an address. The durable account
+    // still remains unique by email; sending stays blocked until the duplicate
+    // recipient address is resolved.
     const uniques = uniqueColumnSets(recipients)
-    expect(uniques).toContainEqual(['email', 'round_id'])
+    expect(uniques).not.toContainEqual(['email', 'round_id'])
     expect(uniques).not.toContainEqual(['email'])
+    const lookup = getTableConfig(recipients).indexes.find(
+      (index) => index.config.name === 'recipients_round_email_idx',
+    )
+    expect(lookup).toBeDefined()
+    expect(lookup?.config.unique).toBe(false)
   })
 
   it('lets rounds accumulate rather than replacing one another', () => {

@@ -4,16 +4,15 @@
  * Two severities, and the whole design of this file is keeping them apart:
  *
  *   **FILE-LEVEL errors** stop the entire file. Missing required values,
- *   malformed emails, duplicate emails inside the file or against records that
- *   already exist, non-numeric or out-of-range percentages and amounts,
- *   past-dated deadlines, and jurisdiction values that are not valid ISO
+ *   malformed emails, duplicates against records that already exist,
+ *   non-numeric or out-of-range percentages and amounts, invalid supplied
+ *   deadlines, and supplied jurisdiction values that are not valid ISO
  *   3166-1 alpha-2 codes. Nothing imports until they are fixed.
  *
- *   **PER-RECIPIENT blocks** import the row and block that row alone. There is
- *   exactly one of them: a valid country code that is outside the
- *   compliance-approved list (§8.2). The row lands with `blocked = true` and
- *   `blockReason = JURISDICTION_NOT_APPROVED` while every other row proceeds
- *   normally (AC7, AC22).
+ *   **PER-RECIPIENT blocks** import a draft while preventing it from being
+ *   sent. A missing deadline, missing jurisdiction, duplicate address within
+ *   the same new file, or a valid country outside the approved list stays
+ *   visible and editable after import. The send gates remain authoritative.
  *
  * Warnings block nothing. The operator may be modelling (§10).
  *
@@ -85,6 +84,9 @@ export type WarningCode =
   | 'ZERO_PERCENTAGE'
   | 'ZERO_AMOUNT'
   | 'INDIRECT_OVERRIDE_DIFFERS'
+  | 'DUPLICATE_EMAIL_REQUIRES_REVIEW'
+  | 'MISSING_DEADLINE'
+  | 'MISSING_JURISDICTION'
 
 export interface ImportWarning {
   code: WarningCode
@@ -97,7 +99,7 @@ export interface PreparedRow {
   sourceRowNumber: number
   name: string
   email: string
-  jurisdiction: string
+  jurisdiction: string | null
   /** Set when the cell was a country name rather than a code, so the UI can show it. */
   jurisdictionReadFrom: string | null
 
@@ -107,7 +109,7 @@ export interface PreparedRow {
   indirectPercentage: string
   indirectOverridden: boolean
 
-  responseDeadline: string
+  responseDeadline: string | null
   senderName: string | null
   senderEmail: string | null
   senderPhone: string | null
@@ -115,7 +117,7 @@ export interface PreparedRow {
 
   /** Per-recipient block. The row imports; only this row cannot be sent to. */
   blocked: boolean
-  blockReason: 'JURISDICTION_NOT_APPROVED' | null
+  blockReason: 'JURISDICTION_NOT_APPROVED' | 'VALIDATION_FAILED' | null
   blockDetail: string | null
 
   /** What the parser had to do, shown beside the row before import. */
@@ -220,14 +222,13 @@ export function validateImport(
     } else if (email !== '') {
       const firstSeenAt = seenInFile.get(email)
       if (firstSeenAt !== undefined) {
-        fileErrors.push({
-          code: 'DUPLICATE_EMAIL_IN_FILE',
+        warnings.push({
+          code: 'DUPLICATE_EMAIL_REQUIRES_REVIEW',
           sourceRowNumber: at,
-          field: 'recipient_email',
-          message: `Row ${at} repeats an email already used on row ${firstSeenAt}. Every recipient needs their own address.`,
-          raw: emailRaw,
+          message:
+            `Row ${at} shares an email with row ${firstSeenAt}. Both rows will be imported as held drafts ` +
+            'and must be separated or deliberately combined before sending.',
         })
-        rowFailed = true
       } else {
         seenInFile.set(email, at)
       }
@@ -393,7 +394,7 @@ export function validateImport(
     }
 
     // --- deadline ---------------------------------------------------------
-    let responseDeadline = ''
+    let responseDeadline: string | null = null
     const deadlineRaw = (row.values.response_deadline ?? '').trim()
     if (deadlineRaw !== '') {
       const parsed = parseDate(deadlineRaw, { order: deadlineAnswer.dateOrder })
@@ -421,10 +422,16 @@ export function validateImport(
           responseDeadline = parsed.value
         }
       }
+    } else {
+      warnings.push({
+        code: 'MISSING_DEADLINE',
+        sourceRowNumber: at,
+        message: `Row ${at} has no response deadline yet. It will be imported as a held draft.`,
+      })
     }
 
     // --- jurisdiction: the two severities meet here -----------------------
-    let jurisdiction = ''
+    let jurisdiction: string | null = null
     let jurisdictionReadFrom: string | null = null
     let blocked = false
     let blockDetail: string | null = null
@@ -454,9 +461,27 @@ export function validateImport(
             'This recipient is imported and held; every other recipient is unaffected.'
         }
       }
+    } else {
+      warnings.push({
+        code: 'MISSING_JURISDICTION',
+        sourceRowNumber: at,
+        message: `Row ${at} has no jurisdiction yet. It will be imported as a held draft.`,
+      })
     }
 
     if (rowFailed) continue
+
+    const missingDraftFields = [
+      responseDeadline === null ? 'response deadline' : null,
+      jurisdiction === null ? 'jurisdiction' : null,
+    ].filter((value): value is string => value !== null)
+
+    if (missingDraftFields.length > 0) {
+      blocked = true
+      blockDetail =
+        `Draft preparation is incomplete: ${missingDraftFields.join(' and ')} ` +
+        `${missingDraftFields.length === 1 ? 'is' : 'are'} still needed. Nothing can be sent.`
+    }
 
     prepared.push({
       sourceRowNumber: at,
@@ -474,7 +499,12 @@ export function validateImport(
       senderPhone: emptyToNull(row.values.sender_phone),
       internalNotes: emptyToNull(row.values.internal_notes),
       blocked,
-      blockReason: blocked ? 'JURISDICTION_NOT_APPROVED' : null,
+      blockReason:
+        missingDraftFields.length > 0
+          ? 'VALIDATION_FAILED'
+          : blocked
+            ? 'JURISDICTION_NOT_APPROVED'
+            : null,
       blockDetail,
       notes: dedupe(notes),
       display: {
@@ -485,7 +515,7 @@ export function validateImport(
         indirectPercentage: formatPercentage(indirectPercentage, {
           decimalPlaces: context.decimalPlaces,
         }),
-        deadline: responseDeadline,
+        deadline: responseDeadline ?? 'Not set',
       },
     })
   }

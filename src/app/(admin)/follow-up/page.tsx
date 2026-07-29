@@ -95,13 +95,17 @@ export default async function FollowUpPage() {
         person.responseChoice === 'NO_RESPONSE' &&
         !person.blocked,
     )
-    .sort((left, right) => left.responseDeadline.localeCompare(right.responseDeadline))
+    .sort((left, right) =>
+      (left.responseDeadline ?? '9999-12-31').localeCompare(
+        right.responseDeadline ?? '9999-12-31',
+      ),
+    )
     .map((person) => ({
       id: `follow-${person.offerId}`,
       person: person.name,
       reason: person.deadlineReached
-        ? `No response. Their ${person.responseDeadline} deadline has arrived.`
-        : `No response yet. Their deadline is ${person.responseDeadline}.`,
+        ? `No response. Their ${person.responseDeadline ?? 'unset'} deadline has arrived.`
+        : `No response yet. Their deadline is ${person.responseDeadline ?? 'not set'}.`,
       href: `/recipients/${person.offerId}`,
       action: canAct ? 'Review next step' : 'Inspect',
     }))

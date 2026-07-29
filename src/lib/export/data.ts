@@ -127,7 +127,7 @@ export async function loadRecipientExportRows(
       jurisdiction: row.jurisdiction ?? 'ZZ',
       roundName: row.roundName,
       offerId: row.offer.id,
-      responseDeadline: row.offer.responseDeadline,
+      responseDeadline: row.offer.responseDeadline ?? '',
       currency: receipt?.currency?.toUpperCase() ?? 'USD',
       spvPercentage: row.offer.spvPercentage,
       indirectFlipitPercentage: row.offer.indirectPercentage,

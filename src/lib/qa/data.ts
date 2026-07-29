@@ -310,7 +310,7 @@ export async function loadQaQueue(filter: QaQueueFilter = 'ALL'): Promise<QaQueu
           indirectPercentage: formatPercentage(offer.indirectPercentage, {
             decimalPlaces: config.decimalPlaces,
           }),
-          responseDeadline: offer.responseDeadline,
+          responseDeadline: offer.responseDeadline ?? 'Not set',
           stage: offer.stage,
           roundName: offer.roundName,
         }

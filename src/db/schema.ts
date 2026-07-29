@@ -403,8 +403,11 @@ export const recipients = pgTable(
       .references(() => rounds.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     email: text('email').notNull(),
-    /** ISO 3166-1 alpha-2. Drives the per-recipient gate. */
-    jurisdiction: char('jurisdiction', { length: 2 }).notNull(),
+    /**
+     * ISO 3166-1 alpha-2. Null while the operator is still preparing the list.
+     * A null value is a hard send blocker, never an approved jurisdiction.
+     */
+    jurisdiction: char('jurisdiction', { length: 2 }),
     internalNotes: text('internal_notes'),
 
     senderName: text('sender_name'),
@@ -416,7 +419,7 @@ export const recipients = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    uniqueIndex('recipients_round_email_idx').on(t.roundId, t.email),
+    index('recipients_round_email_idx').on(t.roundId, t.email),
     index('recipients_jurisdiction_idx').on(t.jurisdiction),
   ],
 )
@@ -508,7 +511,11 @@ export const offers = pgTable(
     indirectPercentage: percentage('indirect_percentage').notNull(),
     indirectOverridden: boolean('indirect_overridden').notNull().default(false),
 
-    responseDeadline: date('response_deadline').notNull(),
+    /**
+     * Null while the round is being prepared. Pre-flight refuses sending until
+     * a real present-or-future date has been recorded.
+     */
+    responseDeadline: date('response_deadline'),
     originalDeadline: date('original_deadline'),
 
     stage: offerStageEnum('stage').notNull().default('INVITATION_SENT'),

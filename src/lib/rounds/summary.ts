@@ -34,7 +34,7 @@ export interface RoundParticipant {
   name: string
   email: string
   responseChoice: 'NO_RESPONSE' | 'INTERESTED' | 'NOT_INTERESTED' | 'QUESTION'
-  responseDeadline: string
+  responseDeadline: string | null
   originalDeadline: string | null
   stage: string
   emailStatus: string
@@ -117,7 +117,7 @@ export async function loadRoundSummary(
     emailStatus: row.emailStatus,
     blocked: row.blocked,
     accountStatus: row.accountStatus,
-    deadlineReached: row.responseDeadline <= today,
+    deadlineReached: row.responseDeadline !== null && row.responseDeadline <= today,
   }))
 
   const committedTotal = sumDecimals(
@@ -143,7 +143,7 @@ export async function loadRoundSummary(
 
   const upcoming = participants
     .map((row) => row.responseDeadline)
-    .filter((deadline) => deadline > today)
+    .filter((deadline): deadline is string => deadline !== null && deadline > today)
     .sort()
 
   return {
@@ -162,7 +162,10 @@ export async function loadRoundSummary(
         .length,
       askedAQuestion: participants.filter((row) => row.responseChoice === 'QUESTION').length,
       extended: participants.filter(
-        (row) => row.originalDeadline !== null && row.responseDeadline > row.originalDeadline,
+        (row) =>
+          row.originalDeadline !== null &&
+          row.responseDeadline !== null &&
+          row.responseDeadline > row.originalDeadline,
       ).length,
       deadlineReached: participants.filter((row) => row.deadlineReached).length,
       blocked: participants.filter((row) => row.blocked).length,

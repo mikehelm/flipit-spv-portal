@@ -9,6 +9,7 @@ import {
   recordFundsReceivedAction,
   reissueCertificateAction,
 } from '@/actions/offers'
+import { updateRecipientDraftAction } from '@/actions/recipient-draft'
 import { ActionForm } from '@/components/admin/action-form'
 import { Checkbox, Field, Select, TextArea, TextInput } from '@/components/admin/ui'
 import { FUNDS_CONFIRMATION_NOTICE, STAGE_LABEL } from '@/lib/portal/stages'
@@ -38,6 +39,61 @@ export function AdvanceForm({
       </Field>
       <Field label="Internal note" name="internalNote" hint="Optional. Never shown to them.">
         <TextArea name="internalNote" rows={2} />
+      </Field>
+    </ActionForm>
+  )
+}
+
+export function RecipientDraftForm({
+  offerId,
+  name,
+  email,
+  jurisdiction,
+  responseDeadline,
+}: {
+  offerId: string
+  name: string
+  email: string
+  jurisdiction: string | null
+  responseDeadline: string | null
+}) {
+  return (
+    <ActionForm
+      action={updateRecipientDraftAction}
+      submitLabel="Save draft details"
+      hidden={{ offerId }}
+    >
+      <Field label="Name" name="name">
+        <TextInput name="name" defaultValue={name} required />
+      </Field>
+      <Field
+        label="Email"
+        name="email"
+        hint="Shared addresses are allowed while preparing, but sending stays blocked until each offer has the intended address."
+      >
+        <TextInput name="email" type="email" defaultValue={email} required />
+      </Field>
+      <Field
+        label="Jurisdiction"
+        name="jurisdiction"
+        hint="Leave blank until known, or enter a country name or two-letter ISO code."
+      >
+        <TextInput
+          name="jurisdiction"
+          defaultValue={jurisdiction ?? ''}
+          className="uppercase"
+        />
+      </Field>
+      <Field
+        label="Response deadline"
+        name="responseDeadline"
+        hint="Leave blank until David is ready to set the invitation deadline."
+      >
+        <TextInput
+          name="responseDeadline"
+          type="date"
+          defaultValue={responseDeadline ?? ''}
+        />
       </Field>
     </ActionForm>
   )

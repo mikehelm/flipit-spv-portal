@@ -124,7 +124,7 @@ function RecipientCard({
         <div>
           <dt className="text-muted">Deadline</dt>
           <dd className="mt-0.5 font-semibold tabular-nums text-ftext">
-            {row.responseDeadline}
+            {row.responseDeadline || 'Not set'}
           </dd>
         </div>
       </dl>
