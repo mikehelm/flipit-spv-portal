@@ -1964,6 +1964,46 @@ now.
 
 ---
 
+## The alarm that wakes somebody, and the page they open when they do
+
+There are three places the application's own health report is read: the **health
+page**, which lists everything; the **banner** on the overview, which carries
+what a page load can afford to work out; and the **signal** an outside monitoring
+service polls every few minutes — the only one of the three that still works when
+the machine itself has stopped.
+
+A year ago, the most serious thing this report can find — a storage bucket
+keeping every file it was told to destroy — reached the page and never the
+banner. Nothing said so, because a rule missing from a list looks exactly like a
+rule that was never written. That was fixed, and a check was written comparing
+the page against the banner.
+
+There is now one comparing the page against the **alarm**, across fifty-four
+different states of the system:
+
+- the monitor raises an alarm when, and only when, the page shows something that
+  needs a person;
+- every area that is not fine is named in the alarm, once, at its **worse**
+  severity — an alarm that says "worth a look" about something that also holds a
+  "this is wrong" is telling you the more comfortable half;
+- and nothing about any person is in it. That payload sits behind a shared
+  secret held by an outside company, which is a weaker thing than a login.
+
+### What writing it found
+
+Something none of the existing checks could see. All thirteen health rules are
+assembled into the report by a **hand-written list**. A rule written and simply
+not added to that list appears on *nothing* — not the page, not the banner, not
+the alarm — and every check that compares one of those against another passes,
+because it is missing from both sides.
+
+That is the same mistake as the bucket one, a level further up, and nothing was
+looking for it. Now every rule is found automatically and required to be in the
+list, in both directions. Two more entries in the break-it-on-purpose command
+prove it: **thirty-one promises**.
+
+---
+
 ## Things worth knowing
 
 - The `ENCRYPTION_KEY` and `AUTH_SECRET` in your local `.env` are throwaway development values. Generate fresh ones for anything real.

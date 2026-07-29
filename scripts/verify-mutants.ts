@@ -499,6 +499,31 @@ const MUTATIONS: readonly Mutation[] = [
     noticedBy: 'verify:determinism qa',
     says: /runs clean over its own leftovers/,
   },
+  {
+    // The omission one level above the one `banner-parity.test.ts` covers.
+    //
+    // `buildFindings` is a hand-written list of thirteen calls. A rule left out
+    // of it reaches **no** surface — not the health page, not the overview
+    // banner, and not the monitor that pages somebody — and every
+    // surface-against-surface parity test agrees about it perfectly, because it
+    // is on none of them. This is the shape of the defect that hid
+    // `bucketRetentionFindings` from the banner for a year, one level up.
+    claim: 'a rule left out of the assembly reaches no surface at all',
+    file: 'src/lib/health/rules.ts',
+    find: '    ...storageFindings(facts),\n',
+    replace: '',
+    noticedBy: 'vitest run src/lib/health/signal-parity.test.ts',
+  },
+  {
+    // The third surface. `summariseHealth` reduces the report for an uptime
+    // monitor, and dropping `ATTENTION` from the areas loop leaves a monitor
+    // told about a system whose page shows something it is not being told.
+    claim: 'the signal names every area the health page says is not fine',
+    file: 'src/lib/health/signal.ts',
+    find: "  for (const severity of ['WRONG', 'ATTENTION'] as const) {",
+    replace: "  for (const severity of ['WRONG'] as const) {",
+    noticedBy: 'vitest run src/lib/health/signal-parity.test.ts',
+  },
 ]
 
 /** What a run of one check produced. */

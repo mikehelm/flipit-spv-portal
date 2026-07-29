@@ -13764,3 +13764,158 @@ somebody deletes.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## The third surface, and the omission one level up
+
+*"The same trick would work on the health signal"* has been on the queue for five
+entries. It was the largest untouched item that is not about the checking
+machinery, and doing it found something bigger than the item itself.
+
+### Three readers, three places a finding can fail to arrive
+
+The health report has three: the **page**, which lists everything; the
+**banner**, which carries what a page load can afford; and the **signal** at
+`GET /api/health`, which is what an uptime monitor polls and the only one of the
+three that survives the machine itself stopping.
+
+`banner-parity.test.ts` compares the first two, for a stated reason —
+`bucketRetentionFindings` reached the page and never the banner for a year, and
+*a rule missing from a list looks exactly like a rule that was never written*.
+`signal-parity.test.ts` now compares the third against the first, over **every
+world the real rules are driven through** rather than over hand-built reports:
+
+- the monitor pages when, and **only** when, the page shows a `WRONG`;
+- every area with a finding that is not `OK` is named, once, at the **worse** of
+  its severities — a monitor told `attention` about an area that also holds a
+  `wrong` is being told the more comfortable half;
+- the counts account for every finding;
+- and nothing about a person is in the payload, checked against the headlines,
+  details and remedies the rules actually emitted rather than invented ones.
+
+### And the omission a level above all three
+
+Writing it exposed something none of the existing parity tests could see.
+`buildFindings` is a **hand-written list of thirteen calls**. A rule written,
+exported, and simply not added to that list reaches **no surface at all** — not
+the page, not the banner, not the monitor — and every surface-against-surface
+parity test passes, because it is missing from both sides of every comparison.
+
+***That is the `bucketRetentionFindings` defect one level up, and nothing was
+looking for it.*** Every `*Findings` export is now discovered from the module
+namespace and required to appear in `buildFindings`, in both directions: no rule
+missing from the assembly, and nothing in the assembly that no rule produced.
+
+**Two mutations**, both of them deletions from a list: `storageFindings` removed
+from `buildFindings`, and `ATTENTION` removed from the signal's areas loop.
+
+### One fixture, not two
+
+The worlds moved out of `banner-parity.test.ts` into `src/lib/health/worlds.ts`.
+Eighteen cheap worlds crossed with three expensive ones, now driven by two files.
+
+The alternative was a second copy, and the argument against it is the one this
+repository has already made twice — `scripts/lib/browser.ts` exists because a
+browser launch was written twice and the copies disagreed, and `verify/source.ts`
+exists because four things had four ideas of what code is. ***Two parity tests
+over two drifting copies of the same fixture would make two tests disagree about
+what the system is while both report success.***
+
+**Decisions.**
+
+- ***The signal is compared against the page, not against the banner.*** The
+  banner deliberately carries less; the page is the full report and is what
+  somebody opens after being paged.
+- ***Area severity is checked as the worse of the two, explicitly.*** The
+  deduplication makes it true by construction today, and "true by construction"
+  was also what the comment above `storageFindings` said for a year.
+- ***The privacy check is repeated over real rule output.*** `signal.test.ts`
+  already proves it over hand-built findings; a headline carrying a reminder id
+  would come from a rule, not from a fixture.
+- ***The worlds module is not a test file.*** Same position as `vacuous.ts` and
+  `log-scan.ts`: the thing two tests share is a module.
+
+**Deviations.** None.
+
+**Checklist.** No point changes hands. Point 5's spirit — nothing reveals
+anything about a person — is now checked on the one payload that leaves the
+building unauthenticated, against the output the real rules produce.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**3041**, 133 files) are green.
+`pnpm verify:all` is **27 passed, 0 failed, 0 skipped**.
+`pnpm verify:mutants` is **62 passed, 0 failed** — thirty-one claims.
+
+**Uncertain.**
+
+- ***`unattendedFindings` is a hand-written list too, and nothing checks its
+  completeness the way `buildFindings` is now checked.*** The banner test asks
+  whether a rule *could* be on the banner and complains when a cheap one is not
+  — which is the stronger question — but a rule added to `unattendedFindings`
+  and to nothing else would be on the banner and on no other surface. **Untested,
+  and it is the next item in this area.**
+- ***The three expensive worlds are three.*** A rule reading an expensive fact
+  that happens to answer identically in all three is treated as cheap. The
+  header says so; nothing bounds how likely it is.
+- ***Nothing drives `unavailableSignal` through a real failure.*** The route
+  catches a thrown report and answers `unavailable`; the throw is never caused by
+  a real broken database in a test.
+- ***Ordering between scripts is still untested in `verify:determinism`.*** Each
+  script survives its own leftovers; nothing proves `verify:export` survives
+  `verify:qa`'s, which is the shape the flake actually took.
+- ***The unit suite is not run twice, and not shuffled.*** 3041 tests; vitest can
+  shuffle file and test order with a seed, and order dependence is the commonest
+  hidden non-determinism there is.
+- ***Two runs is repeatability, not a flakiness sample.***
+- ***The five build-and-browser verifications are not repeated.***
+- ***Choosing between `existsInCode` and a raw regex is a judgement per rule, and
+  getting it wrong is silent.***
+- ***The camera flag rests on a comment.***
+- ***The regex-or-division heuristic is still a heuristic.***
+- ***`emptyBeside` has no weak default.***
+- ***Thirty-odd other `.length === 0` sites were read by eye and left alone.***
+- ***The log sweep reads names, not values.***
+- ***The six negated checks without controls are recorded, not solved.***
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***An exception inside the transaction leaves a `began` row unresolved.***
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*
