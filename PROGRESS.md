@@ -14010,9 +14010,10 @@ variable.
 
 **Uncertain.**
 
-- ***Nothing mutates `setup.ts` back to `??=` in `verify:mutants`.*** The new
-  test would catch it, and that pairing is unproven. **Cheap, and the next
-  item.**
+- ~~*Nothing mutates `setup.ts` back to `??=`.*~~ **Done in the same session.**
+  `DATABASE_URL` restored to `??=` and `setup.test.ts` fails. `verify:mutants`
+  is **64 passed, 0 failed** — thirty-two claims. The one that would have been
+  worth having before this morning is the one now in the list.
 - ***One shuffled run per `verify:all`, at a random seed, is a thin sample.***
   Two defects in three runs says the space is not empty. Nobody knows how many
   more orders are bad, and nothing accumulates the seeds that have been tried.

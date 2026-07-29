@@ -524,6 +524,19 @@ const MUTATIONS: readonly Mutation[] = [
     replace: "  for (const severity of ['WRONG'] as const) {",
     noticedBy: 'vitest run src/lib/health/signal-parity.test.ts',
   },
+  {
+    // The suite's own environment. `??=` here means the unit tests use whatever
+    // is already in the environment — which made six of them fail inside
+    // `verify:determinism` and pass from a bare shell, and which meant anybody
+    // with a real `DATABASE_URL` exported ran the whole suite against their
+    // real database. One character each, and the file's own header promises the
+    // opposite.
+    claim: 'the unit suite chooses its environment rather than inheriting one',
+    file: 'src/test/setup.ts',
+    find: "process.env.DATABASE_URL = 'postgresql://postgres@127.0.0.1:5433/spv_test'",
+    replace: "process.env.DATABASE_URL ??= 'postgresql://postgres@127.0.0.1:5433/spv_test'",
+    noticedBy: 'vitest run src/test/setup.test.ts',
+  },
 ]
 
 /** What a run of one check produced. */
