@@ -267,6 +267,82 @@ const MUTATIONS: readonly Mutation[] = [
     replace: '  if (false) return null',
     noticedBy: 'vitest run src/lib/qa/anonymity.test.ts',
   },
+
+  // -------------------------------------------------------------------------
+  // Checklist 8 — never log a credential, an email body, or the OpenAI key.
+  //
+  // Four entries in a row recorded this point as having no mutation, each with
+  // the same reasoning: it is a property of every log statement in the
+  // repository rather than of one function, so there is no single line to
+  // break. The reasoning is right about the shape and was wrong about the
+  // conclusion.
+  //
+  // Point 8 is defended in four places, and each of them has a line:
+  //
+  //   - `Secret` makes a credential inert in a template literal;
+  //   - `scrubSecrets` removes one from text a transport handed back;
+  //   - `assertNoSecrets` throws rather than write a forbidden key to the
+  //     audit log;
+  //   - and everything left over is a *set* of console calls, which
+  //     `src/lib/security/logging.test.ts` enumerates.
+  //
+  // The last two below are mutated the other way round: rather than removing a
+  // defence they add the defect — a body printed in a send path, and a new log
+  // line in a module that is not allowed one — and ask whether anybody
+  // notices. They are the only mutations in this file that *insert* code. The
+  // defects this repository has actually shipped were omissions, so having a
+  // pair of the other shape is worth the asymmetry.
+  // -------------------------------------------------------------------------
+  {
+    // Checklist 8. The class exists so a stray `console.log(transport)` prints
+    // `[redacted]`. Give it back its value and it prints the app password.
+    claim: 'a credential prints as [redacted], whatever is done to it',
+    file: 'src/lib/email/transport/secret.ts',
+    find: "  toString(): string {\n    return '[redacted]'\n  }",
+    replace: '  toString(): string {\n    return this.#value\n  }',
+    noticedBy: 'vitest run src/lib/email/transport/secret.test.ts',
+  },
+  {
+    // Checklist 8. The last thing between a credential and the audit log, for
+    // text this application did not author — an error object from a transport
+    // library. Its own comment says it should never fire in practice, and a
+    // mutation is how "should never" is told apart from "cannot".
+    claim: 'a credential is scrubbed out of text a transport handed back',
+    file: 'src/lib/email/transport/secret.ts',
+    find: '    result = result.split(raw).join(REDACTED)',
+    replace: '    result = result.split(raw).join(raw)',
+    noticedBy: 'vitest run src/lib/email/transport/secret.test.ts',
+  },
+  {
+    // Checklist 8. The audit log is the one store in this application exported
+    // wholesale, so a body in a metadata cell leaves the building through a
+    // door the investor never sees. Drop the two content keys from the list.
+    claim: 'an email body cannot be written to the audit log',
+    file: 'src/lib/audit.ts',
+    find: '|htmlbody|textbody|body|transcript)/i',
+    replace: '|htmlbody|textbody)/i',
+    noticedBy: 'vitest run src/lib/audit.test.ts',
+  },
+  {
+    // Checklist 8, inverted: not a defence removed but the defect itself, in
+    // the place it would really happen — somebody debugging a send, printing
+    // the thing they are debugging, and leaving it in.
+    claim: 'no log line anywhere prints an email body',
+    file: 'src/lib/sending/send-invitation.ts',
+    find: '  const snapshotId = snapshot!.id',
+    replace: '  const snapshotId = snapshot!.id\n  console.log(rendered.html)',
+    noticedBy: 'vitest run src/lib/security/logging.test.ts',
+  },
+  {
+    // And the inventory, which is the half of that file a body-shaped mutation
+    // does not reach: a new console call in the shipped application, printing
+    // nothing sensitive at all, is still a decision somebody has to state.
+    claim: 'a new log line in the shipped application has to be declared',
+    file: 'src/lib/media/reconcile.ts',
+    find: 'export async function countTrackedFiles',
+    replace: 'console.log("counting")\nexport async function countTrackedFiles',
+    noticedBy: 'vitest run src/lib/security/logging.test.ts',
+  },
 ]
 
 /** What a run of one check produced. */

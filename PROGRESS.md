@@ -12897,3 +12897,188 @@ token, an email body, or the OpenAI key* — has none.
 - *Nothing measures bundle size, and nothing measures what the middleware costs.*
 - *`worker-src 'self'` has been proved only on Chromium.*
 - *`global-error.tsx` remains unrendered, and that is a stated position.*
+
+---
+
+## Point 8, and the scanner that reported a cleaner repository than the truth
+
+Five entries in a row have ended with point 8 — *does any log line contain a
+token, an email body, or the OpenAI key* — recorded as the one item on the
+twelve-point checklist with no mutation, each giving the same reason: it is a
+property of **every log statement in the repository** rather than of one
+function, so there is no single line to break. The last entry added that it
+"may end in a note rather than a mutation".
+
+It did not. The reasoning is right about the shape of the claim and was wrong
+about the conclusion.
+
+### What point 8 actually rests on
+
+A property of every statement is a property of the **set** of statements, and a
+set can be enumerated. Once it is, point 8 turns out to rest on four things, and
+all four have a line:
+
+- ***`Secret`*** makes a credential inert in a template literal, a
+  `JSON.stringify` and a `console.log` alike.
+- ***`scrubSecrets`*** removes one from text this application did not author —
+  an error object handed back by a transport library.
+- ***`assertNoSecrets`*** throws rather than write a forbidden key to the audit
+  log, which is the one store here that is exported wholesale.
+- ***And everything left over is a set of console calls***, which
+  `src/lib/security/logging.test.ts` now enumerates.
+
+**Five mutations, and all twelve points of the checklist are now covered.** The
+first three break a defence. The last two do the opposite and *insert* the
+defect: one prints `rendered.html` in the middle of `sendInvitationEmail` —
+somebody debugging a send, printing the thing they are debugging, leaving it in
+— and one adds a log line to a module that prints nothing sensitive at all, to
+drive the half of the check the first does not reach. They are the only
+mutations in this file that add code rather than remove it, and this repository's
+real defects have been omissions, so having a pair of the other shape is worth
+the asymmetry.
+
+### The sweep
+
+`src/lib/security/log-scan.ts` reads every `.ts`/`.tsx` under `src/` and
+`scripts/`, finds every console call, and separates each argument into the
+**names** in it and the **prose** in it. Three rules, each with a control:
+
+1. **No name in an argument position is a credential or a message body.** 447
+   calls, none of them.
+2. **The shipped application logs from two files**, at an exact count, each with
+   a written reason: the health endpoint's fixed sentence, and the seed. A
+   ceiling would let a log line into a request path silently; an exact count
+   costs somebody a sentence.
+3. **The one deliberate exception is named.** `db/seed.ts` prints a one-time
+   setup link — token and all — to the console of the administrator who ran it.
+   It is the only place here a credential is printed on purpose, and an unstated
+   exception is how a rule rots.
+
+### The part worth writing down
+
+The first draft of the scanner reported **zero offenders across the whole
+repository**, and it was wrong twice, in opposite directions.
+
+Wrong the *safe* way first: `scripts/check-media.ts` explains bucket versioning
+in a concatenated sentence containing the word *question*, and the scanner
+reported the prose. A rule that cries wolf on a paragraph of documentation is a
+rule somebody deletes, so quoted runs are now lifted out and judged by a
+different rule — does this look like a credential — which prose does not meet.
+
+Then wrong the *dangerous* way. `scripts/verify-deployment.ts` contains the
+regular expression `/(?:href|src)="([^"]+)"/g`. A classifier that reads those
+quotation marks as the start of a string opens one that never closes: it
+swallowed five hundred lines and **fourteen real console calls** with them. The
+sweep reported a cleaner repository than the truth, in exactly the words a clean
+repository reports itself in. Handling regular expressions properly took the
+count of scanned calls from 413 to 447.
+
+***That is the defect this whole file exists to rule out, found inside the file
+itself, on the first run.*** It is also the fourth time in this repository that
+a check reported success about something it was not looking at — and the first
+where the thing not being looked at was the checker's own input.
+
+**Decisions.**
+
+- ***Text inside a string or a comment is not a log statement, and this is a
+  rule rather than an exclusion list.*** Two files needed it —
+  `email/transport/secret.ts` documents `console.log(transport)` in a comment
+  explaining why it is inert, and `scripts/verify-mutants.ts` holds two log
+  lines that print a body as *strings*, pasted into other files on purpose and
+  never executed. An exclusion list would have covered both and taught nothing;
+  a classifier covers the next one too.
+- ***Identifiers are split on camel humps before the rule reads them.***
+  `\btoken\b` reads straight past `portalToken`, `setupToken` and
+  `sessionToken`, which is to say past every name this repository actually gives
+  a credential. The first draft did exactly that and the control caught it.
+  `somebody` is not split, so `\bbody\b` does not fire on it.
+- ***`text` is deliberately not a forbidden name.*** It is the commonest
+  innocent identifier here — a heading, a label, a line of a report — and a rule
+  that fires on all of them is a rule somebody switches off. `textBody` is the
+  name this application gives the thing that matters.
+- ***An exact count, not a ceiling, for the two files that may log.***
+- ***The sweep does not claim to see through an alias.*** It reads source text,
+  so a body assigned to an innocent name first defeats it. Nothing text-based
+  could do otherwise, and the header says so rather than implying coverage it
+  does not have.
+
+**Deviations.** None.
+
+**Checklist.** All twelve points now have at least one mutation demonstrating
+the check catching the claim being broken. Point 8 has five.
+
+`pnpm typecheck`, `pnpm lint` and `pnpm test` (**2835**, 131 files) are green.
+`pnpm verify:mutants` is **40 passed, 0 failed** — twenty claims.
+
+**Uncertain.**
+
+- ***The sweep reads names, not values.*** `const x = rendered.html; console.log(x)`
+  passes it. The runtime defences catch a credential that way — `Secret` is
+  inert whatever it is called — but nothing catches an aliased *body*. The next
+  step up is following an assignment one level, and it is not obvious that is
+  worth the machinery. **Named as the honest limit, not as a plan.**
+- ***Nothing checks `process.stdout.write`.*** Two files use it —
+  `verify-all.ts` streams a child's output, `mint-setup-link.ts` prints a token
+  by design — and both are deliberate. The sweep does not look at either, so
+  they are two log statements outside the set it claims to enumerate. **This is
+  the cheapest remaining gap in point 8 and it is the next item.**
+- ***The classifier does not know a regular expression from a division in every
+  case.*** It uses the usual previous-token heuristic. It is right on this
+  repository — the call count is stable and the long masked runs are all real
+  HTML templates — but it is a heuristic and a future `a /b/ c` would fool it.
+- ***The flake was found by luck.*** One run in three. Nothing runs `verify:all`
+  twice, and nothing measures whether the suite is deterministic.
+- ***Every other mutation is still a single edit to a single file.*** Two now
+  insert rather than rewrite; none deletes a whole rule from a list, which is
+  the shape of the defects this repository has actually shipped.
+- ***Nothing mutates the verification scripts themselves.***
+- ***`.filter(...).length === 0` has not been looked at.***
+- ***The six negated checks without controls are recorded, not solved.*** The
+  three new ones in `logging.test.ts` each have one, which is the pattern to
+  apply to the six rather than a reduction of them.
+- ***The same trick would work on the health *signal*.*** `summariseHealth` is a
+  third surface for the findings and has no parity test.
+- ***Nothing checks that the fallback browser is a full Chromium rather than a
+  headless shell.***
+- ***A read-only mount and a real permission denial have not been driven.***
+- ***Nothing has actually killed the process mid-erasure.***
+- ***An exception inside the transaction leaves a `began` row unresolved.***
+- ***No real bucket has answered either retention question.***
+- ***A truncated version listing is a floor and nothing walks it.***
+- ***Nothing connects a count of copies to the investors they belong to.***
+- ***One erasure, one neighbour, thirty-four objects.***
+- ***The stale refusal banner is recorded, not decided.***
+- ***A crossing of the register-entry line is still undetectable.***
+- ***The sixteen numbers prove the labels are not permuted; they do not prove
+  each label is the right sentence for its field.***
+- ***The audit-metadata sweep is still exercised with one shape of row.***
+- ***Whether pseudonymisation satisfies an erasure request is still the legal
+  question at the top of OPEN_DECISIONS item 12.*** **Still the largest open
+  thing in the repository that is not somebody's configuration step.**
+- ***The table's own judgement in `ACCEPTANCE.md` is still unaudited.***
+- ***No other section of `DEPLOYMENT.md` has a test.***
+- ***`TEST_ME.md` has no test at all.***
+- *§9 of OPEN_DECISIONS — the palette against the live site — needs Michael's
+  eyes and nothing else will do.*
+- *Nobody has asked Michael about the two lapsed rows in `CLAIMS.md`.*
+- *`CLAIMS.md` is still the only coordinating document with no test at all.*
+- *The three cron lines in `DEPLOYMENT.md` §8 are installed on no machine.*
+- *Whether issuing a document should notify the investor at all is still open.*
+- *The precision rule is still an open question for Michael — OPEN_DECISIONS §11.*
+- *The password-reset journey is still not built — OPEN_DECISIONS §10.*
+- *One image, one format, one size in the media library.*
+- *The styles in the email preview are proved applied by absence, not measurement.*
+- *`img-src 'none'` on the email body has never met a template with an image.*
+- *The email body route is measured for one recipient in one state.*
+- *Nothing measures the second audit row from the operator's side.*
+- *`frame-ancestors 'self'` is proved by the frame loading, not by a refusal.*
+- *The `verify:all` order is declared, not derived; a skip and a failure share one
+  exit code.*
+- *The blank pre-hydration body on a 500 is recorded and not decided.*
+- *One fault shape, on two screens.*
+- *Step 4 is measured in its richest state and in no other.*
+- *Two rows are not a spreadsheet.*
+- *Nothing drives an upload between 67.2 MB and 68 MB.*
+- *Nothing measures bundle size, and nothing measures what the middleware costs.*
+- *`worker-src 'self'` has been proved only on Chromium.*
+- *`global-error.tsx` remains unrendered, and that is a stated position.*

@@ -1738,6 +1738,63 @@ could not possibly see it: *"MUTANT SURVIVED — the check reported success"*. A
 one of the code snippets it looks for was misspelled: *"NOT APPLIED"* — so a
 promise it can no longer find is reported, rather than quietly counted as passed.
 
+### The last item on the release checklist
+
+Of the twelve things on the release checklist, eleven had a promise on that list
+and one did not: **no line this application writes to a log may contain a
+password, an email's contents, or an API key.**
+
+It had been left because it is not a rule about one piece of code. It is a rule
+about *every* place in the whole application that writes anything down, and there
+is no single line to break. That is true, and it turned out not to be the end of
+it — a rule about every place is a rule about the **list** of places, and a list
+can be written out.
+
+So there is now a check that reads every file in the application and every one of
+the checking commands, finds all **447** places that write to a console, and asks
+of each: does it print anything whose name is a password, a token, a key, or the
+contents of an email? None of them do. It also holds a list of **the two files in
+the application that are allowed to write anything at all** — the health signal's
+fixed one-line message, and the seed command you ran at setup — each with a
+written reason. A new one anywhere else fails the check until somebody says why
+it is there.
+
+There is one deliberate exception and it is now named in writing: the seed prints
+the one-time setup links, tokens and all, to the screen of whoever ran it. That
+is how you got your password-setting link in the first place, it is single-use
+and expiring, and it goes nowhere but that terminal.
+
+**All twelve items on the release checklist now have a promise on the list, and
+this one has five of them.** Three switch off a defence — the class that keeps a
+password printing as `[redacted]`, the cleaner that strips one out of an error
+message handed back by Google, and the refusal to write an email body into the
+audit log. The other two do the opposite: they **add** the mistake — a line
+printing the email's contents in the middle of the sending code, exactly where
+somebody debugging a send would leave one behind — and check that it is caught.
+
+### What that new check found about itself
+
+On its first run it reported the application completely clean, and it was wrong
+twice.
+
+Once harmlessly: it read a *sentence* in a report about storage buckets that
+happened to contain the word "question", and flagged it as an email's contents. A
+check that cries wolf on ordinary English is one somebody eventually switches
+off, so it now tells the difference between a name in the code and prose in a
+message.
+
+Once not harmlessly at all. One of the checking commands contains a piece of
+pattern-matching with quotation marks inside it. The new check misread those as
+the start of a quoted message and from there stopped reading properly — it
+skipped five hundred lines, and **fourteen real places that write to a log went
+unexamined**. It reported a cleaner application than the truth, in exactly the
+words a genuinely clean one uses.
+
+That is the fourth time in this project a check has reported success about
+something it was not actually looking at, and the first time the thing it was not
+looking at was **its own input**. It is fixed, the count of examined lines went
+from 413 to 447, and there is a test that would catch it happening again.
+
 ---
 
 ## Things worth knowing
