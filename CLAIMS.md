@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Guided investor data workspace | Codex `/root` | 2026-07-30 09:51 UTC | `src/app/(admin)/admin/page.tsx`, `src/components/admin/investor-list-overview.tsx`, `src/app/(admin)/recipients/page.tsx`, `src/app/(admin)/recipients/[offerId]/*`, `src/actions/recipient-draft.ts`, focused tests |
 
 ## Done, so nobody starts it again
 
