@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { db } from '@/db'
-import { investorAccounts, offers, recipients, rounds } from '@/db/schema'
+import { auditEvents, investorAccounts, offers, recipients, rounds } from '@/db/schema'
 import { Card, Notice, Pill, SectionHeading } from '@/components/admin/ui'
 import { requireReader } from '@/lib/auth/guards'
 import { readServiceConfig } from '@/lib/auth/service-config'
@@ -38,6 +38,44 @@ export const dynamic = 'force-dynamic'
 
 function formatDate(value: Date | null): string {
   return value ? value.toISOString().slice(0, 16).replace('T', ' ') : '—'
+}
+
+const DRAFT_FIELD_LABELS: Record<string, string> = {
+  name: 'Name',
+  email: 'Email',
+  jurisdiction: 'Country',
+  responseDeadline: 'Response deadline',
+}
+
+function draftChangeMetadata(value: unknown): {
+  changed: string[]
+  before: Record<string, unknown>
+  after: Record<string, unknown>
+  reason: string | null
+} {
+  if (!value || typeof value !== 'object') {
+    return { changed: [], before: {}, after: {}, reason: null }
+  }
+  const item = value as Record<string, unknown>
+  return {
+    changed: Array.isArray(item.changed)
+      ? item.changed.filter((field): field is string => typeof field === 'string')
+      : [],
+    before: item.before && typeof item.before === 'object'
+      ? item.before as Record<string, unknown>
+      : {},
+    after: item.after && typeof item.after === 'object'
+      ? item.after as Record<string, unknown>
+      : {},
+    reason: typeof item.reason === 'string' && item.reason.trim() !== ''
+      ? item.reason
+      : null,
+  }
+}
+
+function historyValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return 'Not set'
+  return String(value)
 }
 
 export default async function OfferPage({
@@ -77,6 +115,23 @@ export default async function OfferPage({
   const currentStage = stageIndex(stage)
   const history = await loadStageHistory(offerId)
   const certificates = await listCertificates(offerId)
+  const draftHistory = await db
+    .select({
+      id: auditEvents.id,
+      actorLabel: auditEvents.actorLabel,
+      metadata: auditEvents.metadata,
+      createdAt: auditEvents.createdAt,
+    })
+    .from(auditEvents)
+    .where(
+      and(
+        eq(auditEvents.entityType, 'offer'),
+        eq(auditEvents.entityId, offerId),
+        eq(auditEvents.action, 'recipient.draft_updated'),
+      ),
+    )
+    .orderBy(desc(auditEvents.createdAt))
+    .limit(20)
 
   const decimalPlaces = config.decimalPlaces
 
@@ -155,17 +210,83 @@ export default async function OfferPage({
         </Card>
 
         {admin.role !== 'VIEWER' && row.recipientId ? (
+          <div id="draft-invitation-details" className="scroll-mt-24">
+            <Card
+              title="Review and edit this person"
+              description="Correct the spreadsheet details here. You will confirm before saving, every change is recorded, and nothing on this page sends an invitation."
+            >
+              <RecipientDraftForm
+                offerId={offerId}
+                name={row.recipientName ?? row.accountName}
+                email={row.recipientEmail ?? row.accountEmail}
+                jurisdiction={row.jurisdiction}
+                responseDeadline={row.offer.responseDeadline}
+              />
+            </Card>
+          </div>
+        ) : null}
+
+        {admin.role !== 'VIEWER' ? (
           <Card
-            title="Draft invitation details"
-            description="These details can be completed after import. Saving never sends an email."
+            title="Confirmed change history"
+            description="Mike and David can see who changed the spreadsheet details, when, what changed and why."
           >
-            <RecipientDraftForm
-              offerId={offerId}
-              name={row.recipientName ?? row.accountName}
-              email={row.recipientEmail ?? row.accountEmail}
-              jurisdiction={row.jurisdiction}
-              responseDeadline={row.offer.responseDeadline}
-            />
+            {draftHistory.length === 0 ? (
+              <p className="text-sm text-dim">No spreadsheet details have been changed yet.</p>
+            ) : (
+              <ol className="grid grid-cols-1 gap-4">
+                {draftHistory.map((event) => {
+                  const change = draftChangeMetadata(event.metadata)
+                  return (
+                    <li key={event.id} className="rounded-sm border hairline bg-bg2/45 p-4">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <p className="text-sm font-semibold text-white">
+                          {event.actorLabel} confirmed a change
+                        </p>
+                        <p className="text-xs text-muted">{formatDate(event.createdAt)}</p>
+                      </div>
+                      {change.changed.length > 0 ? (
+                        <dl className="mt-3 grid grid-cols-1 gap-2">
+                          {change.changed.map((field) => (
+                            <div key={field} className="grid gap-1 text-xs sm:grid-cols-[9rem_1fr]">
+                              <dt className="font-semibold text-silver2">
+                                {DRAFT_FIELD_LABELS[field] ?? field}
+                              </dt>
+                              <dd className="text-dim">
+                                <span className="line-through opacity-70">
+                                  {historyValue(change.before[field])}
+                                </span>
+                                <span className="mx-2 text-orange">→</span>
+                                <span className="text-ftext">
+                                  {historyValue(change.after[field])}
+                                </span>
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : (
+                        <p className="mt-2 text-xs text-dim">
+                          This older entry did not record field-by-field values.
+                        </p>
+                      )}
+                      {change.reason ? (
+                        <p className="mt-3 border-l-2 border-orange pl-3 text-xs leading-relaxed text-dim">
+                          Why: {change.reason}
+                        </p>
+                      ) : null}
+                    </li>
+                  )
+                })}
+              </ol>
+            )}
+            {admin.role === 'OWNER' ? (
+              <Link
+                href={`/audit?action=recipient.draft_updated`}
+                className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-orange"
+              >
+                Open the complete audit history
+              </Link>
+            ) : null}
           </Card>
         ) : null}
 

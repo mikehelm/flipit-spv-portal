@@ -60,7 +60,7 @@ export function RecipientDraftForm({
   return (
     <ActionForm
       action={updateRecipientDraftAction}
-      submitLabel="Save draft details"
+      submitLabel="Confirm and save changes"
       hidden={{ offerId }}
     >
       <Field label="Name" name="name">
@@ -95,6 +95,25 @@ export function RecipientDraftForm({
           defaultValue={responseDeadline ?? ''}
         />
       </Field>
+      <Field
+        label="Why are you changing this?"
+        name="changeReason"
+        hint="Optional, but useful for Mike and David later. It is kept with the change history."
+      >
+        <TextArea
+          name="changeReason"
+          rows={2}
+          maxLength={500}
+          placeholder="For example: David confirmed the investor’s country."
+        />
+      </Field>
+      <div className="rounded-sm border border-orange/35 bg-orange/5 p-4">
+        <Checkbox
+          name="confirmed"
+          required
+          label="I checked these changes and want them saved to the permanent history. This does not send an invitation."
+        />
+      </div>
     </ActionForm>
   )
 }

@@ -178,10 +178,10 @@ function RecipientCard({
         </Link>
 
         <Link
-          href={`/recipients/${row.offerId}`}
-          className="inline-flex min-h-11 items-center rounded-sm border hairline px-3 text-sm font-semibold text-ftext transition-colors hover:border-orange"
+          href={`/recipients/${row.offerId}#draft-invitation-details`}
+          className="inline-flex min-h-11 items-center rounded-sm bg-orange px-3 text-sm font-bold text-bg transition-opacity hover:opacity-90"
         >
-          Their record
+          Review &amp; edit
         </Link>
 
         {blockedMessage ? (

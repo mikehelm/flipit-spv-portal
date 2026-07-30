@@ -4,6 +4,19 @@ import { describe, expect, it } from 'vitest'
 
 const PAGE = join(process.cwd(), 'src/app/(admin)/admin/page.tsx')
 const GUIDE = join(process.cwd(), 'src/components/admin/guided-start.tsx')
+const INVESTOR_LIST = join(
+  process.cwd(),
+  'src/components/admin/investor-list-overview.tsx',
+)
+const DRAFT_FORM = join(
+  process.cwd(),
+  'src/app/(admin)/recipients/[offerId]/parts.tsx',
+)
+const DRAFT_ACTION = join(process.cwd(), 'src/actions/recipient-draft.ts')
+const INVESTOR_RECORD = join(
+  process.cwd(),
+  'src/app/(admin)/recipients/[offerId]/page.tsx',
+)
 
 function source(path: string): string {
   return readFileSync(path, 'utf8')
@@ -47,6 +60,34 @@ describe('the role-aware Start page', () => {
     expect(page).toContain('countSubmittedEmailReviewProposals()')
     expect(guide).toContain('onboarding.complete')
     expect(guide).toContain('pendingAccessRequests + submittedProposals')
+  })
+
+  it('puts the editable investor list immediately after the guided start', () => {
+    const page = source(PAGE)
+    const list = source(INVESTOR_LIST)
+    expect(page).toContain('loadBatchContext()')
+    expect(page.indexOf('<GuidedStart')).toBeLessThan(
+      page.indexOf('<InvestorListOverview'),
+    )
+    expect(list).toContain('Check the spreadsheet data')
+    expect(list).toContain('Review &amp; edit')
+    expect(list).toContain('#draft-invitation-details')
+  })
+
+  it('confirms changes and records before, after and the reason', () => {
+    const form = source(DRAFT_FORM)
+    const action = source(DRAFT_ACTION)
+    const record = source(INVESTOR_RECORD)
+    expect(form).toContain('Confirm and save changes')
+    expect(form).toContain('name="confirmed"')
+    expect(form).toContain('name="changeReason"')
+    expect(action).toContain('Confirm the changes before saving.')
+    expect(action).toContain('before,')
+    expect(action).toContain('after,')
+    expect(action).toContain("action: 'recipient.draft_updated'")
+    expect(record).toContain('Confirmed change history')
+    expect(record).toContain('change.before[field]')
+    expect(record).toContain('change.after[field]')
   })
 })
 

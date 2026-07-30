@@ -21,6 +21,8 @@ const schema = z.object({
   email: z.string().trim().toLowerCase().refine(isValidEmail, 'Use a valid email address.'),
   jurisdiction: z.string().trim().max(120),
   responseDeadline: z.string().trim(),
+  changeReason: z.string().trim().max(500),
+  confirmed: z.boolean().refine((value) => value, 'Confirm the changes before saving.'),
 })
 
 export async function updateRecipientDraftAction(
@@ -34,6 +36,8 @@ export async function updateRecipientDraftAction(
     email: formData.get('email'),
     jurisdiction: formData.get('jurisdiction'),
     responseDeadline: formData.get('responseDeadline'),
+    changeReason: formData.get('changeReason'),
+    confirmed: formData.get('confirmed') === 'on',
   })
 
   if (!parsed.success) {
@@ -83,6 +87,26 @@ export async function updateRecipientDraftAction(
       })
     }
     responseDeadline = input.responseDeadline
+  }
+
+  const before = {
+    name: current.recipient.name,
+    email: current.recipient.email,
+    jurisdiction: current.recipient.jurisdiction,
+    responseDeadline: current.offer.responseDeadline,
+  }
+  const after = {
+    name: input.name,
+    email: input.email,
+    jurisdiction,
+    responseDeadline,
+  }
+  const changed = (Object.keys(before) as Array<keyof typeof before>).filter(
+    (field) => before[field] !== after[field],
+  )
+
+  if (changed.length === 0) {
+    return actionOk('Nothing changed. The existing investor record was left as it was.')
   }
 
   const [duplicate] = await db
@@ -178,7 +202,10 @@ export async function updateRecipientDraftAction(
     entityId: current.offer.id,
     action: 'recipient.draft_updated',
     metadata: {
-      changed: ['name', 'email', 'jurisdiction', 'responseDeadline'],
+      changed,
+      before,
+      after,
+      reason: input.changeReason || null,
       incompleteFields: missing,
       accountSplit: nextAccountId !== current.account.id,
     },

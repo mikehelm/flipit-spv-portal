@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { GuidedStart } from '@/components/admin/guided-start'
+import { InvestorListOverview } from '@/components/admin/investor-list-overview'
 import { Notice } from '@/components/admin/ui'
 import { requireReader } from '@/lib/auth/guards'
 import { onboardingProgress } from '@/lib/auth/onboarding'
@@ -7,6 +8,7 @@ import { readOnboardingSnapshot } from '@/lib/auth/onboarding-store'
 import { readUnattendedAlert } from '@/lib/health/report'
 import { countPendingAccessRequests } from '@/lib/access-requests/store'
 import { countSubmittedEmailReviewProposals } from '@/lib/email-review/data'
+import { loadBatchContext } from '@/lib/sending/data'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +23,7 @@ export default async function AdminHomePage() {
     admin.name?.trim().split(/\s+/)[0] ||
     (admin.role === 'OWNER' ? 'Mike' : admin.role === 'OPERATOR' ? 'David' : 'there')
 
-  const [alert, onboarding, pendingAccessRequests, submittedProposals] =
+  const [alert, onboarding, pendingAccessRequests, submittedProposals, investorRows] =
     await Promise.all([
       readUnattendedAlert(),
       admin.role === 'OPERATOR'
@@ -31,6 +33,9 @@ export default async function AdminHomePage() {
       admin.role === 'OWNER'
         ? countSubmittedEmailReviewProposals()
         : Promise.resolve(null),
+      admin.role === 'VIEWER'
+        ? Promise.resolve([])
+        : loadBatchContext().then((context) => context.rows),
     ])
 
   return (
@@ -42,6 +47,8 @@ export default async function AdminHomePage() {
         pendingAccessRequests={pendingAccessRequests}
         submittedProposals={submittedProposals}
       />
+
+      <InvestorListOverview role={admin.role} rows={investorRows} />
 
       {alert.needsAPerson > 0 ? (
         <div className="mb-6">
