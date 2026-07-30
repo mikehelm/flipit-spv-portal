@@ -35,6 +35,7 @@ something else — there is always something else in the Uncertain notes.
 
 | Package | Session | Claimed at (UTC) | Files it expects to touch |
 | --- | --- | --- | --- |
+| Apple-clean investor spreadsheet | Codex `/root` | 2026-07-30 10:19 UTC | `src/components/admin/investor-list-overview.tsx`, `src/app/(admin)/admin/page.test.ts`, focused visual styles/tests |
 
 ## Done, so nobody starts it again
 
