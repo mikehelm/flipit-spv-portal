@@ -69,9 +69,14 @@ describe('the role-aware Start page', () => {
     expect(page.indexOf('<GuidedStart')).toBeLessThan(
       page.indexOf('<InvestorListOverview'),
     )
-    expect(list).toContain('Check the spreadsheet data')
-    expect(list).toContain('Review &amp; edit')
+    expect(list).toContain('Check the investor details')
+    expect(list).toContain('Open all investors')
     expect(list).toContain('#draft-invitation-details')
+    expect(list).toContain('bg-white text-[#1d1d1f]')
+    expect(list).toContain("text-[#d70015]")
+    expect(list).toContain('role="tooltip"')
+    expect(list).toContain('BUILD_SPEC §8.2 · not legal advice')
+    expect(list).toContain('BUILD_SPEC §6.6')
   })
 
   it('confirms changes and records before, after and the reason', () => {
